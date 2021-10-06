@@ -4,7 +4,7 @@ function blur(img, blurAmount, resolve) {
   var blur = new Blur({
     radius: blurAmount || 30,
     // gaussian: true
-    stack: true
+    stack: true,
   });
   blur.init();
 
@@ -23,9 +23,16 @@ export function blurImage(src, blurAmount): Promise<string> {
     img.style.position = "absolute";
     img.crossOrigin = "Anonymous";
     img.onload = function () {
-      blur(this, blurAmount, resolve);
+      const complete = (data) => {
+        return setTimeout(() => {
+          resolve(data);
+        }, 500);
+      };
+      blur(this, blurAmount, complete);
     }.bind(img);
     img.src = src;
+    img.style.zIndex = "0";
+    img.style.opacity = "0";
     document.body.appendChild(img);
   });
   // or in shorthand

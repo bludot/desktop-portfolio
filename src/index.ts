@@ -15,11 +15,14 @@ import nested from "jss-plugin-nested";
 import settings from "./utils/settings";
 import bridge from "./utils/bridge";
 import { backgroundImage } from "html2canvas/dist/types/css/property-descriptors/background-image";
+import Bootscreen from "./components/Bootscreen";
 
 jss.setup(preset());
 jss.use(nested());
 
 let count = 2;
+const bootscreen = new Bootscreen();
+bootscreen.load(document.querySelector("#app"));
 
 async function startup() {
   await settings.setDesktopImage("https://i.imgur.com/DELma5R.jpg");
@@ -31,7 +34,7 @@ startup().then(() => {
   });
   bridge.set<Desktop>("Desktop", desktop);
 
-  desktop.startup();
+desktop.startup(bootscreen);
   /*
   const initWindow = new LocalWindow({
     title: `window ${count}`,

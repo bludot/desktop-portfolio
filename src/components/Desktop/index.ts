@@ -41,10 +41,11 @@ class Desktop extends OSElement {
   load(element: HTMLElement) {
     super.load(element);
   }
-  async startup() {
+  async startup(bootscreen) {
     this.mainElement.appendChild(this.element);
     this.taskbar.load(this.element);
-    this.applyStyle();
+    await this.applyStyle();
+    setTimeout(() => {bootscreen.unload()}, 5000)
   }
 }
 

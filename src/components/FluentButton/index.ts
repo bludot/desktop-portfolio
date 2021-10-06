@@ -1,4 +1,7 @@
 class FluentButton {
+  rootEl: HTMLElement;
+  el: HTMLElement;
+
   constructor(rootEl, { text, icon, outerReveal, onClick }) {
     this.rootEl =
       typeof rootEl === "string" ? document.querySelector(rootEl) : rootEl;
@@ -6,7 +9,7 @@ class FluentButton {
     FluentButton.elements.add(this.rootEl);
 
     this.rootEl.innerHTML = FluentButton.createHTML({ text, icon });
-    this.el = this.rootEl.firstElementChild;
+    this.el = this.rootEl.firstElementChild as HTMLElement;
 
     if (onClick) this.el.addEventListener("click", onClick);
     this.el.addEventListener("touchstart", this.startRipple);
@@ -54,6 +57,7 @@ class FluentButton {
       window.requestAnimationFrame(this.updateOuterReveal.bind(this, event));
     });
     window.addEventListener("touchmove", ({ touches }) => {
+      // @ts-ignore
       const [{ clientX, clientY }] = touches;
       const position = { pageX: clientX, pageY: clientY };
       window.requestAnimationFrame(this.updateOuterReveal.bind(this, position));
@@ -61,6 +65,7 @@ class FluentButton {
   }
 
   updateOuterReveal({ pageX, pageY }) {
+    // @ts-ignore
     for (const [el, { width, height }] of FluentButton.outerRevealElements) {
       const { x, y } = this.updateCoordinates({
         pageX,
@@ -91,6 +96,7 @@ class FluentButton {
     return { width, height };
   }
   updateElementDimensions() {
+    // @ts-ignore
     for (const [el] of FluentButton.outerRevealElements) {
       FluentButton.outerRevealElements.set(el, this.getElementDimensions(el));
     }

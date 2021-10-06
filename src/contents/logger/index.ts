@@ -19,7 +19,7 @@ class LoggerWindow extends OSElement {
           overflow: "auto",
         },
         '& span': {
-          display: "inline-block"
+          display: "block"
         }
       },
     });

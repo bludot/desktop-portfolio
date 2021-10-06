@@ -45,7 +45,8 @@ class Desktop extends OSElement {
     this.mainElement.appendChild(this.element);
     this.taskbar.load(this.element);
     await this.applyStyle();
-    setTimeout(() => {bootscreen.unload()}, 5000)
+    await bootscreen.unload();
+    
   }
 }
 

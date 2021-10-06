@@ -24,15 +24,17 @@ class Bootscreen extends OSElement {
     });
     this.loader = new Loader();
   }
-  beforeLoad() {
-    this.loader.load(this.element)
-    return Promise.resolve();
+  async beforeLoad() {
+    await this.loader.load(this.element);
   }
-  beforeUnload() {
-    return new Promise((resolve) => {
-      this.element.style.opacity = "0"
-      setTimeout(() => resolve, 250)
-    })
+  async beforeUnload() {
+    const promise = new Promise((resolve): void => {
+      this.element.style.opacity = "0";
+      setTimeout(() => {
+        resolve(null);
+      }, 250);
+    });
+    return promise;
   }
 }
 

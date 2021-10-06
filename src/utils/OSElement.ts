@@ -8,12 +8,12 @@ class OSElement {
   style: () => any;
   className: string;
   styleSheet: StyleSheet;
-  instanceName: string = "OSElement";
+  instanceName: string;
   logger: Logger;
-  constructor(tagName: string, id: string) {
+  constructor(tagName: string, id: string, instanceName?: string) {
     this.element = document.createElement(tagName);
     this.element.id = this.id = id;
-    this.instanceName = new.target.name || "test";
+    this.instanceName = instanceName || tagName;
     this.logger = new Logger(this.instanceName);
     this.logger.debug(`Initializing`);
   }

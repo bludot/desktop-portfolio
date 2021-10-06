@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 class Loader extends OSElement {
   constructor() {
-    super(`Loader_${uuidv4().replace(/-/g, "")}`, "loader");
+    super('loader', `Loader_${uuidv4().replace(/-/g, "")}`);
     this.style = () => ({
       "@keyframes lds-dual-ring": {
         from: {

@@ -11,7 +11,7 @@ class Desktop extends OSElement {
   id: string;
   backgroundColor: string;
   taskbar: Taskbar;
-  instanceName: string;
+  instanceName: string = "Desktop";
   constructor({
     backgroundColor = "#EEEEEE",
     mainElement = document.body,
@@ -19,7 +19,7 @@ class Desktop extends OSElement {
     backgroundColor: string;
     mainElement: HTMLElement;
   }) {
-    super("desktop", "desktop");
+    super("desktop", "desktop", "Desktop");
     this.mainElement = mainElement;
     this.backgroundColor = backgroundColor;
     this.taskbar = new Taskbar();

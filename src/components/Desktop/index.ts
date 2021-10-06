@@ -38,7 +38,7 @@ class Desktop extends OSElement {
     return this.taskbar;
   }
 
-  load(element: HTMLElement) {
+  async load(element: HTMLElement) {
     super.load(element);
   }
   async startup(bootscreen) {

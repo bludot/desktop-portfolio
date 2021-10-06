@@ -44,7 +44,7 @@ class TaskbarButton extends OSElement {
     });
   }
 
-  load(element: HTMLElement) {
+  async load(element: HTMLElement) {
     super.load(element);
     this.element.addEventListener("click", () => {
       this.action(this.element);
@@ -119,7 +119,7 @@ class TaskbarButtons extends OSElement {
       }
     });
   }
-  load(element: HTMLElement) {
+  async load(element: HTMLElement) {
     super.load(element);
     this.buttons.forEach((button) => {
       button.load(this.element);

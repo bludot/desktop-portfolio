@@ -139,7 +139,7 @@ class StartMenu extends OSElement {
     this.menuItems = [];
   }
 
-  load(element: HTMLElement) {
+  async load(element: HTMLElement) {
     if (!this.parent) {
       super.load(element);
       // window.addEventListener("click", this.unload.bind(this));

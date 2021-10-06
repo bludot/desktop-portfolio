@@ -21,7 +21,7 @@ class Title extends OSElement {
     });
   }
 
-  load(element: HTMLElement) {
+  async load(element: HTMLElement) {
     this.element.appendChild(document.createTextNode(this.title));
     super.load(element);
   }
@@ -48,7 +48,7 @@ class TitleBar extends OSElement {
     // this.element.append(this.title);
     this.title.load(this.element);
   }
-  load(element: HTMLElement) {
+  async load(element: HTMLElement) {
     super.load(element);
   }
 }

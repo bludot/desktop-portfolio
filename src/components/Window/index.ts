@@ -125,7 +125,7 @@ class OSWindow extends OSElement {
       .addEventListener("mousedown", this.mousedown.bind(this));
     this.element.addEventListener("mousedown", this.mousedownWindow.bind(this));
   }
-  public load(element: HTMLElement): void {
+  public async load(element: HTMLElement): Promise<void> {
     const main = document.createElement("div");
     main.style.cssText = `
     width: 100%;

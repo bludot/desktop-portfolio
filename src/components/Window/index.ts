@@ -21,7 +21,7 @@ class OSWindow extends OSElement {
     height: number;
   } = {
     width: 400,
-    height: 400
+    height: 400,
   };
   constructor({
     title,
@@ -32,8 +32,8 @@ class OSWindow extends OSElement {
     center = true,
     dimensions = {
       width: 400,
-      height: 400
-    }
+      height: 400,
+    },
   }: IWindow) {
     super("window", "window");
     // const blur = document.createElement("blur");
@@ -66,8 +66,8 @@ class OSWindow extends OSElement {
           : `0px 2px 5px 0px rgba(0, 0, 0, 0.16),
                 0 2px 5px 0 rgba(0, 0, 0, 0.26)`,
         display: "flex",
-        flexFlow: "column nowrap"
-      }
+        flexFlow: "column nowrap",
+      },
     });
   }
 
@@ -106,7 +106,7 @@ class OSWindow extends OSElement {
         y: e.pageY,
         x: e.pageX,
         top: e.pageY - parseInt(this.element.style.top) || e.pageY,
-        left: e.pageX - parseInt(this.element.style.left) || e.pageX
+        left: e.pageX - parseInt(this.element.style.left) || e.pageX,
       };
     }
     this.onActive(this);
@@ -134,14 +134,14 @@ class OSWindow extends OSElement {
 
     if (typeof this.content.load === "function") {
       // main.appendChild(this.content());
-      this.content.load(main);
+      await this.content.load(main);
     } else {
       main.appendChild(this.content);
     }
     const onClose = () => {
       this.onClose(this);
     };
-    this.topbar.load(this.element);
+    await this.topbar.load(this.element);
     // this.element.appendChild(topbar({ title: this.title, close: onClose }));
     this.element.appendChild(main);
     // WindowManager.init(this.element);

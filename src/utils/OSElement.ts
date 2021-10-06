@@ -27,7 +27,10 @@ class OSElement {
     }
   }
 
-  public load(element: HTMLElement) {
+  public beforeLoad() {}
+  public afterLoad() {}
+  public async load(element: HTMLElement) {
+    await this.beforeLoad();
     if (this.parent) {
       throw new Error("Already loaded! did you mean to reload?");
     }
@@ -37,12 +40,17 @@ class OSElement {
     }
     this.applyStyle();
     this.parent.appendChild(this.element);
+    await this.afterLoad();
   }
+  public beforeUnload() {}
+  public afterUnload() {}
 
-  unload() {
+  async unload() {
+    await this.beforeUnload();
     this.parent.removeChild(this.element);
     this.parent = null;
     this.unloadStyle();
+    await this.afterUnload();
   }
   reload() {
     const tmpParent = this.parent;

@@ -1,7 +1,9 @@
 import OSElement from "../../utils/OSElement";
 import settings from "../../utils/settings";
+import Loader from "../Loader";
 
 class Bootscreen extends OSElement {
+  loader: Loader;
   constructor() {
     super("Bootscreen", "bootscreen");
     this.style = () => ({
@@ -15,9 +17,22 @@ class Bootscreen extends OSElement {
         backgroundSize: "cover",
         backgroundPosition: "center",
         zIndex: "9999",
-        overflow: "hidden"
-      }
+        overflow: "hidden",
+        opacity: "1",
+        transition: "250ms opacity linear",
+      },
     });
+    this.loader = new Loader();
+  }
+  beforeLoad() {
+    this.loader.load(this.element)
+    return Promise.resolve();
+  }
+  beforeUnload() {
+    return new Promise((resolve) => {
+      this.element.style.opacity = "0"
+      setTimeout(() => resolve, 250)
+    })
   }
 }
 

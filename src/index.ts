@@ -2,7 +2,7 @@ import { library, dom } from "@fortawesome/fontawesome-svg-core";
 import {
   faTimes,
   faWindowMaximize,
-  faWindowMinimize
+  faWindowMinimize,
 } from "@fortawesome/free-solid-svg-icons";
 // import LocalWindow from "./components/Window";
 import Desktop from "./components/Desktop";
@@ -30,11 +30,11 @@ async function startup() {
 startup().then(() => {
   const desktop = new Desktop({
     backgroundColor: "#4FC3F7",
-    mainElement: document.querySelector("#app")
+    mainElement: document.querySelector("#app"),
   });
   bridge.set<Desktop>("Desktop", desktop);
 
-desktop.startup(bootscreen);
+  desktop.startup(bootscreen);
   /*
   const initWindow = new LocalWindow({
     title: `window ${count}`,

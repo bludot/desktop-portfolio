@@ -14,7 +14,8 @@
     "jss": "10.7.1",
     "jss-plugin-nested": "10.7.1",
     "jss-preset-default": "10.7.1",
-    "remove": "^0.1.5"
+    "remove": "^0.1.5",
+    "uuid": "^8.3.2"
   },
   "devDependencies": {
     "typescript": "^4.4.3",

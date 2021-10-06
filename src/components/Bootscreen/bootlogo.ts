@@ -10,7 +10,6 @@ class Bootlogo extends OSElement {
         position: "relative",
         overflow: "hidden",
         opacity: "1",
-        background: "black",
         flex: "0 1 auto",
         "&::before": {
           position: "absolute",

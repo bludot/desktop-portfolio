@@ -20,7 +20,7 @@ class Bootscreen extends OSElement {
         overflow: "hidden",
         opacity: "1",
         transition: "250ms opacity linear",
-        background: "black",
+        background: "#EEEE",
         display: "flex",
         flexFlow: "column",
         justifyContent: "center",

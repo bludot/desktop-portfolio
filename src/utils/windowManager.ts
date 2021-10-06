@@ -22,7 +22,7 @@ class WindowManager {
       ...windowOptions,
       onActive: this.onActive.bind(this),
       onClose: this.remove.bind(this)
-    };
+    } as IWindow;
     const oswindowInstance = new OSWindow(fullWindowOptions);
     const oswindow = {
       window: oswindowInstance,

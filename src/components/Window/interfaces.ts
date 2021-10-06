@@ -6,6 +6,10 @@ export interface IWindow {
   content: any;
   desktop: Desktop;
   center: boolean;
+  dimensions: {
+    width: number;
+    height: number;
+  };
   onActive: (window: OSWindow) => void;
   onClose: (window: OSWindow) => void;
 }

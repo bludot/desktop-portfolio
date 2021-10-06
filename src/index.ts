@@ -26,15 +26,12 @@ async function startup() {
 }
 startup().then(() => {
   const desktop = new Desktop({
-    color: "#4FC3F7",
+    backgroundColor: "#4FC3F7",
     mainElement: document.querySelector("#app")
   });
   bridge.set<Desktop>("Desktop", desktop);
 
-  desktop.startup({
-    backgroundColor: "#4FC3F7",
-    mainElement: document.body
-  });
+  desktop.startup();
   /*
   const initWindow = new LocalWindow({
     title: `window ${count}`,

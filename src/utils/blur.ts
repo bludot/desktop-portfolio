@@ -173,7 +173,9 @@ var proto = {
       pa,
       rbs;
 
+    // @ts-ignore
     var mul_sum = Blur.mul_table[radius],
+    // @ts-ignore
       shg_sum = Blur.shg_table[radius];
 
     var widthMinus1 = width - 1,
@@ -182,6 +184,7 @@ var proto = {
       sumFactor = (radiusPlus1 * (radiusPlus1 + 1)) / 2,
       div = radius + radius + 1,
       w4 = width << 2;
+      // @ts-ignore
     var stackStart = Blur.newBlurStack(),
       stackEnd = null,
       stackIn = null,
@@ -189,6 +192,7 @@ var proto = {
       stack = stackStart;
 
     for (i = 1; i < div; i++) {
+      // @ts-ignore
       stack = stack.next = Blur.newBlurStack();
       if (i == radiusPlus1) {
         stackEnd = stack;
@@ -419,6 +423,7 @@ var proto = {
 
   createCanvas: function (width, height) {
     var canvas = document.createElement("canvas");
+    // @ts-ignore
     canvas.retinaResolutionEnabled = false;
     canvas.width = width;
     canvas.height = height;
@@ -427,7 +432,7 @@ var proto = {
     return canvas;
   }
 };
-
+// @ts-ignore
 Blur.newBlurStack = function () {
   return {
     r: 0,
@@ -437,7 +442,7 @@ Blur.newBlurStack = function () {
     next: null
   };
 };
-
+// @ts-ignore
 Blur.mul_table = [
   512,
   512,
@@ -695,7 +700,7 @@ Blur.mul_table = [
   261,
   259
 ];
-
+// @ts-ignore
 Blur.shg_table = [
   9,
   11,

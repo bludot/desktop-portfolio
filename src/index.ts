@@ -25,7 +25,7 @@ const bootscreen = new Bootscreen();
 bootscreen.load(document.querySelector("#app"));
 
 async function startup() {
-  await settings.setDesktopImage("https://i.imgur.com/DELma5R.jpg");
+  await settings.setDesktopImage("/assets/main_desktop_background.jpg");
 }
 startup().then(() => {
   const desktop = new Desktop({

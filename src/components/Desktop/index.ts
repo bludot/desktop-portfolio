@@ -1,6 +1,9 @@
+import Logger from "../../Logger";
 import OSElement from "../../utils/OSElement";
 import settings from "../../utils/settings";
 import Taskbar from "./../Taskbar";
+
+const logger = new Logger("Desktop");
 
 class Desktop extends OSElement {
   mainElement: HTMLElement;
@@ -8,9 +11,10 @@ class Desktop extends OSElement {
   id: string;
   backgroundColor: string;
   taskbar: Taskbar;
+  instanceName: string;
   constructor({
-    backgroundColor = "#4FC3F7",
-    mainElement = document.body
+    backgroundColor = "#EEEEEE",
+    mainElement = document.body,
   }: {
     backgroundColor: string;
     mainElement: HTMLElement;
@@ -30,8 +34,8 @@ class Desktop extends OSElement {
         backgroundSize: "cover",
         backgroundPosition: "center",
         zIndex: "1",
-        overflow: "hidden"
-      }
+        overflow: "hidden",
+      },
     });
   }
   getTaskbar() {
@@ -42,12 +46,11 @@ class Desktop extends OSElement {
     super.load(element);
   }
   async startup(bootscreen) {
-    console.log('going to start')
+    console.log("going to start");
     this.mainElement.appendChild(this.element);
     this.taskbar.load(this.element);
     await this.applyStyle();
     await bootscreen.unload();
-    
   }
 }
 

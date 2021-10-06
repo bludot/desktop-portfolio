@@ -39,7 +39,7 @@ class Bootlogo extends OSElement {
         resolve(null);
       }, 250);
     });
-    return promise;
+    await  promise;
   }
 }
 

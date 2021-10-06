@@ -20,7 +20,7 @@ class Bootscreen extends OSElement {
         overflow: "hidden",
         opacity: "1",
         transition: "250ms opacity linear",
-        background: "#EEEE",
+        background: "#EEEEEE",
         display: "flex",
         flexFlow: "column",
         justifyContent: "center",
@@ -45,7 +45,7 @@ class Bootscreen extends OSElement {
   }
   
   
-  async beforeUnload() {
+  async beforeUnload(): Promise<void> {
     console.log('here')
     const promise = new Promise((resolve): void => {
       this.element.style.opacity = "0";
@@ -53,7 +53,7 @@ class Bootscreen extends OSElement {
         resolve(null);
       }, 250);
     });
-    return promise;
+    await promise
   }
 }
 

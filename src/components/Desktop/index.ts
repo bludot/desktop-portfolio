@@ -42,6 +42,7 @@ class Desktop extends OSElement {
     super.load(element);
   }
   async startup(bootscreen) {
+    console.log('going to start')
     this.mainElement.appendChild(this.element);
     this.taskbar.load(this.element);
     await this.applyStyle();

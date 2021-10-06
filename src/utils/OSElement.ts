@@ -27,8 +27,8 @@ class OSElement {
     }
   }
 
-  public beforeLoad() {}
-  public afterLoad() {}
+  public async beforeLoad() {}
+  public async afterLoad() {}
   public async load(element: HTMLElement) {
     await this.beforeLoad();
     if (this.parent) {
@@ -42,8 +42,8 @@ class OSElement {
     this.parent.appendChild(this.element);
     await this.afterLoad();
   }
-  public beforeUnload() {}
-  public afterUnload() {}
+  public async beforeUnload() {}
+  public async afterUnload() {}
 
   async unload() {
     await this.beforeUnload();

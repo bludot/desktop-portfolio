@@ -19,6 +19,91 @@
         overflow: hidden;
         font-size: 14px;
       }
+      #flower {
+    height: 112px;
+    width:108px;
+    position: absolute;
+    right: 0px;
+    display: block;
+    margin:0;
+}
+
+#flower .bottom {
+    left:0;
+    bottom:0;
+    position:absolute;
+    display: block;
+    margin: auto;
+    width:0;
+    border-bottom:20px solid #000000;
+    border-right:20px solid #000000;
+    border-left:20px solid #000000;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
+    border-top: 20px solid #000000;
+    border-top-left-radius: 20px;
+    border-color:#2190FC;
+    /* box-shadow:0px -2px 5px 0px rgba(0,0,0,0.26); */
+}
+
+#flower .petal:nth-child(1) {
+    width: 50px;
+    height:50px;
+    border-radius: 50px  10px 50px 0px;
+    background:#FF2B19;
+    position: absolute;
+    bottom: 21px;
+    left: 50px;
+    -webkit-transform:rotate(35deg);
+    z-index: 3;
+    /* box-shadow:0px -2px 5px 0px rgba(0,0,0,0.26); */
+    transition-delay: 0.0s
+}
+
+#flower .petal {
+    opacity:0;
+    transition-timing-function: ease;
+    -webkit-transition: opacity 1000ms ease;
+}
+
+#flower.on .petal {
+    opacity: 1;
+}
+
+#flower .petal:nth-child(2) {
+    width: 50px;
+    height:50px;
+    border-radius: 50px  10px 50px 0px;
+    background:#FCF800;
+    position: absolute;
+    bottom: 40px;
+    left: 40px;
+    /* box-shadow:0px -2px 5px 0px rgba(0,0,0,0.26); */
+    z-index: 2;
+    transition-delay: 0.3s
+}
+
+#flower .petal:nth-child(3) {
+    width: 50px;
+    height:50px;
+    border-radius: 50px  10px 50px 0px;
+    background:#00DA25;
+    position: absolute;
+    bottom: 50px;
+    left: 21px;
+    -webkit-transform:rotate(-35deg);
+    /* box-shadow:0px -2px 5px 0px rgba(0,0,0,0.26); */
+    transition-delay: 0.7s
+}
+
+#os_name {
+    position:absolute;
+    bottom:0;
+    left:0;
+    right:0;
+    font-size: 30px;
+    font-weight: 300;
+}
       /*
             #background {
               position: fixed;

@@ -16,6 +16,7 @@ import settings from "./utils/settings";
 import bridge from "./utils/bridge";
 import { backgroundImage } from "html2canvas/dist/types/css/property-descriptors/background-image";
 import Bootscreen from "./components/Bootscreen";
+import queryString from "query-string";
 
 jss.setup(preset());
 jss.use(nested());
@@ -28,23 +29,18 @@ async function startup() {
   await settings.setDesktopImage("/assets/main_desktop_background.jpg");
 }
 startup().then(() => {
+  console.log('after set')
   const desktop = new Desktop({
     backgroundColor: "#4FC3F7",
     mainElement: document.querySelector("#app"),
   });
   bridge.set<Desktop>("Desktop", desktop);
-
-  desktop.startup(bootscreen);
-  /*
-  const initWindow = new LocalWindow({
-    title: `window ${count}`,
-    content,
-    desktop
-  });
-  initWindow.load(document.querySelector("desktop"));
-  */
-  // document.body.appendChild(LocalWindow({ title: "window 1", content }));
-  // document.body.appendChild(LocalWindow({ title: "window 2", content }));
+  const params = queryString.parse(location.search);
+  
+  if (params.bootscreen === "1") {
+  } else {
+    desktop.startup(bootscreen);
+  }
 
   // We are only using the user-astronaut icon
   library.add(faTimes, faWindowMaximize, faWindowMinimize);
@@ -53,12 +49,4 @@ startup().then(() => {
   // continue doing this as the DOM changes.
   dom.watch();
 
-  const list = new DoublyLinkedList<any>();
-
-  list.push("test");
-  list.push("test2");
-
-  list.printList();
-
-  console.log(list.head);
 });

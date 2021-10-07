@@ -129,8 +129,10 @@ class OSWindow extends OSElement {
     const main = document.createElement("div");
     main.style.cssText = `
     width: 100%;
-  height: 100%;
-  z-index: 1;`;
+    height: auto;
+    z-index: 1;
+    flex: 1 1 auto;
+    overflow: hidden;`;
 
     if (typeof this.content.load === "function") {
       // main.appendChild(this.content());

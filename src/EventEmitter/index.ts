@@ -18,6 +18,10 @@ export class EventEmitter {
     };
   }
 
+  public on(name: string, cb: Function) {
+    return this.subscribe(name, cb);
+  }
+
   public emit(name: string, ...args: any[]): void {
     (this.events[name] || []).forEach((fn) => fn(...args));
   }

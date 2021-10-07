@@ -1,5 +1,5 @@
-import { EventEmitter } from "../EventEmitter";
-import { LOG_TYPE } from "./interfaces";
+import EventEmitter from "eventemitter3";
+import { BrowserTransportOptions, ITransport, LOG_TYPE } from "./interfaces";
 import { Log } from "./Log";
 
 class GlobalLogger {
@@ -27,13 +27,53 @@ class GlobalLogger {
     return this.logs;
   }
   public subscribe(...args): any {
-    return this.event.subscribe.apply(this.event, args);
+    return this.event.on.apply(this.event, args);
+    //return this.event.subscribe.apply(this.event, args);
   }
+}
+
+class Transport {
+  event: EventEmitter;
+  constructor() {
+    this.event = new EventEmitter();
+  }
+
+  public log(log: Log): void {
+    this.event.emit("log", log);
+  }
+
+  public subscribe(...args): any {
+    return this.event.on.apply(this.event, args);
+  }
+
+  public emit(type: LOG_TYPE, log: Log): void {
+    this.event.emit(type, log);
+  }
+  public unsubscribe(...args): any {
+    return this.event.off.apply(this.event, args);
+  }
+}
+
+class DefaultTransport extends Transport implements ITransport {
+  constructor(opts: BrowserTransportOptions) {
+    super()
+    if (opts.console) {
+      this.event.on("*", (log: Log) => {
+        console.log(log.toString());
+      });
+    }
+    this.event.on("*", (log: Log) => {
+      GlobalLogger.getInstance().log(log);
+    });
+  }
+  public log(log: Log): void {
+    this.event.emit("log", log);
+  } 
 }
 
 class Logger {
   logs: Log[] = [];
-  transport: any = console;
+  transport: ITransport = new DefaultTransport({});
   serviceName: string;
   constructor(serviceName) {
     this.logs = [];
@@ -43,22 +83,7 @@ class Logger {
     this.logs.push(log);
     GlobalLogger.getInstance().log(log);
 
-    switch (log.type) {
-      case LOG_TYPE.INFO:
-        this.transport.info(log.formattedMessage);
-        break;
-      case LOG_TYPE.WARNING:
-        this.transport.warn(log.formattedMessage);
-        break;
-      case LOG_TYPE.ERROR:
-        this.transport.error(log.formattedMessage);
-        break;
-      case LOG_TYPE.DEBUG:
-        this.transport.debug(log.formattedMessage);
-        break;
-      default:
-        throw new Error(`Invalid Log Type,  ${log.type}`);
-    }
+    this.transport.log(log);
   }
 
   getLogs() {
@@ -83,9 +108,9 @@ class Logger {
       (message) => new Log(type, message, this.serviceName)
     );
     if (messages.length > 1) {
-      this.transport.group(messages[0]);
+      // this.transport.group(messages[0]);
       logs.forEach((log) => this.log(log));
-      this.transport.groupEnd(messages[0]);
+      // this.transport.groupEnd(messages[0]);
     } else {
       logs.forEach((log) => this.log(log));
     }
@@ -96,9 +121,9 @@ class Logger {
       (message) => new Log(type, message, this.serviceName)
     );
     if (messages.length > 1) {
-      this.transport.group(messages[0]);
+      // this.transport.group(messages[0]);
       logs.forEach((log) => this.log(log));
-      this.transport.groupEnd(messages[0]);
+      // this.transport.groupEnd(messages[0]);
     } else {
       logs.forEach((log) => this.log(log));
     }
@@ -109,9 +134,9 @@ class Logger {
       (message) => new Log(type, message, this.serviceName)
     );
     if (messages.length > 1) {
-      this.transport.group(messages[0]);
+      // this.transport.group(messages[0]);
       logs.forEach((log) => this.log(log));
-      this.transport.groupEnd(messages[0]);
+      // this.transport.groupEnd(messages[0]);
     } else {
       logs.forEach((log) => this.log(log));
     }
@@ -122,9 +147,9 @@ class Logger {
       (message) => new Log(type, message, this.serviceName)
     );
     if (messages.length > 1) {
-      this.transport.group(messages[0]);
+      // this.transport.group(messages[0]);
       logs.forEach((log) => this.log(log));
-      this.transport.groupEnd(messages[0]);
+      // this.transport.groupEnd(messages[0]);
     } else {
       logs.forEach((log) => this.log(log));
     }

@@ -48,13 +48,14 @@ startup().then(async () => {
   }
   if (params.debug === "1") {
     windowManager.new({
-      title: "Terminal",
+      title: "Debugger",
       content: new LoggerWindow(),
       dimensions: { width: 800, height: 400 },
       desktop: bridge.get<Desktop>("Desktop"),
     });
   }
 
+  
   // We are only using the user-astronaut icon
   library.add(faTimes, faWindowMaximize, faWindowMinimize);
 

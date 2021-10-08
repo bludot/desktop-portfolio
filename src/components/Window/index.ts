@@ -92,11 +92,13 @@ class OSWindow extends OSElement {
     this.windowPosition = {};
   }
   mousemove(e: MouseEvent): void {
+    e.preventDefault();
     this.element.style.top = e.pageY - this.windowPosition.top + "px";
     this.element.style.left = e.pageX - this.windowPosition.left + "px";
   }
 
   mousedown(e: MouseEvent): void {
+    e.preventDefault();
     if (
       this.windowPosition && // 👈 null and undefined check
       Object.keys(this.windowPosition).length === 0 &&

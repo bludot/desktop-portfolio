@@ -98,7 +98,7 @@ class OSWindow extends OSElement {
   }
 
   mousedown(e: MouseEvent): void {
-    e.preventDefault();
+    // e.preventDefault();
     if (
       this.windowPosition && // 👈 null and undefined check
       Object.keys(this.windowPosition).length === 0 &&

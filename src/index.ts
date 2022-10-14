@@ -18,7 +18,6 @@ import windowManager from "./utils/windowManager";
 import LoggerWindow from "./contents/logger";
 import ExperienceContent from "./contents/experience";
 import AboutContent from "./contents/about";
-import OSAlert from "./components/Alert";
 import AlertContent from "./contents/alert";
 
 // @ts-ignore

@@ -7,6 +7,9 @@ import bridge from "./../../utils/bridge";
 import windowManager from "../../utils/windowManager";
 import Desktop from "../Desktop";
 import AboutContent from "./../../contents/about";
+import Experience from "../../contents/experience";
+import ExperienceContent from "../../contents/experience";
+import AlertContent from "../../contents/alert";
 
 class StartMenu extends OSElement {
   menuItems: MenuItem[];
@@ -69,7 +72,17 @@ class StartMenu extends OSElement {
         return icon;
       })(),
       text: "Experience",
-      action: () => {}
+      action: () => {
+        windowManager.new({
+          title: `Experience`,
+          content: new ExperienceContent(),
+          desktop: bridge.get<Desktop>("Desktop"),
+          dimensions: {
+            width: 600,
+            height: 500,
+          }
+        });
+      }
     });
     experience.load(menuGrid.getElement());
     const projects = new MenuItem({
@@ -85,7 +98,18 @@ class StartMenu extends OSElement {
         return icon;
       })(),
       text: "Projects",
-      action: () => {}
+      action: () => {
+        windowManager.new({
+          title: `Projects Unavailable`,
+          content: new AlertContent({title: "Projects Unavailable", text: "This window isnt built yet, come back later"}),
+          dimensions: {
+            width: 250,
+            height: 180
+          },
+          desktop: bridge.get<Desktop>("Desktop"),
+          isDialog: true
+        });
+      }
     });
     projects.load(menuGrid.getElement());
     const contact = new MenuItem({
@@ -101,7 +125,18 @@ class StartMenu extends OSElement {
         return icon;
       })(),
       text: "Contact",
-      action: () => {}
+      action: () => {
+        windowManager.new({
+          title: `Contact Unavailable`,
+          content: new AlertContent({title: "Contact Unavailable", text: "This window isnt built yet, come back later"}),
+          dimensions: {
+            width: 250,
+            height: 180
+          },
+          desktop: bridge.get<Desktop>("Desktop"),
+          isDialog: true
+        });
+      }
     });
     contact.load(menuGrid.getElement());
     const settings = new MenuItem({
@@ -117,7 +152,18 @@ class StartMenu extends OSElement {
         return icon;
       })(),
       text: "Settings",
-      action: () => {}
+      action: () => {
+        windowManager.new({
+          title: `Settings Unavailable`,
+          content: new AlertContent({title: "Settings Unavailable", text: "This window isnt built yet, come back later"}),
+          dimensions: {
+            width: 250,
+            height: 180
+          },
+          desktop: bridge.get<Desktop>("Desktop"),
+          isDialog: true
+        });
+      }
     });
     settings.load(menuGrid.getElement());
     const logout = new MenuItem({
@@ -133,7 +179,18 @@ class StartMenu extends OSElement {
         return icon;
       })(),
       text: "logout",
-      action: () => {}
+      action: () => {
+        windowManager.new({
+          title: `Command Unavailable`,
+          content: new AlertContent({title: "Command Unavailable", text: "This window isnt built yet, come back later"}),
+          dimensions: {
+            width: 250,
+            height: 180
+          },
+          desktop: bridge.get<Desktop>("Desktop"),
+          isDialog: true
+        });
+      }
     });
     logout.load(menuGrid.getElement());
     this.menuItems = [];

@@ -47,8 +47,9 @@ class OSElement {
 
     await this.beforeLoad();
     this.logger.debug(`Finished beforeLoad hook`);
-    
+
     if (this.parent) {
+      console.log(this.parent)
       throw new Error("Already loaded! did you mean to reload?");
     }
 
@@ -59,9 +60,9 @@ class OSElement {
 
     this.applyStyle();
     this.logger.debug(`Applyied styles`);
-    
+
     this.parent.appendChild(this.element);
-    
+
     await this.afterLoad();
     this.logger.debug(`Finished afterLoad hook`);
 
@@ -80,7 +81,7 @@ class OSElement {
 
     this.parent.removeChild(this.element);
     this.parent = null;
-    
+
     this.unloadStyle();
     this.logger.debug(`Finished unloadStyle hook`);
 

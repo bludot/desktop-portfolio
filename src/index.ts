@@ -1,4 +1,4 @@
-import { library, dom } from "@fortawesome/fontawesome-svg-core";
+import {library, dom} from "@fortawesome/fontawesome-svg-core";
 import {
   faTimes,
   faWindowMaximize,
@@ -13,9 +13,13 @@ import settings from "./utils/settings";
 import bridge from "./utils/bridge";
 import Bootscreen from "./components/Bootscreen";
 import queryString from "query-string";
-import Logger, { GlobalLogger } from "./Logger";
+import Logger, {GlobalLogger} from "./Logger";
 import windowManager from "./utils/windowManager";
 import LoggerWindow from "./contents/logger";
+import ExperienceContent from "./contents/experience";
+import AboutContent from "./contents/about";
+import OSAlert from "./components/Alert";
+import AlertContent from "./contents/alert";
 
 // @ts-ignore
 window.LOGGER = GlobalLogger.getInstance();
@@ -34,6 +38,50 @@ async function startup() {
   await settings.setDesktopImage("/assets/main_desktop_background.jpg");
   logger.debug(`Dekstop Image Set:  ${settings.desktopImage.original}`);
 }
+
+const mainWindows = {
+  "experience": ({top, left}: { top?: number, left?: number }) => {
+    windowManager.new({
+      title: `Experience`,
+      content: new ExperienceContent(),
+      desktop: bridge.get<Desktop>("Desktop"),
+      dimensions: {
+        width: 600,
+        height: 500,
+      },
+      windowPosition: top || left ? {
+        top,
+        left,
+      } : {},
+      center: top || left ? false : true
+    });
+  },
+  "about": ({top, left}: { top?: number, left?: number }) => {
+    windowManager.new({
+      title: `About`,
+      content: new AboutContent(),
+      desktop: bridge.get<Desktop>("Desktop"),
+      windowPosition: top || left ? {
+        top,
+        left,
+      } : {},
+      center: top || left ? false : true
+    });
+  },
+  "alert": () => {
+    windowManager.new({
+      title: `Unexpected Error`,
+      content: new AlertContent({title: "Unexpected Error", text: "Unable to do this action"}),
+      dimensions: {
+        width: 250,
+        height: 150
+      },
+      desktop: bridge.get<Desktop>("Desktop"),
+      isDialog: true
+    });
+  }
+}
+
 startup().then(async () => {
   const desktop = new Desktop({
     backgroundColor: "#EEEEEE",
@@ -50,12 +98,37 @@ startup().then(async () => {
     windowManager.new({
       title: "Debugger",
       content: new LoggerWindow(),
-      dimensions: { width: 800, height: 400 },
+      dimensions: {width: 800, height: 400},
       desktop: bridge.get<Desktop>("Desktop"),
     });
   }
+  if (params.windows) {
 
-  
+    const windows = (params.windows as string).split(',')
+    windows.forEach(windowToOpen => {
+      if (windows.includes("experience") && windows.includes("about")) {
+        if (windowToOpen == "about") {
+          mainWindows[windowToOpen]({top: 30, left: 30})
+          return
+        }
+        if (windowToOpen == "experience") {
+          mainWindows[windowToOpen]({top: 30, left: 600})
+          return
+
+        }
+        if (mainWindows[windowToOpen]) {
+          mainWindows[windowToOpen]({})
+        }
+
+        return
+      }
+      if (mainWindows[windowToOpen]) {
+        mainWindows[windowToOpen]({})
+      }
+    })
+  }
+
+
   // We are only using the user-astronaut icon
   library.add(faTimes, faWindowMaximize, faWindowMinimize);
 

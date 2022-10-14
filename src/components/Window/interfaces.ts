@@ -2,6 +2,7 @@ import Desktop from "./../Desktop";
 import OSWindow from "./index";
 
 export interface IWindow {
+  isDialog: boolean
   title: string;
   content: any;
   desktop: Desktop;
@@ -10,6 +11,7 @@ export interface IWindow {
     width: number;
     height: number;
   };
+  windowPosition: any,
   onActive: (window: OSWindow) => void;
   onClose: (window: OSWindow) => void;
 }

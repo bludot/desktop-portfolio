@@ -6,6 +6,7 @@ import TopBar from "./topbar";
 import WindowBlur from "./blur";
 
 class OSWindow extends OSElement {
+  isDialog: boolean = false;
   windowPosition: any;
   className: string = "window";
   title: string;
@@ -24,6 +25,7 @@ class OSWindow extends OSElement {
     height: 400,
   };
   constructor({
+    isDialog,
     title,
     content,
     desktop,
@@ -34,32 +36,34 @@ class OSWindow extends OSElement {
       width: 400,
       height: 400,
     },
+    windowPosition
   }: IWindow) {
     super("window", "window");
-    // const blur = document.createElement("blur");
+
     const blur = new WindowBlur(60, 8);
 
-    // this.element.appendChild(blur);
     blur.load(this.element);
     this.title = title;
     this.content = content;
     this.desktop = desktop;
-    this.windowPosition = {};
+
     this.onActive = onActive;
     this.onClose = onClose;
     this.center = center;
     this.dimensions = dimensions;
-    this.topbar = new TopBar({ title, close: () => this.onClose(this) });
+    this.topbar = new TopBar({ title, close: () => this.onClose(this), isDialog });
+    this.windowPosition = windowPosition || {}
     this.style = () => ({
       [this.id]: {
         background: "rgba(200,200,200, .5)",
         position: "fixed",
-        top: 0,
-        left: 0,
+        top: this.windowPosition.top || 0,
+        left: this.windowPosition.left || 0,
         height: `${this.dimensions.height}px`,
         width: `${this.dimensions.width}px`,
         borderRadius: "8px",
-        overflow: "hidden",
+        // overflow: "hidden",
+        overflow: "auto",
         boxShadow: this.active
           ? `0 17px 50px 0 rgba(0, 0, 0, 0.19),
         0 12px 15px 0 rgba(0, 0, 0, 0.24)`
@@ -80,15 +84,14 @@ class OSWindow extends OSElement {
     this.applyStyle();
   }
   setIndex(index: number): void {
-    // console.log("THIS", this);
+
     this.element.style.zIndex = index.toString();
   }
 
   mouseup(e: MouseEvent): void {
     window.removeEventListener("mousemove", this.mousemove.bind(this));
     window.removeEventListener("mouseup", this.mouseup.bind(this));
-    //window.removeEventListener("mousemove", this.mouseMoveLeft);
-    //window.removeEventListener("mousemove", this.mouseMoveTop);
+
     this.windowPosition = {};
   }
   mousemove(e: MouseEvent): void {
@@ -98,7 +101,7 @@ class OSWindow extends OSElement {
   }
 
   mousedown(e: MouseEvent): void {
-    // e.preventDefault();
+
     if (
       this.windowPosition && // 👈 null and undefined check
       Object.keys(this.windowPosition).length === 0 &&
@@ -134,10 +137,12 @@ class OSWindow extends OSElement {
     height: auto;
     z-index: 1;
     flex: 1 1 auto;
-    overflow: hidden;`;
+    overflow: auto;
+    `;
+    // overflow: hidden;
 
     if (typeof this.content.load === "function") {
-      // main.appendChild(this.content());
+
       await this.content.load(main);
     } else {
       main.appendChild(this.content);
@@ -146,9 +151,9 @@ class OSWindow extends OSElement {
       this.onClose(this);
     };
     await this.topbar.load(this.element);
-    // this.element.appendChild(topbar({ title: this.title, close: onClose }));
+
     this.element.appendChild(main);
-    // WindowManager.init(this.element);
+
     super.load(this.desktop.getElement());
     if (this.center) {
       console.log("WIDTH", getWindowWidth());

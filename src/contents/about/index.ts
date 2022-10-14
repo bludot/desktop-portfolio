@@ -3,7 +3,7 @@ import OSElement from "./../../utils/OSElement";
 const content = `
 <div>
   <h1>About</h1>
-  <h2>Bobet Marely</h2>
+  <h2>James Trotter</h2>
   <p>Hello!</p>
   <p>I am a software engineer passionate about technology. You can see my experience by going to the start menu and
   selecting experience</p>

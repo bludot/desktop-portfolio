@@ -83,7 +83,7 @@ class TaskbarButtons extends OSElement {
           `;
           container.appendChild(icon);
           const span = document.createElement("span");
-          span.appendChild(document.createTextNode("Bobet"));
+          span.appendChild(document.createTextNode("James"));
           span.style.cssText = `
             flex: 1 1 auto;
             display: inline-block;

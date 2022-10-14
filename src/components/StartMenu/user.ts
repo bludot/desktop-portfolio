@@ -19,7 +19,7 @@ class User extends OSElement {
       margin: 5px 0;
       flex: 1 1 auto;
     `;
-    header.appendChild(document.createTextNode("Bobet Marelet"));
+    header.appendChild(document.createTextNode("James Trotter"));
     const subtitle = document.createElement("sub");
 
     subtitle.style.cssText = `

@@ -63,10 +63,11 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 import OSElement from "./OSElement";
 var ResizableBorder = /** @class */ (function (_super) {
     __extends(ResizableBorder, _super);
-    function ResizableBorder(type) {
+    function ResizableBorder(type, width) {
         var _this = _super.call(this, "border", "border") || this;
         _this.element.className = "border";
         _this.type = type;
+        _this.borderWidth = width || 3;
         _this.parentDimensions = {
             width: 0,
             height: 0,
@@ -86,7 +87,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { top: -5, left: 0, right: 0, height: 5, cursor: "ns-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { top: -_this.borderWidth, left: 0, right: 0, height: _this.borderWidth, cursor: "ns-resize" }),
                     _a);
             };
         }
@@ -94,7 +95,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { top: 0, bottom: 0, right: -5, width: 5, cursor: "ew-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { top: 0, bottom: 0, right: -_this.borderWidth, width: _this.borderWidth, cursor: "ew-resize" }),
                     _a);
             };
         }
@@ -102,7 +103,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { bottom: -5, right: 0, left: 0, height: 5, cursor: "ns-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { bottom: -_this.borderWidth, right: 0, left: 0, height: _this.borderWidth, cursor: "ns-resize" }),
                     _a);
             };
         }
@@ -110,7 +111,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { bottom: 0, top: 0, left: -5, width: 5, cursor: "ew-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { bottom: 0, top: 0, left: -_this.borderWidth, width: _this.borderWidth, cursor: "ew-resize" }),
                     _a);
             };
         }
@@ -118,7 +119,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { bottom: -5, right: -5, width: 5, height: 5, cursor: "nwse-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { bottom: -_this.borderWidth, right: -_this.borderWidth, width: _this.borderWidth, height: _this.borderWidth, cursor: "nwse-resize" }),
                     _a);
             };
         }
@@ -126,7 +127,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { bottom: -5, left: -5, width: 5, height: 5, cursor: "nesw-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { bottom: -_this.borderWidth, left: -_this.borderWidth, width: _this.borderWidth, height: _this.borderWidth, cursor: "nesw-resize" }),
                     _a);
             };
         }
@@ -134,7 +135,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { top: -5, left: -5, width: 5, height: 5, cursor: "nwse-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { top: -_this.borderWidth, left: -_this.borderWidth, width: _this.borderWidth, height: _this.borderWidth, cursor: "nwse-resize" }),
                     _a);
             };
         }
@@ -142,7 +143,7 @@ var ResizableBorder = /** @class */ (function (_super) {
             _this.style = function () {
                 var _a;
                 return (_a = {},
-                    _a[_this.id] = __assign(__assign({}, style), { top: -5, right: -5, width: 5, height: 5, cursor: "nesw-resize" }),
+                    _a[_this.id] = __assign(__assign({}, style), { top: -_this.borderWidth, right: -_this.borderWidth, width: _this.borderWidth, height: _this.borderWidth, cursor: "nesw-resize" }),
                     _a);
             };
         }

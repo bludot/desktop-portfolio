@@ -1,5 +1,6 @@
 import OSElement from "./OSElement";
 class ResizableBorder extends OSElement {
+  borderWidth: number
   type: ResizeType;
   parentDimensions: {
     width: number;
@@ -11,10 +12,11 @@ class ResizableBorder extends OSElement {
     x: number;
     y: number;
   };
-  constructor(type: ResizeType) {
+  constructor(type: ResizeType, width?: number) {
     super("border", "border");
     this.element.className = "border";
     this.type = type;
+    this.borderWidth = width || 3
     this.parentDimensions = {
       width: 0,
       height: 0,
@@ -36,10 +38,10 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          top: -5,
+          top: -this.borderWidth,
           left: 0,
           right: 0,
-          height: 5,
+          height: this.borderWidth,
           cursor: "ns-resize"
         }
       });
@@ -49,8 +51,8 @@ class ResizableBorder extends OSElement {
           ...style,
           top: 0,
           bottom: 0,
-          right: -5,
-          width: 5,
+          right: -this.borderWidth,
+          width: this.borderWidth,
           cursor: "ew-resize"
         }
       });
@@ -58,10 +60,10 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          bottom: -5,
+          bottom: -this.borderWidth,
           right: 0,
           left: 0,
-          height: 5,
+          height: this.borderWidth,
           cursor: "ns-resize"
         }
       });
@@ -71,8 +73,8 @@ class ResizableBorder extends OSElement {
           ...style,
           bottom: 0,
           top: 0,
-          left: -5,
-          width: 5,
+          left: -this.borderWidth,
+          width: this.borderWidth,
           cursor: "ew-resize"
         }
       });
@@ -80,10 +82,10 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          bottom: -5,
-          right: -5,
-          width: 5,
-          height: 5,
+          bottom: -this.borderWidth,
+          right: -this.borderWidth,
+          width: this.borderWidth,
+          height: this.borderWidth,
           cursor: "nwse-resize"
         }
       });
@@ -91,10 +93,10 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          bottom: -5,
-          left: -5,
-          width: 5,
-          height: 5,
+          bottom: -this.borderWidth,
+          left: -this.borderWidth,
+          width: this.borderWidth,
+          height: this.borderWidth,
           cursor: "nesw-resize"
         }
       });
@@ -102,10 +104,10 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          top: -5,
-          left: -5,
-          width: 5,
-          height: 5,
+          top: -this.borderWidth,
+          left: -this.borderWidth,
+          width: this.borderWidth,
+          height: this.borderWidth,
           cursor: "nwse-resize"
         }
       });
@@ -113,10 +115,10 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          top: -5,
-          right: -5,
-          width: 5,
-          height: 5,
+          top: -this.borderWidth,
+          right: -this.borderWidth,
+          width: this.borderWidth,
+          height: this.borderWidth,
           cursor: "nesw-resize"
         }
       });

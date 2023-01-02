@@ -103,6 +103,13 @@ class OSElement {
   public getElement() {
     return this.element;
   }
+
+  public updateDimension(x: number, y: number, width: number, height: number) {
+    this.element.style.top = `${y}px`
+    this.element.style.left = `${x}px`
+    this.element.style.width = `${width}px`
+    this.element.style.height = `${height}px`
+  }
 }
 
 export default OSElement;

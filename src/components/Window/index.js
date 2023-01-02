@@ -53,6 +53,7 @@ import OSElement from "../../utils/OSElement";
 import { getWindowWidth, getWindowHeight } from "./../../utils/utils";
 import TopBar from "./topbar";
 import WindowBlur from "./blur";
+import Resizable from "../../utils/resizable";
 var OSWindow = /** @class */ (function (_super) {
     __extends(OSWindow, _super);
     function OSWindow(_a) {
@@ -92,7 +93,7 @@ var OSWindow = /** @class */ (function (_super) {
                     width: _this.dimensions.width + "px",
                     borderRadius: "8px",
                     // overflow: "hidden",
-                    overflow: "auto",
+                    // overflow: "auto",
                     boxShadow: _this.active
                         ? "0 17px 50px 0 rgba(0, 0, 0, 0.19),\n        0 12px 15px 0 rgba(0, 0, 0, 0.24)"
                         : "0px 2px 5px 0px rgba(0, 0, 0, 0.16),\n                0 2px 5px 0 rgba(0, 0, 0, 0.26)",
@@ -183,10 +184,14 @@ var OSWindow = /** @class */ (function (_super) {
                                 this.desktop.getTaskbar().getElement().clientHeight + "px";
                         }
                         this.makeMovable();
+                        this.makeResizable();
                         return [2 /*return*/];
                 }
             });
         });
+    };
+    OSWindow.prototype.makeResizable = function () {
+        Resizable(this);
     };
     return OSWindow;
 }(OSElement));

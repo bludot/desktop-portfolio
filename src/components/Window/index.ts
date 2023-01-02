@@ -4,6 +4,7 @@ import Desktop from "./../Desktop";
 import { IWindow } from "./interfaces";
 import TopBar from "./topbar";
 import WindowBlur from "./blur";
+import Resizable from "../../utils/resizable";
 
 class OSWindow extends OSElement {
   isDialog: boolean = false;
@@ -63,7 +64,7 @@ class OSWindow extends OSElement {
         width: `${this.dimensions.width}px`,
         borderRadius: "8px",
         // overflow: "hidden",
-        overflow: "auto",
+        // overflow: "auto",
         boxShadow: this.active
           ? `0 17px 50px 0 rgba(0, 0, 0, 0.19),
         0 12px 15px 0 rgba(0, 0, 0, 0.24)`
@@ -167,6 +168,10 @@ class OSWindow extends OSElement {
       }px`;
     }
     this.makeMovable();
+    this.makeResizable();
+  }
+  makeResizable() {
+    Resizable(this)
   }
 }
 export default OSWindow;

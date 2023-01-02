@@ -123,7 +123,7 @@ var TaskbarButtons = /** @class */ (function (_super) {
                     icon.style.cssText = "\n            flex: 1 1 auto;\n            width: 25px;\n            height: 25px;\n            background-image: url(http://placekitten.com/40/40);\n            background-size: cover;\n            background-position: center;\n            border-radius: 100%;\n            border: 1px solid #666;\n            display: inline-block;\n            margin: 0 4px;\n          ";
                     container.appendChild(icon);
                     var span = document.createElement("span");
-                    span.appendChild(document.createTextNode("Bobet"));
+                    span.appendChild(document.createTextNode("James"));
                     span.style.cssText = "\n            flex: 1 1 auto;\n            display: inline-block;\n            margin: 0 4px;\n          ";
                     container.appendChild(span);
                     return container;

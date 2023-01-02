@@ -157,6 +157,12 @@ var OSElement = /** @class */ (function () {
     OSElement.prototype.getElement = function () {
         return this.element;
     };
+    OSElement.prototype.updateDimension = function (x, y, width, height) {
+        this.element.style.top = y + "px";
+        this.element.style.left = x + "px";
+        this.element.style.width = width + "px";
+        this.element.style.height = height + "px";
+    };
     return OSElement;
 }());
 export default OSElement;

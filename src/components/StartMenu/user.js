@@ -31,7 +31,7 @@ var User = /** @class */ (function (_super) {
         };
         var header = document.createElement("h1");
         header.style.cssText = "\n      font-size: 34px;\n      font-weight: 200;\n      white-space: nowrap;\n      margin: 5px 0;\n      flex: 1 1 auto;\n    ";
-        header.appendChild(document.createTextNode("Bobet Marelet"));
+        header.appendChild(document.createTextNode("James Trotter"));
         var subtitle = document.createElement("sub");
         subtitle.style.cssText = "\n      font-size: 16px;\n      font-weight: 400;\n      white-space: nowrap;\n      margin: 5px 0;\n      flex: 1 1 auto;\n    ";
         subtitle.appendChild(document.createTextNode("Software Engineer"));

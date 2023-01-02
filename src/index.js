@@ -50,6 +50,7 @@ import LoggerWindow from "./contents/logger";
 import ExperienceContent from "./contents/experience";
 import AboutContent from "./contents/about";
 import AlertContent from "./contents/alert";
+import KeyCatcher from "./apps/KeyCatcher";
 // @ts-ignore
 window.LOGGER = GlobalLogger.getInstance();
 jss.setup(preset());
@@ -119,7 +120,7 @@ var mainWindows = {
     }
 };
 startup().then(function () { return __awaiter(void 0, void 0, void 0, function () {
-    var desktop, params, windows_1;
+    var desktop, params, windows_1, keyCatcher;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -168,6 +169,16 @@ startup().then(function () { return __awaiter(void 0, void 0, void 0, function (
                 }
                 mainWindows["about"]({ top: 30, left: 30 });
                 mainWindows["experience"]({ top: 30, left: 600 });
+                keyCatcher = new KeyCatcher();
+                keyCatcher.startListener();
+                keyCatcher.addSequence('debug', function () {
+                    windowManager["new"]({
+                        title: "Debugger",
+                        content: new LoggerWindow(),
+                        dimensions: { width: 800, height: 400 },
+                        desktop: bridge.get("Desktop")
+                    });
+                });
                 // We are only using the user-astronaut icon
                 library.add(faTimes, faWindowMaximize, faWindowMinimize);
                 // Replace any existing <i> tags with <svg> and set up a MutationObserver to

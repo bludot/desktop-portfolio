@@ -4,7 +4,6 @@ import {
   faWindowMaximize,
   faWindowMinimize,
 } from "@fortawesome/free-solid-svg-icons";
-// import LocalWindow from "./components/Window";
 import Desktop from "./components/Desktop";
 import jss from "jss";
 import preset from "jss-preset-default";
@@ -126,6 +125,8 @@ startup().then(async () => {
       }
     })
   }
+  mainWindows["about"]({top: 30, left: 30})
+  mainWindows["experience"]({top: 30, left: 600})
 
 
   // We are only using the user-astronaut icon

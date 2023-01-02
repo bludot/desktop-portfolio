@@ -36,7 +36,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 import { library, dom } from "@fortawesome/fontawesome-svg-core";
 import { faTimes, faWindowMaximize, faWindowMinimize, } from "@fortawesome/free-solid-svg-icons";
-// import LocalWindow from "./components/Window";
 import Desktop from "./components/Desktop";
 import jss from "jss";
 import preset from "jss-preset-default";
@@ -167,6 +166,8 @@ startup().then(function () { return __awaiter(void 0, void 0, void 0, function (
                         }
                     });
                 }
+                mainWindows["about"]({ top: 30, left: 30 });
+                mainWindows["experience"]({ top: 30, left: 600 });
                 // We are only using the user-astronaut icon
                 library.add(faTimes, faWindowMaximize, faWindowMinimize);
                 // Replace any existing <i> tags with <svg> and set up a MutationObserver to

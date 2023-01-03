@@ -13,6 +13,17 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -52,10 +63,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 import OSElement from "./../../utils/OSElement";
 import TaskbarButtons from "./button";
 import WindowBlur from "../Window/blur";
+import isMobile from 'is-mobile';
 var Taskbar = /** @class */ (function (_super) {
     __extends(Taskbar, _super);
     function Taskbar() {
         var _this = _super.call(this, "taskbar", "taskbar") || this;
+        _this.isMobile = isMobile();
         var blur = new WindowBlur(30, 8);
         blur.load(_this.element);
         _this.taskbarButtons = new TaskbarButtons();
@@ -63,25 +76,14 @@ var Taskbar = /** @class */ (function (_super) {
         _this.style = function () {
             var _a;
             return (_a = {},
-                _a[_this.id] = {
-                    height: "50px",
-                    position: "fixed",
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    display: "block",
-                    zIndex: "1000",
-                    backgroundColor: "rgba(255,255,255,.5)",
-                    margin: "15px",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    boxShadow: "0 17px 50px 0 rgba(0, 0, 0, 0.19),\n        0 12px 15px 0 rgba(0, 0, 0, 0.24)",
+                _a[_this.id] = __assign(__assign({ height: "50px", position: "fixed", bottom: 0, left: 0, right: 0, display: "block", zIndex: "1000", backgroundColor: "rgba(255,255,255,.5)", margin: _this.isMobile ? "0px" : "15px" }, (_this.isMobile ? {} : {
+                    borderRadius: "8px"
+                })), { overflow: "hidden", boxShadow: "0 17px 50px 0 rgba(0, 0, 0, 0.19),\n        0 12px 15px 0 rgba(0, 0, 0, 0.24)", 
                     // "backdrop-filter": "blur(20px)",
                     /*...(!support.css.backdropFilter && {
                       backgroundColor: "rgba(200,200,200,.8)"
                     }),*/
-                    color: "#000"
-                },
+                    color: "#000" }),
                 _a);
         };
         return _this;

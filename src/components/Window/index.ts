@@ -6,7 +6,6 @@ import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
 import isMobile from 'is-mobile'
-import desktop from "./../Desktop";
 
 class OSWindow extends OSElement {
   isDialog: boolean = false;
@@ -66,7 +65,11 @@ class OSWindow extends OSElement {
         left: this.windowPosition.left || 0,
         height: `${this.dimensions.height}px`,
         width: `${this.dimensions.width}px`,
-        borderRadius: "8px",
+        ...(this.isMobile ? {
+          } : {
+            borderRadius: "8px",
+          }
+        ),
         // overflow: "hidden",
         // overflow: "auto",
         boxShadow: this.active
@@ -179,7 +182,7 @@ class OSWindow extends OSElement {
     }
     if (this.isMobile) {
       setTimeout(() => {
-        const height = getWindowHeight() - (getWindowHeight() - this.desktop.getTaskbar().getElement().offsetTop) - 10
+        const height = getWindowHeight() - (getWindowHeight() - this.desktop.getTaskbar().getElement().offsetTop)
         this.element.style.left = `0px`;
         this.element.style.top = `0px`;
         this.element.style.height = `${height}px`;

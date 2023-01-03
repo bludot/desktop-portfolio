@@ -13,6 +13,17 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -86,22 +97,14 @@ var OSWindow = /** @class */ (function (_super) {
         _this.style = function () {
             var _a;
             return (_a = {},
-                _a[_this.id] = {
-                    background: "rgba(200,200,200, .5)",
-                    position: "fixed",
-                    top: _this.windowPosition.top || 0,
-                    left: _this.windowPosition.left || 0,
-                    height: _this.dimensions.height + "px",
-                    width: _this.dimensions.width + "px",
-                    borderRadius: "8px",
+                _a[_this.id] = __assign(__assign({ background: "rgba(200,200,200, .5)", position: "fixed", top: _this.windowPosition.top || 0, left: _this.windowPosition.left || 0, height: _this.dimensions.height + "px", width: _this.dimensions.width + "px" }, (_this.isMobile ? {} : {
+                    borderRadius: "8px"
+                })), { 
                     // overflow: "hidden",
                     // overflow: "auto",
                     boxShadow: _this.active
                         ? "0 17px 50px 0 rgba(0, 0, 0, 0.19),\n        0 12px 15px 0 rgba(0, 0, 0, 0.24)"
-                        : "0px 2px 5px 0px rgba(0, 0, 0, 0.16),\n                0 2px 5px 0 rgba(0, 0, 0, 0.26)",
-                    display: "flex",
-                    flexFlow: "column nowrap"
-                },
+                        : "0px 2px 5px 0px rgba(0, 0, 0, 0.16),\n                0 2px 5px 0 rgba(0, 0, 0, 0.26)", display: "flex", flexFlow: "column nowrap" }),
                 _a);
         };
         return _this;
@@ -189,7 +192,7 @@ var OSWindow = /** @class */ (function (_super) {
                         }
                         if (this.isMobile) {
                             setTimeout(function () {
-                                var height = getWindowHeight() - (getWindowHeight() - _this.desktop.getTaskbar().getElement().offsetTop) - 10;
+                                var height = getWindowHeight() - (getWindowHeight() - _this.desktop.getTaskbar().getElement().offsetTop);
                                 _this.element.style.left = "0px";
                                 _this.element.style.top = "0px";
                                 _this.element.style.height = height + "px";

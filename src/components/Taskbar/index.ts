@@ -1,12 +1,15 @@
 import OSElement from "./../../utils/OSElement";
 import TaskbarButtons from "./button";
 import WindowBlur from "../Window/blur";
-import StartMenu from "../StartMenu";
+import isMobile from 'is-mobile'
 
 class Taskbar extends OSElement {
   taskbarButtons: TaskbarButtons;
+  isMobile: boolean
+
   constructor() {
     super("taskbar", "taskbar");
+    this.isMobile = isMobile()
     const blur = new WindowBlur(30, 8);
     blur.load(this.element);
     this.taskbarButtons = new TaskbarButtons();
@@ -21,8 +24,13 @@ class Taskbar extends OSElement {
         display: "block",
         zIndex: "1000",
         backgroundColor: "rgba(255,255,255,.5)",
-        margin: "15px",
-        borderRadius: "8px",
+        margin: this.isMobile ? "0px" : "15px",
+        ...(this.isMobile ? {
+          } : {
+            borderRadius: "8px",
+          }
+        ),
+
         overflow: "hidden",
         boxShadow: `0 17px 50px 0 rgba(0, 0, 0, 0.19),
         0 12px 15px 0 rgba(0, 0, 0, 0.24)`,

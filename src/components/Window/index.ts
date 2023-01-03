@@ -105,14 +105,13 @@ class OSWindow extends OSElement {
 
     if (
       this.windowPosition && // 👈 null and undefined check
-      Object.keys(this.windowPosition).length === 0 &&
       this.windowPosition.constructor === Object
     ) {
       this.windowPosition = {
         y: e.pageY,
         x: e.pageX,
-        top: e.pageY - parseInt(this.element.style.top) || e.pageY,
-        left: e.pageX - parseInt(this.element.style.left) || e.pageX,
+        top: e.pageY - this.element.offsetTop || e.pageY,
+        left: e.pageX - this.element.offsetLeft || e.pageX,
       };
     }
     this.onActive(this);
@@ -167,8 +166,11 @@ class OSWindow extends OSElement {
         this.desktop.getTaskbar().getElement().clientHeight
       }px`;
     }
-    this.makeMovable();
-    this.makeResizable();
+    setTimeout(() => {
+      this.makeMovable();
+      this.makeResizable();
+    }, 0)
+
   }
   makeResizable() {
     Resizable(this)

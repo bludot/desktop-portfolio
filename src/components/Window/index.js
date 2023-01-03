@@ -127,13 +127,12 @@ var OSWindow = /** @class */ (function (_super) {
     };
     OSWindow.prototype.mousedown = function (e) {
         if (this.windowPosition && // 👈 null and undefined check
-            Object.keys(this.windowPosition).length === 0 &&
             this.windowPosition.constructor === Object) {
             this.windowPosition = {
                 y: e.pageY,
                 x: e.pageX,
-                top: e.pageY - parseInt(this.element.style.top) || e.pageY,
-                left: e.pageX - parseInt(this.element.style.left) || e.pageX
+                top: e.pageY - this.element.offsetTop || e.pageY,
+                left: e.pageX - this.element.offsetLeft || e.pageX
             };
         }
         this.onActive(this);
@@ -183,8 +182,10 @@ var OSWindow = /** @class */ (function (_super) {
                                 this.dimensions.height / 2 -
                                 this.desktop.getTaskbar().getElement().clientHeight + "px";
                         }
-                        this.makeMovable();
-                        this.makeResizable();
+                        setTimeout(function () {
+                            _this.makeMovable();
+                            _this.makeResizable();
+                        }, 0);
                         return [2 /*return*/];
                 }
             });

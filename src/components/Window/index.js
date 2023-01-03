@@ -126,15 +126,12 @@ var OSWindow = /** @class */ (function (_super) {
         this.element.style.left = e.pageX - this.windowPosition.left + "px";
     };
     OSWindow.prototype.mousedown = function (e) {
-        if (this.windowPosition && // 👈 null and undefined check
-            this.windowPosition.constructor === Object) {
-            this.windowPosition = {
-                y: e.pageY,
-                x: e.pageX,
-                top: e.pageY - this.element.offsetTop || e.pageY,
-                left: e.pageX - this.element.offsetLeft || e.pageX
-            };
-        }
+        this.windowPosition = {
+            y: e.pageY,
+            x: e.pageX,
+            top: e.pageY - this.element.offsetTop || e.pageY,
+            left: e.pageX - this.element.offsetLeft || e.pageX
+        };
         this.onActive(this);
         window.addEventListener("mouseup", this.mouseup.bind(this));
         window.addEventListener("mousemove", this.mousemove.bind(this));
@@ -175,6 +172,12 @@ var OSWindow = /** @class */ (function (_super) {
                         _a.sent();
                         this.element.appendChild(main);
                         _super.prototype.load.call(this, this.desktop.getElement());
+                        if (this.windowPosition.top) {
+                            this.element.style.top = this.windowPosition.top;
+                        }
+                        if (this.windowPosition.left) {
+                            this.element.style.left = this.windowPosition.left;
+                        }
                         if (this.center) {
                             console.log("WIDTH", getWindowWidth());
                             this.element.style.left = getWindowWidth() / 2 - this.dimensions.width / 2 + "px";

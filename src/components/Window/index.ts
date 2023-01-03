@@ -103,17 +103,14 @@ class OSWindow extends OSElement {
 
   mousedown(e: MouseEvent): void {
 
-    if (
-      this.windowPosition && // 👈 null and undefined check
-      this.windowPosition.constructor === Object
-    ) {
+
       this.windowPosition = {
         y: e.pageY,
         x: e.pageX,
         top: e.pageY - this.element.offsetTop || e.pageY,
         left: e.pageX - this.element.offsetLeft || e.pageX,
       };
-    }
+
     this.onActive(this);
     window.addEventListener("mouseup", this.mouseup.bind(this));
     window.addEventListener("mousemove", this.mousemove.bind(this));
@@ -155,6 +152,12 @@ class OSWindow extends OSElement {
     this.element.appendChild(main);
 
     super.load(this.desktop.getElement());
+    if (this.windowPosition.top) {
+      this.element.style.top = this.windowPosition.top
+    }
+    if (this.windowPosition.left) {
+      this.element.style.left = this.windowPosition.left
+    }
     if (this.center) {
       console.log("WIDTH", getWindowWidth());
       this.element.style.left = `${

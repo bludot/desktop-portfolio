@@ -54,6 +54,7 @@ import { getWindowWidth, getWindowHeight } from "./../../utils/utils";
 import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
+import isMobile from 'is-mobile';
 var OSWindow = /** @class */ (function (_super) {
     __extends(OSWindow, _super);
     function OSWindow(_a) {
@@ -70,6 +71,7 @@ var OSWindow = /** @class */ (function (_super) {
             width: 400,
             height: 400
         };
+        _this.isMobile = isMobile();
         var blur = new WindowBlur(60, 8);
         blur.load(_this.element);
         _this.title = title;
@@ -185,10 +187,21 @@ var OSWindow = /** @class */ (function (_super) {
                                 this.dimensions.height / 2 -
                                 this.desktop.getTaskbar().getElement().clientHeight + "px";
                         }
-                        setTimeout(function () {
-                            _this.makeMovable();
-                            _this.makeResizable();
-                        }, 0);
+                        if (this.isMobile) {
+                            setTimeout(function () {
+                                var height = getWindowHeight() - (getWindowHeight() - _this.desktop.getTaskbar().getElement().offsetTop) - 10;
+                                _this.element.style.left = "0px";
+                                _this.element.style.top = "0px";
+                                _this.element.style.height = height + "px";
+                                _this.element.style.width = getWindowWidth() + "px";
+                            }, 0);
+                        }
+                        if (!this.isMobile) {
+                            setTimeout(function () {
+                                _this.makeMovable();
+                                _this.makeResizable();
+                            }, 0);
+                        }
                         return [2 /*return*/];
                 }
             });

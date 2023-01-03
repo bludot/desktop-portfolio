@@ -1,10 +1,12 @@
 import OSElement from "../../utils/OSElement";
-import { getWindowWidth, getWindowHeight } from "./../../utils/utils";
+import {getWindowWidth, getWindowHeight} from "./../../utils/utils";
 import Desktop from "./../Desktop";
-import { IWindow } from "./interfaces";
+import {IWindow} from "./interfaces";
 import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
+import isMobile from 'is-mobile'
+import desktop from "./../Desktop";
 
 class OSWindow extends OSElement {
   isDialog: boolean = false;
@@ -25,22 +27,24 @@ class OSWindow extends OSElement {
     width: 400,
     height: 400,
   };
-  constructor({
-    isDialog,
-    title,
-    content,
-    desktop,
-    onActive,
-    onClose,
-    center = true,
-    dimensions = {
-      width: 400,
-      height: 400,
-    },
-    windowPosition
-  }: IWindow) {
-    super("window", "window");
+  isMobile: boolean;
 
+  constructor({
+                isDialog,
+                title,
+                content,
+                desktop,
+                onActive,
+                onClose,
+                center = true,
+                dimensions = {
+                  width: 400,
+                  height: 400,
+                },
+                windowPosition
+              }: IWindow) {
+    super("window", "window");
+    this.isMobile = isMobile()
     const blur = new WindowBlur(60, 8);
 
     blur.load(this.element);
@@ -52,7 +56,7 @@ class OSWindow extends OSElement {
     this.onClose = onClose;
     this.center = center;
     this.dimensions = dimensions;
-    this.topbar = new TopBar({ title, close: () => this.onClose(this), isDialog });
+    this.topbar = new TopBar({title, close: () => this.onClose(this), isDialog});
     this.windowPosition = windowPosition || {}
     this.style = () => ({
       [this.id]: {
@@ -80,10 +84,12 @@ class OSWindow extends OSElement {
     this.active = false;
     this.applyStyle();
   }
+
   focus() {
     this.active = true;
     this.applyStyle();
   }
+
   setIndex(index: number): void {
 
     this.element.style.zIndex = index.toString();
@@ -95,6 +101,7 @@ class OSWindow extends OSElement {
 
     this.windowPosition = {};
   }
+
   mousemove(e: MouseEvent): void {
     e.preventDefault();
     this.element.style.top = e.pageY - this.windowPosition.top + "px";
@@ -104,12 +111,12 @@ class OSWindow extends OSElement {
   mousedown(e: MouseEvent): void {
 
 
-      this.windowPosition = {
-        y: e.pageY,
-        x: e.pageX,
-        top: e.pageY - this.element.offsetTop || e.pageY,
-        left: e.pageX - this.element.offsetLeft || e.pageX,
-      };
+    this.windowPosition = {
+      y: e.pageY,
+      x: e.pageX,
+      top: e.pageY - this.element.offsetTop || e.pageY,
+      left: e.pageX - this.element.offsetLeft || e.pageX,
+    };
 
     this.onActive(this);
     window.addEventListener("mouseup", this.mouseup.bind(this));
@@ -127,6 +134,7 @@ class OSWindow extends OSElement {
       .addEventListener("mousedown", this.mousedown.bind(this));
     this.element.addEventListener("mousedown", this.mousedownWindow.bind(this));
   }
+
   public async load(element: HTMLElement): Promise<void> {
     const main = document.createElement("div");
     main.style.cssText = `
@@ -169,14 +177,26 @@ class OSWindow extends OSElement {
         this.desktop.getTaskbar().getElement().clientHeight
       }px`;
     }
-    setTimeout(() => {
-      this.makeMovable();
-      this.makeResizable();
-    }, 0)
-
+    if (this.isMobile) {
+      setTimeout(() => {
+        const height = getWindowHeight() - (getWindowHeight() - this.desktop.getTaskbar().getElement().offsetTop) - 10
+        this.element.style.left = `0px`;
+        this.element.style.top = `0px`;
+        this.element.style.height = `${height}px`;
+        this.element.style.width = `${getWindowWidth()}px`;
+      }, 0)
+    }
+    if (!this.isMobile) {
+      setTimeout(() => {
+        this.makeMovable();
+        this.makeResizable();
+      }, 0)
+    }
   }
+
   makeResizable() {
     Resizable(this)
   }
 }
+
 export default OSWindow;

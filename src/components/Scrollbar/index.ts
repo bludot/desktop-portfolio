@@ -47,6 +47,30 @@ class ScrollBar extends OSElement {
     (this.element.children[0] as HTMLElement).style.top = top + "px";
     this.element.style.top = parent.scrollTop + "px";
     this.debounceHide();
+    const height =
+      (this.element.parentElement.clientHeight /
+        this.element.parentElement.scrollHeight) *
+      this.element.parentElement.clientHeight;
+    this.style = () => ({
+      [this.id]: {
+        position: "absolute",
+        top: 0,
+        height: this.element.parentElement?.clientHeight + "px",
+        right: "-10px",
+        width: "10px",
+        zIndex: "1",
+        transition: "right 250ms",
+        "& > .bar": {
+          width: "10px",
+          height: height + "px",
+          position: "relative",
+          backgroundColor: "#ccc"
+        }
+        // overflow: "hidden"
+      }
+    });
+    this.applyStyle()
+
   }
 
   hide() {
@@ -57,13 +81,10 @@ class ScrollBar extends OSElement {
   async load(element: HTMLElement) {
     super.load(element);
     setTimeout(() => {
-      console.log("THE HEIGHT", this.element.parentElement.clientHeight);
-      console.log("SCROLL HEIGHT", this.element.parentElement.scrollHeight);
       const height =
         (this.element.parentElement.clientHeight /
           this.element.parentElement.scrollHeight) *
         this.element.parentElement.clientHeight;
-      console.log("scrollbar");
       this.element.parentElement.style.overflow = "hidden"
       this.style = () => ({
         [this.id]: {

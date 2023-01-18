@@ -81,6 +81,7 @@ var ScrollBar = /** @class */ (function (_super) {
         return _this;
     }
     ScrollBar.prototype.scroll = function (e) {
+        var _this = this;
         this.element.style.right = "0px";
         // @ts-ignore
         var deltas = normalizeWheel(e);
@@ -96,6 +97,32 @@ var ScrollBar = /** @class */ (function (_super) {
         this.element.children[0].style.top = top + "px";
         this.element.style.top = parent.scrollTop + "px";
         this.debounceHide();
+        var height = (this.element.parentElement.clientHeight /
+            this.element.parentElement.scrollHeight) *
+            this.element.parentElement.clientHeight;
+        this.style = function () {
+            var _a;
+            var _b;
+            return (_a = {},
+                _a[_this.id] = {
+                    position: "absolute",
+                    top: 0,
+                    height: ((_b = _this.element.parentElement) === null || _b === void 0 ? void 0 : _b.clientHeight) + "px",
+                    right: "-10px",
+                    width: "10px",
+                    zIndex: "1",
+                    transition: "right 250ms",
+                    "& > .bar": {
+                        width: "10px",
+                        height: height + "px",
+                        position: "relative",
+                        backgroundColor: "#ccc"
+                    }
+                    // overflow: "hidden"
+                },
+                _a);
+        };
+        this.applyStyle();
     };
     ScrollBar.prototype.hide = function () {
         console.log("doing hide");
@@ -108,12 +135,9 @@ var ScrollBar = /** @class */ (function (_super) {
                 _super.prototype.load.call(this, element);
                 setTimeout(function () {
                     var _a;
-                    console.log("THE HEIGHT", _this.element.parentElement.clientHeight);
-                    console.log("SCROLL HEIGHT", _this.element.parentElement.scrollHeight);
                     var height = (_this.element.parentElement.clientHeight /
                         _this.element.parentElement.scrollHeight) *
                         _this.element.parentElement.clientHeight;
-                    console.log("scrollbar");
                     _this.element.parentElement.style.overflow = "hidden";
                     _this.style = function () {
                         var _a;

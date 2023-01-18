@@ -23,6 +23,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 };
 import App from "../App";
+import FeatureFlagsApp from "../FeatureFlags";
 var KeyCatcher = /** @class */ (function (_super) {
     __extends(KeyCatcher, _super);
     function KeyCatcher() {
@@ -34,6 +35,9 @@ var KeyCatcher = /** @class */ (function (_super) {
         _this.sequences = {
             'demo': function () {
                 console.log("demo!");
+            },
+            "feature": function () {
+                new FeatureFlagsApp().load();
             }
         };
         return _this;

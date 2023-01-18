@@ -6,8 +6,11 @@ import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
 import isMobile from 'is-mobile'
+import ScrollBar from "../Scrollbar";
+import db from "../../Store";
 
 class OSWindow extends OSElement {
+  private scrollbar: ScrollBar;
   isDialog: boolean = false;
   windowPosition: any;
   className: string = "window";
@@ -45,7 +48,7 @@ class OSWindow extends OSElement {
     super("window", "window");
     this.isMobile = isMobile()
     const blur = new WindowBlur(60, 8);
-
+    this.scrollbar = new ScrollBar();
     blur.load(this.element);
     this.title = title;
     this.content = content;
@@ -139,6 +142,7 @@ class OSWindow extends OSElement {
   }
 
   public async load(element: HTMLElement): Promise<void> {
+
     const main = document.createElement("div");
     main.style.cssText = `
     width: 100%;
@@ -146,12 +150,18 @@ class OSWindow extends OSElement {
     z-index: 1;
     flex: 1 1 auto;
     overflow: auto;
+    position: relative;
     `;
     // overflow: hidden;
 
     if (typeof this.content.load === "function") {
 
       await this.content.load(main);
+      const scrollbarFeature = await db.featureFlags.where({code: "custom_scrollbar"}).toArray()
+      console.log("THE FEATURE", scrollbarFeature)
+      if (scrollbarFeature[0]?.enabled) {
+        this.scrollbar.load(main);
+      }
     } else {
       main.appendChild(this.content);
     }

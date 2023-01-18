@@ -51,32 +51,98 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 import App from "../App";
 import windowManager from "../../utils/windowManager";
-import AboutContent from "../../contents/about";
 import bridge from "../../utils/bridge";
 import OSElement from "../../utils/OSElement";
-var FeatureFlags = /** @class */ (function (_super) {
-    __extends(FeatureFlags, _super);
-    function FeatureFlags() {
-        return _super.call(this, "FeatureFlags") || this;
+import SwitchToggle from "../../components/SwitchToggle";
+import db, { FeatureFlag } from './../../Store';
+var flags = {
+    "custom_scrollbar": {
+        name: "custom scrollbar",
+        enabled: false
     }
-    FeatureFlags.prototype.load = function () {
-        windowManager["new"]({
-            title: this.name,
-            content: new AboutContent(),
-            desktop: bridge.get("Desktop")
+};
+var FeatureFlagsApp = /** @class */ (function (_super) {
+    __extends(FeatureFlagsApp, _super);
+    function FeatureFlagsApp() {
+        return _super.call(this, "FeatureFlagsApp") || this;
+    }
+    FeatureFlagsApp.prototype.loadFeatures = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var featureFlags, _loop_1, feature;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, db.featureFlags.toArray()];
+                    case 1:
+                        featureFlags = _a.sent();
+                        _loop_1 = function (feature) {
+                            var isSaved = featureFlags.find(function (item) {
+                                return item.code == feature;
+                            });
+                            if (!isSaved) {
+                                var newFeature = new FeatureFlag(feature, flags[feature].name, flags[feature].enabled);
+                                newFeature.save();
+                            }
+                        };
+                        for (feature in flags) {
+                            _loop_1(feature);
+                        }
+                        return [2 /*return*/, db.featureFlags.toArray()];
+                }
+            });
         });
     };
-    return FeatureFlags;
+    FeatureFlagsApp.prototype.load = function () {
+        var _this = this;
+        this.loadFeatures().then(function (flags) {
+            _this.featureFlags = flags;
+            windowManager["new"]({
+                title: _this.name,
+                content: new FeatureFlagsContent(_this.featureFlags),
+                desktop: bridge.get("Desktop")
+            });
+        });
+    };
+    return FeatureFlagsApp;
 }(App));
 var FeatureFlagsContent = /** @class */ (function (_super) {
     __extends(FeatureFlagsContent, _super);
-    function FeatureFlagsContent() {
+    function FeatureFlagsContent(featureFlags) {
         var _this = _super.call(this, "FeatureFlagsContent", "feature-flags-content") || this;
         var element = document.createElement('div');
+        for (var feature in featureFlags) {
+            var switchToggle = new SwitchToggle(10, null, null, featureFlags[feature].enabled);
+            var container = document.createElement('div');
+            var span = document.createElement('span');
+            span.appendChild(document.createTextNode(featureFlags[feature].name));
+            container.appendChild(span);
+            switchToggle.load(container);
+            var onclick_1 = function (flag) {
+                return function () {
+                    flag.enabled = this.element.querySelector('input[type=checkbox]').checked;
+                    flag.save();
+                };
+            };
+            switchToggle.setOnClick(onclick_1(featureFlags[feature]));
+            element.appendChild(container);
+        }
+        _this.element.appendChild(element);
         _this.style = function () {
             var _a;
             return (_a = {},
-                _a[_this.id] = {},
+                _a[_this.id] = {
+                    "& > div > div": {
+                        height: "20px",
+                        borderBottom: "1px solid #ccc",
+                        display: "flex",
+                        flexFlow: "row nowrap",
+                        justifyContent: "space-between",
+                        margin: "10px",
+                        alignItems: "center",
+                        "& > *": {
+                            flex: "0 1 auto"
+                        }
+                    }
+                },
                 _a);
         };
         return _this;
@@ -91,4 +157,5 @@ var FeatureFlagsContent = /** @class */ (function (_super) {
     };
     return FeatureFlagsContent;
 }(OSElement));
+export default FeatureFlagsApp;
 //# sourceMappingURL=index.js.map

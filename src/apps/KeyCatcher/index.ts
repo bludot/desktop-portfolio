@@ -1,4 +1,5 @@
 import App from "../App";
+import FeatureFlagsApp from "../FeatureFlags";
 
 class KeyCatcher extends App {
   sequences: Record<string, () => void>
@@ -13,6 +14,9 @@ class KeyCatcher extends App {
     this.sequences = {
       'demo': () => {
         console.log("demo!")
+      },
+      "feature": () => {
+        new FeatureFlagsApp().load()
       }
     }
   }

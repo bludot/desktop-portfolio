@@ -81,6 +81,9 @@ var StartMenu = /** @class */ (function (_super) {
                 },
                 _a);
         };
+        // if (Settings.blur) {
+        //
+        // }
         var blur = new WindowBlur(60, 8);
         blur.load(_this.element);
         var menuGrid = new MenuGrid();

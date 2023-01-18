@@ -13,17 +13,6 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -60,30 +49,87 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-import OSElement from "./../../utils/OSElement";
-import TaskbarButtons from "./button";
-import WindowBlur from "../Window/blur";
-import isMobile from 'is-mobile';
-var Taskbar = /** @class */ (function (_super) {
-    __extends(Taskbar, _super);
-    function Taskbar() {
-        var _this = _super.call(this, "taskbar", "taskbar") || this;
-        _this.isMobile = isMobile();
-        var blur = new WindowBlur(30, 8);
-        blur.load(_this.element);
-        _this.taskbarButtons = new TaskbarButtons();
-        _this.taskbarButtons.load(_this.element);
+import OSElement from "../../utils/OSElement";
+var SwitchToggle = /** @class */ (function (_super) {
+    __extends(SwitchToggle, _super);
+    function SwitchToggle(size, offColor, onColor, value) {
+        if (size === void 0) { size = 20; }
+        if (offColor === void 0) { offColor = "#ccc"; }
+        if (onColor === void 0) { onColor = "#2196F3"; }
+        if (value === void 0) { value = false; }
+        var _this = _super.call(this, "switch", "switch") || this;
+        _this.size = size;
+        _this.onColor = onColor || "#2196F3";
+        _this.offColor = offColor || "#ccc";
+        _this.value = value || false;
+        var label = document.createElement("label");
+        var input = document.createElement("input");
+        input.type = "checkbox";
+        if (_this.value) {
+            input.checked = true;
+        }
+        var span = document.createElement("span");
+        label.appendChild(input);
+        label.appendChild(span);
+        _this.element.appendChild(label);
         _this.style = function () {
             var _a;
             return (_a = {},
-                _a[_this.id] = __assign(__assign({ height: "50px", position: "fixed", bottom: 0, left: 0, right: 0, display: "block", zIndex: "1000", backgroundColor: "rgba(255,255,255,.5)", margin: _this.isMobile ? "0px" : "15px" }, (_this.isMobile ? {} : {
-                    borderRadius: "8px"
-                })), { overflow: "hidden", boxShadow: "0 17px 50px 0 rgba(0, 0, 0, 0.19),\n        0 12px 15px 0 rgba(0, 0, 0, 0.24)", color: "#000" }),
+                _a[_this.id] = {
+                    width: _this.size * 2 + 8 + "px",
+                    height: _this.size + 8 + "px",
+                    display: "inline-block",
+                    "& > label": {
+                        position: "relative",
+                        display: "inline-block",
+                        width: "100%",
+                        "& > input": {
+                            opacity: 0,
+                            width: 0,
+                            height: 0,
+                            "&:checked + span": {
+                                backgroundColor: _this.onColor,
+                                "&:before": {
+                                    "-webkit-transform": "translateX(" + _this.size + "px)",
+                                    "-ms-transform": "translateX(" + _this.size + "px)",
+                                    transform: "translateX(" + _this.size + "px)"
+                                }
+                            },
+                            "&:focus + span": {
+                                boxShadow: "0 0 1px " + _this.onColor
+                            }
+                        },
+                        "& > span": {
+                            position: "absolute",
+                            cursor: "pointer",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: _this.offColor,
+                            borderRadius: _this.size * 2 + 4 + "px",
+                            "-webkit-transition": ".4s",
+                            transition: ".4s",
+                            height: _this.size + "px",
+                            padding: "4px",
+                            "&:before": {
+                                position: "absolute",
+                                content: "''",
+                                width: _this.size + "px",
+                                height: _this.size + "px",
+                                backgroundColor: "white",
+                                "-webkit-transition": ".4s",
+                                transition: ".4s",
+                                borderRadius: "50%"
+                            }
+                        }
+                    }
+                },
                 _a);
         };
         return _this;
     }
-    Taskbar.prototype.load = function (element) {
+    SwitchToggle.prototype.load = function (element) {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
                 _super.prototype.load.call(this, element);
@@ -91,7 +137,10 @@ var Taskbar = /** @class */ (function (_super) {
             });
         });
     };
-    return Taskbar;
+    SwitchToggle.prototype.setOnClick = function (func) {
+        this.element.onclick = func.bind(this);
+    };
+    return SwitchToggle;
 }(OSElement));
-export default Taskbar;
+export default SwitchToggle;
 //# sourceMappingURL=index.js.map

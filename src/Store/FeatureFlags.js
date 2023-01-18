@@ -34,51 +34,36 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-import { blurImage } from "./blurimage";
-var Settings = /** @class */ (function () {
-    function Settings() {
-        this.desktopImage = {
-            original: "/assets/desktop_background.png",
-            blurred60: null,
-            blurred30: null
-        };
-        this.bootScreenImage = "/assets/boot_screen.png";
+import db from "./index";
+var FeatureFlag = /** @class */ (function () {
+    function FeatureFlag(code, name, enabled, id) {
+        if (enabled === void 0) { enabled = false; }
+        this.code = code;
+        this.name = name;
+        this.enabled = enabled;
+        if (id)
+            this.id = id;
     }
-    Settings.prototype.setDesktopImage = function (image) {
-        return __awaiter(this, void 0, void 0, function () {
-            var _a, _b;
-            return __generator(this, function (_c) {
-                switch (_c.label) {
-                    case 0:
-                        this.desktopImage.original = image;
-                        _a = this.desktopImage;
-                        return [4 /*yield*/, blurImage(image, 30)];
+    FeatureFlag.prototype.save = function () {
+        var _this = this;
+        return db.transaction('rw', db.featureFlags, function () { return __awaiter(_this, void 0, void 0, function () {
+            var exists;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, db.featureFlags.get(this.id)];
                     case 1:
-                        _a.blurred30 = _c.sent();
-                        _b = this.desktopImage;
-                        return [4 /*yield*/, blurImage(image, 60)];
-                    case 2:
-                        _b.blurred60 = _c.sent();
-                        return [2 /*return*/];
+                        exists = _a.sent();
+                        if (exists) {
+                            return [2 /*return*/, db.featureFlags.update(this.id, { enabled: this.enabled })];
+                        }
+                        return [2 /*return*/, db.featureFlags.put(new FeatureFlag(this.code, this.name, this.enabled, this.id))
+                                .then(function (id) { return _this.id = id; })];
                 }
             });
-        });
+        }); });
     };
-    Settings.prototype.setBootScreenImage = function (image) {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                this.bootScreenImage = image;
-                return [2 /*return*/];
-            });
-        });
-    };
-    Settings.prototype.getDesktopImage = function () {
-        return this.desktopImage;
-    };
-    Settings.prototype.getSetting = function (name) {
-    };
-    return Settings;
+    return FeatureFlag;
 }());
-var settings = new Settings();
-export default settings;
-//# sourceMappingURL=settings.js.map
+export { FeatureFlag };
+//# sourceMappingURL=FeatureFlags.js.map

@@ -34,10 +34,6 @@ class Taskbar extends OSElement {
         overflow: "hidden",
         boxShadow: `0 17px 50px 0 rgba(0, 0, 0, 0.19),
         0 12px 15px 0 rgba(0, 0, 0, 0.24)`,
-        // "backdrop-filter": "blur(20px)",
-        /*...(!support.css.backdropFilter && {
-          backgroundColor: "rgba(200,200,200,.8)"
-        }),*/
         color: "#000"
       }
     });

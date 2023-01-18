@@ -10,6 +10,7 @@ import AboutContent from "./../../contents/about";
 import Experience from "../../contents/experience";
 import ExperienceContent from "../../contents/experience";
 import AlertContent from "../../contents/alert";
+import Settings from "../../utils/settings";
 
 class StartMenu extends OSElement {
   menuItems: MenuItem[];
@@ -31,6 +32,9 @@ class StartMenu extends OSElement {
         0 12px 15px 0 rgba(0, 0, 0, 0.24)`
       }
     });
+    // if (Settings.blur) {
+    //
+    // }
     const blur = new WindowBlur(60, 8);
     blur.load(this.element);
     const menuGrid = new MenuGrid();

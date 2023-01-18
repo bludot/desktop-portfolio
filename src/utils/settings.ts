@@ -22,6 +22,9 @@ class Settings {
   getDesktopImage() {
     return this.desktopImage;
   }
+  getSetting(name: string) {
+
+  }
 }
 
 const settings = new Settings()

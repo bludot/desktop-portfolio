@@ -66,6 +66,8 @@ import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
 import isMobile from 'is-mobile';
+import ScrollBar from "../Scrollbar";
+import db from "../../Store";
 var OSWindow = /** @class */ (function (_super) {
     __extends(OSWindow, _super);
     function OSWindow(_a) {
@@ -84,6 +86,7 @@ var OSWindow = /** @class */ (function (_super) {
         };
         _this.isMobile = isMobile();
         var blur = new WindowBlur(60, 8);
+        _this.scrollbar = new ScrollBar();
         blur.load(_this.element);
         _this.title = title;
         _this.content = content;
@@ -152,29 +155,37 @@ var OSWindow = /** @class */ (function (_super) {
         this.element.addEventListener("mousedown", this.mousedownWindow.bind(this));
     };
     OSWindow.prototype.load = function (element) {
+        var _a;
         return __awaiter(this, void 0, void 0, function () {
-            var main, onClose;
+            var main, scrollbarFeature, onClose;
             var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0:
                         main = document.createElement("div");
-                        main.style.cssText = "\n    width: 100%;\n    height: auto;\n    z-index: 1;\n    flex: 1 1 auto;\n    overflow: auto;\n    ";
-                        if (!(typeof this.content.load === "function")) return [3 /*break*/, 2];
+                        main.style.cssText = "\n    width: 100%;\n    height: auto;\n    z-index: 1;\n    flex: 1 1 auto;\n    overflow: auto;\n    position: relative;\n    ";
+                        if (!(typeof this.content.load === "function")) return [3 /*break*/, 3];
                         return [4 /*yield*/, this.content.load(main)];
                     case 1:
-                        _a.sent();
-                        return [3 /*break*/, 3];
+                        _b.sent();
+                        return [4 /*yield*/, db.featureFlags.where({ code: "custom_scrollbar" }).toArray()];
                     case 2:
-                        main.appendChild(this.content);
-                        _a.label = 3;
+                        scrollbarFeature = _b.sent();
+                        console.log("THE FEATURE", scrollbarFeature);
+                        if ((_a = scrollbarFeature[0]) === null || _a === void 0 ? void 0 : _a.enabled) {
+                            this.scrollbar.load(main);
+                        }
+                        return [3 /*break*/, 4];
                     case 3:
+                        main.appendChild(this.content);
+                        _b.label = 4;
+                    case 4:
                         onClose = function () {
                             _this.onClose(_this);
                         };
                         return [4 /*yield*/, this.topbar.load(this.element)];
-                    case 4:
-                        _a.sent();
+                    case 5:
+                        _b.sent();
                         this.element.appendChild(main);
                         _super.prototype.load.call(this, this.desktop.getElement());
                         if (this.windowPosition.top) {

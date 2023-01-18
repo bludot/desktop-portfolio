@@ -13,17 +13,6 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -60,38 +49,95 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-import OSElement from "./../../utils/OSElement";
-import TaskbarButtons from "./button";
-import WindowBlur from "../Window/blur";
-import isMobile from 'is-mobile';
-var Taskbar = /** @class */ (function (_super) {
-    __extends(Taskbar, _super);
-    function Taskbar() {
-        var _this = _super.call(this, "taskbar", "taskbar") || this;
-        _this.isMobile = isMobile();
-        var blur = new WindowBlur(30, 8);
-        blur.load(_this.element);
-        _this.taskbarButtons = new TaskbarButtons();
-        _this.taskbarButtons.load(_this.element);
+import debounce from "../../utils/debounce";
+import OSElement from "../../utils/OSElement";
+var ScrollBar = /** @class */ (function (_super) {
+    __extends(ScrollBar, _super);
+    function ScrollBar() {
+        var _this = _super.call(this, "scrollbar", "scrollbar") || this;
+        var bar = document.createElement("div");
+        bar.className = "bar";
+        _this.element.appendChild(bar);
+        _this.debounceHide = debounce(_this.hide.bind(_this), 50, false);
         _this.style = function () {
             var _a;
             return (_a = {},
-                _a[_this.id] = __assign(__assign({ height: "50px", position: "fixed", bottom: 0, left: 0, right: 0, display: "block", zIndex: "1000", backgroundColor: "rgba(255,255,255,.5)", margin: _this.isMobile ? "0px" : "15px" }, (_this.isMobile ? {} : {
-                    borderRadius: "8px"
-                })), { overflow: "hidden", boxShadow: "0 17px 50px 0 rgba(0, 0, 0, 0.19),\n        0 12px 15px 0 rgba(0, 0, 0, 0.24)", color: "#000" }),
+                _a[_this.id] = {
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    width: "10px",
+                    zIndex: "1",
+                    "& > .bar": {
+                        position: "relative",
+                        width: "10px",
+                        backgroundColor: "#ccc"
+                    }
+                },
                 _a);
         };
         return _this;
     }
-    Taskbar.prototype.load = function (element) {
+    ScrollBar.prototype.scroll = function (e) {
+        this.element.style.right = "0px";
+        // @ts-ignore
+        var delta = e.wheelDelta / 10;
+        var parent = this.element.parentElement;
+        parent.scrollTop += -delta;
+        var top = (parent.scrollTop / parent.clientHeight) *
+            this.element.children[0].clientHeight;
+        this.element.children[0].style.top = top + "px";
+        this.element.style.top = parent.scrollTop + "px";
+        this.debounceHide();
+    };
+    ScrollBar.prototype.hide = function () {
+        console.log("doing hide");
+        this.element.style.right = "-10px";
+    };
+    ScrollBar.prototype.load = function (element) {
         return __awaiter(this, void 0, void 0, function () {
+            var _this = this;
             return __generator(this, function (_a) {
                 _super.prototype.load.call(this, element);
+                setTimeout(function () {
+                    var _a;
+                    console.log("THE HEIGHT", _this.element.parentElement.clientHeight);
+                    console.log("SCROLL HEIGHT", _this.element.parentElement.scrollHeight);
+                    var height = (_this.element.parentElement.clientHeight /
+                        _this.element.parentElement.scrollHeight) *
+                        _this.element.parentElement.clientHeight;
+                    console.log("scrollbar");
+                    _this.element.parentElement.style.overflow = "hidden";
+                    _this.style = function () {
+                        var _a;
+                        var _b;
+                        return (_a = {},
+                            _a[_this.id] = {
+                                position: "absolute",
+                                top: 0,
+                                height: ((_b = _this.element.parentElement) === null || _b === void 0 ? void 0 : _b.clientHeight) + "px",
+                                right: "-10px",
+                                width: "10px",
+                                zIndex: "1",
+                                transition: "right 250ms",
+                                "& > .bar": {
+                                    width: "10px",
+                                    height: height + "px",
+                                    position: "relative",
+                                    backgroundColor: "#ccc"
+                                }
+                                // overflow: "hidden"
+                            },
+                            _a);
+                    };
+                    _this.applyStyle();
+                    (_a = _this.element.parentNode) === null || _a === void 0 ? void 0 : _a.addEventListener("mousewheel", _this.scroll.bind(_this));
+                }, 0);
                 return [2 /*return*/];
             });
         });
     };
-    return Taskbar;
+    return ScrollBar;
 }(OSElement));
-export default Taskbar;
+export { ScrollBar as default };
 //# sourceMappingURL=index.js.map

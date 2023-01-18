@@ -19,6 +19,8 @@ import ExperienceContent from "./contents/experience";
 import AboutContent from "./contents/about";
 import AlertContent from "./contents/alert";
 import KeyCatcher from "./apps/KeyCatcher";
+import {FeatureFlag} from "./Store";
+
 
 // @ts-ignore
 window.LOGGER = GlobalLogger.getInstance();

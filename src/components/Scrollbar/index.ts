@@ -1,7 +1,9 @@
 import debounce from "../../utils/debounce";
 import OSElement from "../../utils/OSElement";
+import normalizeWheel from "../../utils/UniversalScroll/NormalizeWheel";
 
 class ScrollBar extends OSElement {
+  private scrollHeight: number;
   private debounceHide: any;
   constructor() {
     super("scrollbar", "scrollbar");
@@ -9,6 +11,7 @@ class ScrollBar extends OSElement {
     bar.className = "bar";
     this.element.appendChild(bar);
     this.debounceHide = debounce(this.hide.bind(this), 1000, false);
+    this.scrollHeight = 0;
     this.style = () => ({
       [this.id]: {
         position: "absolute",
@@ -28,13 +31,19 @@ class ScrollBar extends OSElement {
   scroll(e: WheelEvent) {
     this.element.style.right = "0px";
     // @ts-ignore
-    const delta = e.wheelDelta / 10;
+    const deltas = normalizeWheel(e);
+    const delta = deltas.pixelY;
     const parent = this.element.parentElement;
-    parent.scrollTop += -delta;
+    parent.scrollTop += delta;
     const top =
       (parent.scrollTop / parent.clientHeight) *
       this.element.children[0].clientHeight;
-
+    if (
+      top > this.scrollHeight - parent?.clientHeight&&
+      delta > 1
+    ) {
+      return;
+    }
     (this.element.children[0] as HTMLElement).style.top = top + "px";
     this.element.style.top = parent.scrollTop + "px";
     this.debounceHide();
@@ -74,6 +83,7 @@ class ScrollBar extends OSElement {
           // overflow: "hidden"
         }
       });
+      this.scrollHeight = this.element.parentElement.scrollHeight;
       this.applyStyle();
       this.element.parentNode?.addEventListener(
         "mousewheel",

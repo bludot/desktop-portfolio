@@ -51,6 +51,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 import debounce from "../../utils/debounce";
 import OSElement from "../../utils/OSElement";
+import normalizeWheel from "../../utils/UniversalScroll/NormalizeWheel";
 var ScrollBar = /** @class */ (function (_super) {
     __extends(ScrollBar, _super);
     function ScrollBar() {
@@ -59,6 +60,7 @@ var ScrollBar = /** @class */ (function (_super) {
         bar.className = "bar";
         _this.element.appendChild(bar);
         _this.debounceHide = debounce(_this.hide.bind(_this), 1000, false);
+        _this.scrollHeight = 0;
         _this.style = function () {
             var _a;
             return (_a = {},
@@ -81,11 +83,16 @@ var ScrollBar = /** @class */ (function (_super) {
     ScrollBar.prototype.scroll = function (e) {
         this.element.style.right = "0px";
         // @ts-ignore
-        var delta = e.wheelDelta / 10;
+        var deltas = normalizeWheel(e);
+        var delta = deltas.pixelY;
         var parent = this.element.parentElement;
-        parent.scrollTop += -delta;
+        parent.scrollTop += delta;
         var top = (parent.scrollTop / parent.clientHeight) *
             this.element.children[0].clientHeight;
+        if (top > this.scrollHeight - (parent === null || parent === void 0 ? void 0 : parent.clientHeight) &&
+            delta > 1) {
+            return;
+        }
         this.element.children[0].style.top = top + "px";
         this.element.style.top = parent.scrollTop + "px";
         this.debounceHide();
@@ -130,6 +137,7 @@ var ScrollBar = /** @class */ (function (_super) {
                             },
                             _a);
                     };
+                    _this.scrollHeight = _this.element.parentElement.scrollHeight;
                     _this.applyStyle();
                     (_a = _this.element.parentNode) === null || _a === void 0 ? void 0 : _a.addEventListener("mousewheel", _this.scroll.bind(_this));
                 }, 0);

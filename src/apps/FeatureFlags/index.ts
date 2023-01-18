@@ -24,13 +24,16 @@ class FeatureFlagsApp extends App {
 
   async loadFeatures(): Promise<FeatureFlag[]> {
     const featureFlags = await db.featureFlags.toArray()
+    console.log(flags)
     for (let feature in flags) {
+      console.log(feature)
       const isSaved = featureFlags.find((item: FeatureFlag): boolean => {
         return item.code == feature
       })
+      console.log("SAVED", !isSaved)
       if (!isSaved) {
         const newFeature = new FeatureFlag(feature, flags[feature].name, flags[feature].enabled)
-        newFeature.save()
+        await newFeature.save()
       }
     }
     return db.featureFlags.toArray()
@@ -38,6 +41,7 @@ class FeatureFlagsApp extends App {
 
   load() {
     this.loadFeatures().then((flags: FeatureFlag[]) => {
+      console.log("Loaded Features")
       this.featureFlags = flags
       windowManager.new({
         title: this.name,

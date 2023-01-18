@@ -47,18 +47,24 @@ var FeatureFlag = /** @class */ (function () {
     FeatureFlag.prototype.save = function () {
         var _this = this;
         return db.transaction('rw', db.featureFlags, function () { return __awaiter(_this, void 0, void 0, function () {
-            var exists;
+            var exists, e_1;
             var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0: return [4 /*yield*/, db.featureFlags.get(this.id)];
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, db.featureFlags.get(this.id)];
                     case 1:
                         exists = _a.sent();
                         if (exists) {
                             return [2 /*return*/, db.featureFlags.update(this.id, { enabled: this.enabled })];
                         }
+                        return [2 /*return*/];
+                    case 2:
+                        e_1 = _a.sent();
                         return [2 /*return*/, db.featureFlags.put(new FeatureFlag(this.code, this.name, this.enabled, this.id))
                                 .then(function (id) { return _this.id = id; })];
+                    case 3: return [2 /*return*/];
                 }
             });
         }); });

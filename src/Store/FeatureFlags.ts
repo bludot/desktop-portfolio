@@ -16,13 +16,19 @@ class FeatureFlag implements IFeatureFlag {
 
   save() {
     return db.transaction('rw', db.featureFlags,async () => {
-      const exists = await db.featureFlags.get(this.id)
-      if (exists) {
-        return db.featureFlags.update(this.id, {enabled: this.enabled})
-      }
+      try {
+        const exists = await db.featureFlags.get(this.id)
+        if (exists) {
+          return db.featureFlags.update(this.id, {enabled: this.enabled})
+        }
+        return
+      } catch (e) {
         return db.featureFlags.put(new FeatureFlag(this.code, this.name, this.enabled, this.id))
-            .then(id => this.id = id);
-        });
+          .then(id => this.id = id);
+
+      }
+    });
+
   }
 }
 

@@ -68,25 +68,49 @@ var FeatureFlagsApp = /** @class */ (function (_super) {
     }
     FeatureFlagsApp.prototype.loadFeatures = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var featureFlags, _loop_1, feature;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var featureFlags, _loop_1, _a, _b, _i, feature;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
                     case 0: return [4 /*yield*/, db.featureFlags.toArray()];
                     case 1:
-                        featureFlags = _a.sent();
+                        featureFlags = _c.sent();
+                        console.log(flags);
                         _loop_1 = function (feature) {
-                            var isSaved = featureFlags.find(function (item) {
-                                return item.code == feature;
+                            var isSaved, newFeature;
+                            return __generator(this, function (_d) {
+                                switch (_d.label) {
+                                    case 0:
+                                        console.log(feature);
+                                        isSaved = featureFlags.find(function (item) {
+                                            return item.code == feature;
+                                        });
+                                        console.log("SAVED", !isSaved);
+                                        if (!!isSaved) return [3 /*break*/, 2];
+                                        newFeature = new FeatureFlag(feature, flags[feature].name, flags[feature].enabled);
+                                        return [4 /*yield*/, newFeature.save()];
+                                    case 1:
+                                        _d.sent();
+                                        _d.label = 2;
+                                    case 2: return [2 /*return*/];
+                                }
                             });
-                            if (!isSaved) {
-                                var newFeature = new FeatureFlag(feature, flags[feature].name, flags[feature].enabled);
-                                newFeature.save();
-                            }
                         };
-                        for (feature in flags) {
-                            _loop_1(feature);
-                        }
-                        return [2 /*return*/, db.featureFlags.toArray()];
+                        _a = [];
+                        for (_b in flags)
+                            _a.push(_b);
+                        _i = 0;
+                        _c.label = 2;
+                    case 2:
+                        if (!(_i < _a.length)) return [3 /*break*/, 5];
+                        feature = _a[_i];
+                        return [5 /*yield**/, _loop_1(feature)];
+                    case 3:
+                        _c.sent();
+                        _c.label = 4;
+                    case 4:
+                        _i++;
+                        return [3 /*break*/, 2];
+                    case 5: return [2 /*return*/, db.featureFlags.toArray()];
                 }
             });
         });
@@ -94,6 +118,7 @@ var FeatureFlagsApp = /** @class */ (function (_super) {
     FeatureFlagsApp.prototype.load = function () {
         var _this = this;
         this.loadFeatures().then(function (flags) {
+            console.log("Loaded Features");
             _this.featureFlags = flags;
             windowManager["new"]({
                 title: _this.name,

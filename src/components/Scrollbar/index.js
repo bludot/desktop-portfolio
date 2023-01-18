@@ -58,7 +58,7 @@ var ScrollBar = /** @class */ (function (_super) {
         var bar = document.createElement("div");
         bar.className = "bar";
         _this.element.appendChild(bar);
-        _this.debounceHide = debounce(_this.hide.bind(_this), 50, false);
+        _this.debounceHide = debounce(_this.hide.bind(_this), 1000, false);
         _this.style = function () {
             var _a;
             return (_a = {},

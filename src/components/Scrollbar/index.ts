@@ -8,7 +8,7 @@ class ScrollBar extends OSElement {
     const bar = document.createElement("div");
     bar.className = "bar";
     this.element.appendChild(bar);
-    this.debounceHide = debounce(this.hide.bind(this), 50, false);
+    this.debounceHide = debounce(this.hide.bind(this), 1000, false);
     this.style = () => ({
       [this.id]: {
         position: "absolute",

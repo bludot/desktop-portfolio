@@ -11,11 +11,16 @@ import Experience from "../../contents/experience";
 import ExperienceContent from "../../contents/experience";
 import AlertContent from "../../contents/alert";
 import Settings from "../../utils/settings";
+import LoggerWindow from "../../contents/logger";
+import isMobile from 'is-mobile'
+import FeatureFlagsApp from "../../apps/FeatureFlags";
 
 class StartMenu extends OSElement {
   menuItems: MenuItem[];
+  isMobile: boolean;
   constructor() {
     super("startmenu", "start-menu");
+    this.isMobile = isMobile()
     this.style = () => ({
       [this.id]: {
         left: "15px",
@@ -170,6 +175,26 @@ class StartMenu extends OSElement {
       }
     });
     settings.load(menuGrid.getElement());
+    if (this.isMobile) {
+      const featureflags = new MenuItem({
+        icon: (() => {
+          const icon = new DOMParser().parseFromString(
+            `<svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium MuiBox-root css-uqopch" focusable="false" aria-hidden="true" viewBox="0 0 24 24" data-testid="NewReleasesIcon"><path d="m23 12-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-10 5h-2v-2h2v2zm0-4h-2V7h2v6z"></path></svg>`,
+            "text/html"
+          ).body.childNodes[0] as HTMLElement;
+          icon.style.cssText = `
+        margin: 0 10px;
+        width: 20px;
+      `;
+          return icon;
+        })(),
+        text: "feature flags",
+        action: () => {
+          new FeatureFlagsApp().load()
+        }
+      });
+      featureflags.load(menuGrid.getElement());
+    }
     const logout = new MenuItem({
       icon: (() => {
         const icon = new DOMParser().parseFromString(
@@ -186,7 +211,10 @@ class StartMenu extends OSElement {
       action: () => {
         windowManager.new({
           title: `Command Unavailable`,
-          content: new AlertContent({title: "Command Unavailable", text: "This window isnt built yet, come back later"}),
+          content: new AlertContent({
+            title: "Command Unavailable",
+            text: "This window isnt built yet, come back later"
+          }),
           dimensions: {
             width: 250,
             height: 180
@@ -197,6 +225,7 @@ class StartMenu extends OSElement {
       }
     });
     logout.load(menuGrid.getElement());
+
     this.menuItems = [];
   }
 

@@ -2,9 +2,38 @@ import debounce from "../../utils/debounce";
 import OSElement from "../../utils/OSElement";
 import normalizeWheel from "../../utils/UniversalScroll/NormalizeWheel";
 
+const flickThreshold = 100;
+
+const animateScroll = (container: HTMLElement, endY: number, duration: number) => {
+  const startY = container.scrollTop;
+  const distanceY = endY - startY;
+  let startTime = null;
+
+  const animate = (currentTime: number) => {
+    if (startTime === null) startTime = currentTime;
+    const timeElapsed = currentTime - startTime;
+    const run = easeInOutQuad(timeElapsed, startY, distanceY, duration);
+    container.scrollTop = run;
+    if (timeElapsed < duration) requestAnimationFrame(animate);
+  };
+
+  const easeInOutQuad = (t: number, b: number, c: number, d: number) => {
+    t /= d / 2;
+    if (t < 1) return (c / 2) * t * t + b;
+    t--;
+    return (-c / 2) * (t * (t - 2) - 1) + b;
+  };
+
+  requestAnimationFrame(animate);
+};
+
 class ScrollBar extends OSElement {
   private scrollHeight: number;
   private debounceHide: any;
+  private touchStartY: number;
+  private touchMoveY: number;
+  private touchDelta: number;
+  private scrollTop: number;
   constructor() {
     super("scrollbar", "scrollbar");
     const bar = document.createElement("div");
@@ -27,7 +56,76 @@ class ScrollBar extends OSElement {
       }
     });
   }
+  // add touch events
+  touchStart(e: TouchEvent) {
+    this.element.style.right = "0px";
+    const parent = this.element.parentElement;
+    this.touchStartY = e.touches[0].clientY;
+    this.scrollTop = parent.scrollTop
+    
+  }
 
+  touchMove(e: TouchEvent) {
+    e.preventDefault();
+    this.touchMoveY = e.touches[0].clientY;
+    this.touchDelta = this.touchStartY - this.touchMoveY;
+
+    const parent = this.element.parentElement;
+    const top =
+      (parent.scrollTop / parent.clientHeight) *
+      this.element.children[0].clientHeight;
+    this.debounceHide();
+
+    if (
+      top > this.scrollHeight - parent?.clientHeight &&
+      this.touchDelta > 1
+    ) {
+      return;
+    }
+
+    parent.scrollTop = this.scrollTop + this.touchDelta;
+
+    (this.element.children[0] as HTMLElement).style.top = top + "px";
+    this.element.style.top = parent.scrollTop + "px";
+  }
+  touchEnd(e: TouchEvent) {
+    var touch = e.changedTouches[0];
+    // var endX = touch.clientX;
+    var endY = touch.clientY;
+    // var deltaX = endX - startX;
+    var deltaY = endY - this.touchStartY;
+    // if (Math.abs(deltaX) > flickThreshold || Math.abs(deltaY) > flickThreshold) {
+    //   // Handle the flick event
+    //  this.handleFlick(deltaX, deltaY);
+    // }
+    if (Math.abs(deltaY) > flickThreshold) {
+      // Handle the flick event
+     //this.handleFlick(deltaY);
+    }
+    this.debounceHide();
+  }
+  handleFlick( deltaY: number) {
+    console.log("flick");
+    const parent = this.element.parentElement;
+    let flickDirection: string;
+        if (deltaY > 0) {
+            flickDirection = "down";
+        } else {
+            flickDirection = "up";
+        }
+        // perform some action based on the flick direction
+        switch (flickDirection) {
+            case "up":
+              animateScroll(parent, -deltaY, 200);
+                console.log("flick up detected");
+
+                break;
+            case "down":
+              animateScroll(parent, deltaY, 200);
+                break;
+        }
+  }
+  
   scroll(e: WheelEvent) {
     this.element.style.right = "0px";
     // @ts-ignore
@@ -39,7 +137,7 @@ class ScrollBar extends OSElement {
       (parent.scrollTop / parent.clientHeight) *
       this.element.children[0].clientHeight;
     if (
-      top > this.scrollHeight - parent?.clientHeight&&
+      top > this.scrollHeight - parent?.clientHeight &&
       delta > 1
     ) {
       return;
@@ -110,8 +208,22 @@ class ScrollBar extends OSElement {
         "mousewheel",
         this.scroll.bind(this)
       );
+      // listener for touch events
+      this.element.parentNode?.addEventListener(
+        "touchstart",
+        this.touchStart.bind(this)
+      );
+      this.element.parentNode?.addEventListener(
+        "touchmove",
+        this.touchMove.bind(this)
+      );
+      this.element.parentNode?.addEventListener(
+        "touchend",
+        this.touchEnd.bind(this)
+      );
+
     }, 0);
   }
 }
 
-export {ScrollBar as default}
+export { ScrollBar as default }

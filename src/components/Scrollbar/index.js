@@ -52,6 +52,29 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 import debounce from "../../utils/debounce";
 import OSElement from "../../utils/OSElement";
 import normalizeWheel from "../../utils/UniversalScroll/NormalizeWheel";
+var flickThreshold = 100;
+var animateScroll = function (container, endY, duration) {
+    var startY = container.scrollTop;
+    var distanceY = endY - startY;
+    var startTime = null;
+    var animate = function (currentTime) {
+        if (startTime === null)
+            startTime = currentTime;
+        var timeElapsed = currentTime - startTime;
+        var run = easeInOutQuad(timeElapsed, startY, distanceY, duration);
+        container.scrollTop = run;
+        if (timeElapsed < duration)
+            requestAnimationFrame(animate);
+    };
+    var easeInOutQuad = function (t, b, c, d) {
+        t /= d / 2;
+        if (t < 1)
+            return (c / 2) * t * t + b;
+        t--;
+        return (-c / 2) * (t * (t - 2) - 1) + b;
+    };
+    requestAnimationFrame(animate);
+};
 var ScrollBar = /** @class */ (function (_super) {
     __extends(ScrollBar, _super);
     function ScrollBar() {
@@ -80,6 +103,66 @@ var ScrollBar = /** @class */ (function (_super) {
         };
         return _this;
     }
+    // add touch events
+    ScrollBar.prototype.touchStart = function (e) {
+        this.element.style.right = "0px";
+        var parent = this.element.parentElement;
+        this.touchStartY = e.touches[0].clientY;
+        this.scrollTop = parent.scrollTop;
+    };
+    ScrollBar.prototype.touchMove = function (e) {
+        e.preventDefault();
+        this.touchMoveY = e.touches[0].clientY;
+        this.touchDelta = this.touchStartY - this.touchMoveY;
+        var parent = this.element.parentElement;
+        var top = (parent.scrollTop / parent.clientHeight) *
+            this.element.children[0].clientHeight;
+        this.debounceHide();
+        if (top > this.scrollHeight - (parent === null || parent === void 0 ? void 0 : parent.clientHeight) &&
+            this.touchDelta > 1) {
+            return;
+        }
+        parent.scrollTop = this.scrollTop + this.touchDelta;
+        this.element.children[0].style.top = top + "px";
+        this.element.style.top = parent.scrollTop + "px";
+    };
+    ScrollBar.prototype.touchEnd = function (e) {
+        var touch = e.changedTouches[0];
+        // var endX = touch.clientX;
+        var endY = touch.clientY;
+        // var deltaX = endX - startX;
+        var deltaY = endY - this.touchStartY;
+        // if (Math.abs(deltaX) > flickThreshold || Math.abs(deltaY) > flickThreshold) {
+        //   // Handle the flick event
+        //  this.handleFlick(deltaX, deltaY);
+        // }
+        if (Math.abs(deltaY) > flickThreshold) {
+            // Handle the flick event
+            //this.handleFlick(deltaY);
+        }
+        this.debounceHide();
+    };
+    ScrollBar.prototype.handleFlick = function (deltaY) {
+        console.log("flick");
+        var parent = this.element.parentElement;
+        var flickDirection;
+        if (deltaY > 0) {
+            flickDirection = "down";
+        }
+        else {
+            flickDirection = "up";
+        }
+        // perform some action based on the flick direction
+        switch (flickDirection) {
+            case "up":
+                animateScroll(parent, -deltaY, 200);
+                console.log("flick up detected");
+                break;
+            case "down":
+                animateScroll(parent, deltaY, 200);
+                break;
+        }
+    };
     ScrollBar.prototype.scroll = function (e) {
         var _this = this;
         this.element.style.right = "0px";
@@ -134,7 +217,7 @@ var ScrollBar = /** @class */ (function (_super) {
             return __generator(this, function (_a) {
                 _super.prototype.load.call(this, element);
                 setTimeout(function () {
-                    var _a;
+                    var _a, _b, _c, _d;
                     var height = (_this.element.parentElement.clientHeight /
                         _this.element.parentElement.scrollHeight) *
                         _this.element.parentElement.clientHeight;
@@ -164,6 +247,10 @@ var ScrollBar = /** @class */ (function (_super) {
                     _this.scrollHeight = _this.element.parentElement.scrollHeight;
                     _this.applyStyle();
                     (_a = _this.element.parentNode) === null || _a === void 0 ? void 0 : _a.addEventListener("mousewheel", _this.scroll.bind(_this));
+                    // listener for touch events
+                    (_b = _this.element.parentNode) === null || _b === void 0 ? void 0 : _b.addEventListener("touchstart", _this.touchStart.bind(_this));
+                    (_c = _this.element.parentNode) === null || _c === void 0 ? void 0 : _c.addEventListener("touchmove", _this.touchMove.bind(_this));
+                    (_d = _this.element.parentNode) === null || _d === void 0 ? void 0 : _d.addEventListener("touchend", _this.touchEnd.bind(_this));
                 }, 0);
                 return [2 /*return*/];
             });

@@ -59,10 +59,13 @@ import windowManager from "../../utils/windowManager";
 import AboutContent from "./../../contents/about";
 import ExperienceContent from "../../contents/experience";
 import AlertContent from "../../contents/alert";
+import isMobile from 'is-mobile';
+import FeatureFlagsApp from "../../apps/FeatureFlags";
 var StartMenu = /** @class */ (function (_super) {
     __extends(StartMenu, _super);
     function StartMenu() {
         var _this = _super.call(this, "startmenu", "start-menu") || this;
+        _this.isMobile = isMobile();
         _this.style = function () {
             var _a;
             return (_a = {},
@@ -189,6 +192,20 @@ var StartMenu = /** @class */ (function (_super) {
             }
         });
         settings.load(menuGrid.getElement());
+        if (_this.isMobile) {
+            var featureflags = new MenuItem({
+                icon: (function () {
+                    var icon = new DOMParser().parseFromString("<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium MuiBox-root css-uqopch\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"NewReleasesIcon\"><path d=\"m23 12-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-10 5h-2v-2h2v2zm0-4h-2V7h2v6z\"></path></svg>", "text/html").body.childNodes[0];
+                    icon.style.cssText = "\n        margin: 0 10px;\n        width: 20px;\n      ";
+                    return icon;
+                })(),
+                text: "feature flags",
+                action: function () {
+                    new FeatureFlagsApp().load();
+                }
+            });
+            featureflags.load(menuGrid.getElement());
+        }
         var logout = new MenuItem({
             icon: (function () {
                 var icon = new DOMParser().parseFromString("<svg class=\"MuiSvgIcon-root jss179\" focusable=\"false\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z\"></path></svg>", "text/html").body.childNodes[0];
@@ -199,7 +216,10 @@ var StartMenu = /** @class */ (function (_super) {
             action: function () {
                 windowManager["new"]({
                     title: "Command Unavailable",
-                    content: new AlertContent({ title: "Command Unavailable", text: "This window isnt built yet, come back later" }),
+                    content: new AlertContent({
+                        title: "Command Unavailable",
+                        text: "This window isnt built yet, come back later"
+                    }),
                     dimensions: {
                         width: 250,
                         height: 180

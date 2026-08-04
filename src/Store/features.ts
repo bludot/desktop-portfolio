@@ -11,7 +11,8 @@ export interface FeatureFlagDefault {
  * have nothing stored and these values are what actually ship.
  */
 export const FEATURE_FLAG_DEFAULTS: Record<string, FeatureFlagDefault> = {
-  custom_scrollbar: { name: "custom scrollbar", enabled: true },
+  // Empty for now. The overlay scrollbar used to live here; it is part of the
+  // product proper and no longer gated.
 };
 
 /**

@@ -95,18 +95,19 @@ describe('isFeatureEnabled', () => {
     await db.featureFlags.clear()
   })
 
-  it('falls back to the default when nothing is stored', async () => {
-    expect(FEATURE_FLAG_DEFAULTS.custom_scrollbar.enabled).toBe(true)
-    await expect(isFeatureEnabled('custom_scrollbar')).resolves.toBe(true)
+  // No flags are declared right now — the overlay scrollbar graduated out of
+  // the system. The helper still has to behave for whatever is added next.
+  it('declares no flags at present', () => {
+    expect(Object.keys(FEATURE_FLAG_DEFAULTS)).toEqual([])
   })
 
-  it('lets a stored value override the default', async () => {
-    await new FeatureFlag('custom_scrollbar', 'custom scrollbar', false).save()
-    await expect(isFeatureEnabled('custom_scrollbar')).resolves.toBe(false)
-  })
-
-  it('reports unknown flags as off', async () => {
+  it('reports an undeclared flag as off', async () => {
     await expect(isFeatureEnabled('not_a_flag')).resolves.toBe(false)
+  })
+
+  it('lets a stored row decide even for an undeclared flag', async () => {
+    await new FeatureFlag('experimental', 'Experimental', true).save()
+    await expect(isFeatureEnabled('experimental')).resolves.toBe(true)
   })
 })
 

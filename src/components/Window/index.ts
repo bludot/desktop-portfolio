@@ -7,11 +7,9 @@ import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
 import isMobile from 'is-mobile'
 import ScrollBar from "../Scrollbar";
-import { isFeatureEnabled } from "../../Store";
 
 class OSWindow extends OSElement {
   private scrollbar: ScrollBar;
-  private scrollbarWanted = false;
   isDialog: boolean = false;
   windowPosition: any;
   className: string = "window";
@@ -189,6 +187,7 @@ class OSWindow extends OSElement {
 
   public async load(element: HTMLElement): Promise<void> {
 
+    let hasScrollableContent = false;
     const main = document.createElement("div");
     main.style.cssText = `
     width: 100%;
@@ -203,10 +202,10 @@ class OSWindow extends OSElement {
     if (typeof this.content.load === "function") {
 
       await this.content.load(main);
-      if (await isFeatureEnabled("custom_scrollbar")) {
-        this.scrollbar.attachTo(main);
-        this.scrollbarWanted = true;
-      }
+      // Content that loads itself is the scrollable kind, so it always gets the
+      // overlay scrollbar. Raw nodes are appended as-is and do not scroll.
+      this.scrollbar.attachTo(main);
+      hasScrollableContent = true;
     } else {
       main.appendChild(this.content);
     }
@@ -217,7 +216,7 @@ class OSWindow extends OSElement {
 
     this.element.appendChild(main);
 
-    if (this.scrollbarWanted) {
+    if (hasScrollableContent) {
       await this.scrollbar.load(this.element);
     }
 

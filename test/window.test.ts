@@ -231,14 +231,12 @@ describe('OSWindow', () => {
     })
   })
 
-  describe('custom scrollbar feature flag', () => {
-    // The scrollbar is only considered for content that loads itself; a raw
-    // node is appended directly and skips the flag check entirely.
+  describe('overlay scrollbar', () => {
+    // Content that loads itself is the scrollable kind; raw nodes are appended
+    // as-is and never scroll.
     const loadableContent = () => ({ load: vi.fn().mockResolvedValue(undefined) })
 
-    // Rows are only written when the Feature Flags app is opened, so most
-    // sessions have nothing stored and the default is what ships.
-    it('is on by default when nothing is stored', async () => {
+    it('is attached to scrollable content, with no flag involved', async () => {
       const win = makeWindow({ content: loadableContent() })
       const scrollbarLoad = vi
         .spyOn((win as any).scrollbar, 'load')
@@ -247,32 +245,11 @@ describe('OSWindow', () => {
       expect(scrollbarLoad).toHaveBeenCalled()
     })
 
-    it('is left off when the flag exists but is disabled', async () => {
-      await db.featureFlags.add({
-        code: 'custom_scrollbar',
-        name: 'custom scrollbar',
-        enabled: false,
-      } as any)
-
-      const win = makeWindow({ content: loadableContent() })
+    it('is skipped for raw nodes, which do not scroll', async () => {
+      const win = makeWindow({ content: document.createElement('p') })
       const scrollbarLoad = vi.spyOn((win as any).scrollbar, 'load')
       await win.load(null as unknown as HTMLElement)
       expect(scrollbarLoad).not.toHaveBeenCalled()
-    })
-
-    it('is attached when the flag is enabled', async () => {
-      await db.featureFlags.add({
-        code: 'custom_scrollbar',
-        name: 'custom scrollbar',
-        enabled: true,
-      } as any)
-
-      const win = makeWindow({ content: loadableContent() })
-      const scrollbarLoad = vi
-        .spyOn((win as any).scrollbar, 'load')
-        .mockResolvedValue(undefined as any)
-      await win.load(null as unknown as HTMLElement)
-      expect(scrollbarLoad).toHaveBeenCalled()
     })
   })
 

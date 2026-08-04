@@ -7,7 +7,7 @@ import KeyCatcher from '../src/apps/KeyCatcher'
 import FeatureFlagsApp from '../src/apps/FeatureFlags'
 import settings from '../src/utils/settings'
 import windowManager from '../src/utils/windowManager'
-import db from '../src/Store'
+import db, { FeatureFlag } from '../src/Store'
 
 jss.setup(preset())
 jss.use(nested())
@@ -103,30 +103,18 @@ describe('FeatureFlagsApp', () => {
     windowManager.windows.length = 0
   })
 
-  it('seeds the known flags on first run', async () => {
+  // Nothing is declared at the moment, so there is nothing to seed.
+  it('seeds nothing while no flags are declared', async () => {
+    const app = new FeatureFlagsApp(makeDesktop())
+    expect(await app.loadFeatures()).toEqual([])
+    expect(await db.featureFlags.count()).toBe(0)
+  })
+
+  it('returns whatever rows already exist', async () => {
+    await new FeatureFlag('experimental', 'Experimental', true).save()
     const app = new FeatureFlagsApp(makeDesktop())
     const flags = await app.loadFeatures()
-
-    expect(flags.map((f) => f.code)).toContain('custom_scrollbar')
-    expect(await db.featureFlags.count()).toBe(1)
-  })
-
-  it('does not duplicate flags that already exist', async () => {
-    const app = new FeatureFlagsApp(makeDesktop())
-    await app.loadFeatures()
-    await app.loadFeatures()
-
-    expect(await db.featureFlags.count()).toBe(1)
-  })
-
-  it('preserves an already-enabled flag when re-seeding', async () => {
-    const app = new FeatureFlagsApp(makeDesktop())
-    const [flag] = await app.loadFeatures()
-    flag.enabled = true
-    await flag.save()
-
-    const reloaded = await app.loadFeatures()
-    expect(reloaded[0].enabled).toBe(true)
+    expect(flags.map((f) => f.code)).toEqual(['experimental'])
   })
 
   it('opens a window listing each flag', async () => {
@@ -136,7 +124,6 @@ describe('FeatureFlagsApp', () => {
     await vi.waitFor(() => expect(windowManager.windows.head).toBeTruthy())
     const win = windowManager.windows.head!.value.window
     expect(win.title).toBe('FeatureFlagsApp')
-    expect(app.featureFlags.map((f) => f.code)).toEqual(['custom_scrollbar'])
   })
 })
 

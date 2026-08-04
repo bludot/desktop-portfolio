@@ -250,17 +250,4 @@ export class DoublyLinkedList<T> {
     }
   }
   */
-  printList() {
-    console.log(this);
-    if (this.head) {
-      let current = this.head;
-      while (current.next) {
-        console.log(current);
-        current = current.next;
-      }
-      console.log(current);
-    } else {
-      console.log("empty list");
-    }
-  }
 }

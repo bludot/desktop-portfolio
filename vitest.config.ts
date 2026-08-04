@@ -27,9 +27,6 @@ export default defineConfig({
         'src/utils/UniversalScroll/**',
         // Type-only modules erase to nothing at runtime.
         '**/interfaces.ts',
-        // Declares a class but exports nothing and is imported nowhere, so
-        // there is no reachable code to exercise. Delete it rather than test it.
-        'src/utils/styleManager.ts',
       ],
       thresholds: {
         lines: 80,

@@ -24,15 +24,12 @@ class FeatureFlagsApp extends App {
 
   async loadFeatures(): Promise<FeatureFlag[]> {
     const featureFlags = await db.featureFlags.toArray()
-    console.log(flags)
-    for (let feature in flags) {
-      console.log(feature)
+    for (const code of Object.keys(flags)) {
       const isSaved = featureFlags.find((item: FeatureFlag): boolean => {
-        return item.code == feature
+        return item.code == code
       })
-      console.log("SAVED", !isSaved)
       if (!isSaved) {
-        const newFeature = new FeatureFlag(feature, flags[feature].name, flags[feature].enabled)
+        const newFeature = new FeatureFlag(code, flags[code].name, flags[code].enabled)
         await newFeature.save()
       }
     }
@@ -41,7 +38,6 @@ class FeatureFlagsApp extends App {
 
   load() {
     this.loadFeatures().then((flags: FeatureFlag[]) => {
-      console.log("Loaded Features")
       this.featureFlags = flags
       windowManager.new({
         title: this.name,
@@ -57,20 +53,18 @@ class FeatureFlagsContent extends OSElement {
   constructor(featureFlags: FeatureFlag[]) {
     super("FeatureFlagsContent", "feature-flags-content");
     const element: HTMLElement = document.createElement('div')
-    for (let feature in featureFlags) {
-      const switchToggle = new SwitchToggle(10, null, null, featureFlags[feature].enabled)
+    for (const flag of featureFlags) {
+      const switchToggle = new SwitchToggle(10, null, null, flag.enabled)
       const container = document.createElement('div')
       const span = document.createElement('span')
-      span.appendChild(document.createTextNode(featureFlags[feature].name))
+      span.appendChild(document.createTextNode(flag.name))
       container.appendChild(span)
       switchToggle.load(container)
-      const onclick = function (flag: FeatureFlag): Function {
-        return function () {
-          flag.enabled = this.element.querySelector('input[type=checkbox]').checked
-          flag.save()
-        }
-      }
-      switchToggle.setOnClick(onclick(featureFlags[feature]))
+      // `this` is the SwitchToggle: setOnClick binds the handler to it.
+      switchToggle.setOnClick(function (this: SwitchToggle) {
+        flag.enabled = this.element.querySelector<HTMLInputElement>('input[type=checkbox]').checked
+        flag.save()
+      })
       element.appendChild(container)
     }
     this.element.appendChild(element)

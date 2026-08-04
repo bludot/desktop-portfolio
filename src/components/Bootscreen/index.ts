@@ -41,12 +41,10 @@ class Bootscreen extends OSElement {
   async beforeLoad() {
     await this.bootlogo.load(this.element);
     await this.loader.load(this.element);
-    console.log('here1')
   }
   
   
   async beforeUnload(): Promise<void> {
-    console.log('here')
     const promise = new Promise((resolve): void => {
       this.element.style.opacity = "0";
       setTimeout(() => {

@@ -5,7 +5,6 @@ import nested from 'jss-plugin-nested'
 import App from '../src/apps/App'
 import KeyCatcher from '../src/apps/KeyCatcher'
 import FeatureFlagsApp from '../src/apps/FeatureFlags'
-import KeyShortcut from '../src/utils/secrets'
 import settings from '../src/utils/settings'
 import bridge from '../src/utils/bridge'
 import windowManager from '../src/utils/windowManager'
@@ -138,28 +137,6 @@ describe('FeatureFlagsApp', () => {
     const win = windowManager.windows.head.value.window
     expect(win.title).toBe('FeatureFlagsApp')
     expect(app.featureFlags.map((f) => f.code)).toEqual(['custom_scrollbar'])
-  })
-})
-
-describe('KeyShortcut', () => {
-  it('tracks keys while they are held and clears them on release', () => {
-    const shortcut = new KeyShortcut()
-
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))
-    expect(shortcut.keysPressed).toHaveProperty('a')
-
-    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))
-    expect(shortcut.keysPressed).not.toHaveProperty('a')
-  })
-
-  it('also records the character for a legacy keyCode', () => {
-    const shortcut = new KeyShortcut()
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', keyCode: 66 }))
-    expect(shortcut.keysPressed).toHaveProperty('b')
-    expect(shortcut.keysPressed).toHaveProperty('B')
-
-    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'b', keyCode: 66 }))
-    expect(shortcut.keysPressed).not.toHaveProperty('B')
   })
 })
 

@@ -46,7 +46,6 @@ class WindowManager {
     }
   }
   onActive(window: OSWindow) {
-    // console.log("THIS", this);
     const node: LNode<IManagedWindow> = this.getNodeByWindow(window);
     const oldWindow: LNode<IManagedWindow> = this.windows.getLNodeAtIndex(0);
     if (node !== oldWindow) {
@@ -69,12 +68,9 @@ class WindowManager {
         current = current.prev;
         index += 1;
       }
-    } else {
-      console.log("empty list");
     }
   }
   remove(oswindow: OSWindow): void {
-    //console.log(oswindow.unload);
     oswindow.unload();
     const node: LNode<IManagedWindow> = this.getNodeByWindow(oswindow);
     this.windows.removeByNode(node);
@@ -87,8 +83,6 @@ class WindowManager {
       while (current.next && current.value.window !== oswindow) {
         current = current.next;
       }
-    } else {
-      console.log("empty list");
     }
     //this.windows.
     // this.windows.removeAtIndex()

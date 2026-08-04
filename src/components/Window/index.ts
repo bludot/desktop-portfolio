@@ -141,7 +141,6 @@ class OSWindow extends OSElement {
   }
 
   public makeMovable(): void {
-    console.log("making movable");
     this.element
       .querySelector(".topbar-window")
       .addEventListener("mousedown", this.onTitlebarMouseDown);
@@ -165,7 +164,6 @@ class OSWindow extends OSElement {
 
       await this.content.load(main);
       const scrollbarFeature = await db.featureFlags.where({code: "custom_scrollbar"}).toArray()
-      console.log("THE FEATURE", scrollbarFeature)
       if (scrollbarFeature[0]?.enabled) {
         this.scrollbar.load(main);
       }
@@ -187,7 +185,6 @@ class OSWindow extends OSElement {
       this.element.style.left = this.windowPosition.left
     }
     if (this.center) {
-      console.log("WIDTH", getWindowWidth());
       this.element.style.left = `${
         getWindowWidth() / 2 - this.dimensions.width / 2
       }px`;

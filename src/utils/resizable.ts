@@ -132,7 +132,6 @@ class ResizableBorder extends OSElement {
   }
 
   mouseDown(e: MouseEvent) {
-    console.log("parent", this.parent);
     this.parentDimensions.width = this.parent.clientWidth;
     this.parentDimensions.height = this.parent.clientHeight;
     this.parentDimensions.x = this.parent.offsetLeft;

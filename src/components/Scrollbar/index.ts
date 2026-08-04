@@ -105,7 +105,6 @@ class ScrollBar extends OSElement {
     this.debounceHide();
   }
   handleFlick( deltaY: number) {
-    console.log("flick");
     const parent = this.element.parentElement;
     let flickDirection: string;
         if (deltaY > 0) {
@@ -117,7 +116,6 @@ class ScrollBar extends OSElement {
         switch (flickDirection) {
             case "up":
               animateScroll(parent, -deltaY, 200);
-                console.log("flick up detected");
 
                 break;
             case "down":
@@ -172,7 +170,6 @@ class ScrollBar extends OSElement {
   }
 
   hide() {
-    console.log("doing hide");
     this.element.style.right = "-10px";
   }
 

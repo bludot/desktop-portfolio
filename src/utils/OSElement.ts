@@ -49,7 +49,6 @@ class OSElement {
     this.logger.debug(`Finished beforeLoad hook`);
 
     if (this.parent) {
-      console.log(this.parent)
       throw new Error("Already loaded! did you mean to reload?");
     }
 
@@ -90,16 +89,6 @@ class OSElement {
 
     this.logger.debug(`Unloaded Instance`);
   }
-  reload() {
-    this.logger.debug(`Reloading Instance`);
-    const tmpParent = this.parent;
-    this.unload();
-    this.load(tmpParent);
-    this.applyStyle();
-
-    this.logger.debug(`Reloaded Instance`);
-  }
-
   public getElement() {
     return this.element;
   }

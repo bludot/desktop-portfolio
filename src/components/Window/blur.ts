@@ -4,10 +4,10 @@ import settings from "../../utils/settings";
 
 const support = getSupport();
 class WindowBlur extends OSElement {
-  blurredImage: string;
+  blurredImage?: string;
   blur: number = 30;
   radius: number = 8;
-  constructor(blur, radius) {
+  constructor(blur: number, radius: number) {
     super("Windowblur", "window-blur");
     this.blur = blur;
     this.radius = radius;

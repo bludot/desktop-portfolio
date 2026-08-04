@@ -28,7 +28,7 @@ jss.use(nested());
 
 let count = 2;
 const bootscreen = new Bootscreen();
-bootscreen.load(document.querySelector("#app"));
+bootscreen.load(document.querySelector("#app") as HTMLElement);
 
 const logger = new Logger("Bootsequence");
 logger.info("Starting up...");
@@ -87,7 +87,7 @@ const makeMainWindows = (desktop: Desktop) => ({
 startup().then(async () => {
   const desktop = new Desktop({
     backgroundColor: "#EEEEEE",
-    mainElement: document.querySelector("#app"),
+    mainElement: document.querySelector("#app") as HTMLElement,
   });
   const mainWindows = makeMainWindows(desktop);
   const params = queryString.parse(location.search);
@@ -115,7 +115,8 @@ startup().then(async () => {
     const sideBySide = names.includes("about") && names.includes("experience")
     names.forEach(name => {
       if (!Object.prototype.hasOwnProperty.call(mainWindows, name)) return
-      mainWindows[name](sideBySide ? sideBySidePositions[name] || {} : {})
+      const open = mainWindows[name as keyof typeof mainWindows]
+      open(sideBySide ? sideBySidePositions[name] || {} : {})
     })
   }
 

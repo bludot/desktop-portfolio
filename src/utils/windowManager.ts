@@ -2,11 +2,11 @@ import OSWindow from "./../components/Window";
 import { DoublyLinkedList, LNode } from "./linkedList";
 import type { IWindow } from "./../components/Window/interfaces";
 
-const between = (initial, first, second) => {
+const between = (initial: number, first: number, second: number) => {
   return initial >= first && initial <= second;
 };
 
-class IManagedWindow {
+interface IManagedWindow {
   window: OSWindow;
   index: number;
   setIndex: (index: number) => void;
@@ -29,10 +29,10 @@ class WindowManager {
       index: this.windows.length + 1,
       setIndex: oswindowInstance.setIndex.bind(oswindowInstance)
     };
-    oswindow.window.load(null);
+    oswindow.window.load(null as unknown as HTMLElement);
     oswindow.setIndex(oswindow.index);
     const list: DoublyLinkedList<IManagedWindow> = this.windows.push(oswindow);
-    this.onActive(list.tail.value.window);
+    this.onActive(list.tail!.value.window);
   }
   getNodeByWindow(window: OSWindow) {
     if (this.windows.head) {
@@ -46,8 +46,8 @@ class WindowManager {
     }
   }
   onActive(window: OSWindow) {
-    const node: LNode<IManagedWindow> = this.getNodeByWindow(window);
-    const oldWindow: LNode<IManagedWindow> = this.windows.getLNodeAtIndex(0);
+    const node = this.getNodeByWindow(window)!;
+    const oldWindow = this.windows.getLNodeAtIndex(0)!;
     if (node !== oldWindow) {
       oldWindow.value.window.unfocus();
       node.value.window.focus();
@@ -60,7 +60,7 @@ class WindowManager {
   }
   setIndexes() {
     if (this.windows.tail) {
-      let current = this.windows.tail;
+      let current: LNode<IManagedWindow> | null = this.windows.tail;
       let index = 1;
       while (current) {
         current.value.index = index;
@@ -72,7 +72,7 @@ class WindowManager {
   }
   remove(oswindow: OSWindow): void {
     oswindow.unload();
-    const node: LNode<IManagedWindow> = this.getNodeByWindow(oswindow);
+    const node = this.getNodeByWindow(oswindow)!;
     this.windows.removeByNode(node);
     if (this.windows.head) {
       this.onActive(this.windows.head.value.window);

@@ -7,9 +7,7 @@
     "sourceMap": true,
     "lib": ["es2020", "dom", "dom.iterable"],
     "moduleResolution": "bundler",
-    // TypeScript 7 defaults `strict` to true; this codebase predates that.
-    // Kept off to preserve the pre-migration behaviour.
-    "strict": false,
+    "strict": true,
     "types": ["bun"],
     "skipLibCheck": true,
     "noEmit": true

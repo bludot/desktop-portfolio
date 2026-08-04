@@ -60,19 +60,19 @@ describe('SwitchToggle', () => {
   it('renders an unchecked checkbox by default', async () => {
     const toggle = new SwitchToggle()
     await toggle.load(host)
-    const input = toggle.getElement().querySelector('input')
+    const input = toggle.getElement().querySelector('input')!
     expect(input.type).toBe('checkbox')
     expect(input.checked).toBe(false)
   })
 
   it('renders checked when constructed with a truthy value', async () => {
-    const toggle = new SwitchToggle(10, null, null, true)
+    const toggle = new SwitchToggle(10, undefined, undefined, true)
     await toggle.load(host)
-    expect(toggle.getElement().querySelector('input').checked).toBe(true)
+    expect(toggle.getElement().querySelector('input')!.checked).toBe(true)
   })
 
   it('falls back to default colours when passed null', () => {
-    const toggle = new SwitchToggle(10, null, null, false)
+    const toggle = new SwitchToggle(10, undefined, undefined, false)
     expect(toggle.onColor).toBe('#2196F3')
     expect(toggle.offColor).toBe('#ccc')
   })
@@ -293,7 +293,7 @@ describe('contents', () => {
     })
     await entry.load(host)
 
-    const text = entry.getElement().textContent
+    const text = entry.getElement().textContent!
     expect(text).toContain('Backend Engineer')
     expect(text).toContain('Honest')
     expect(text).toContain('Bangkok, Thailand')
@@ -323,7 +323,7 @@ describe('contents', () => {
   it('ExperienceContent renders start dates in the declared month', async () => {
     const content = new ExperienceContent()
     await content.load(host)
-    const text = content.getElement().textContent
+    const text = content.getElement().textContent!
 
     expect(text).toContain('Experience')
     expect(text).toContain('Backend Engineer')

@@ -101,7 +101,7 @@ describe('OSElement', () => {
     const el = makeElement()
     await el.load(host)
     const first = el.styleSheet
-    const detach = vi.spyOn(first, 'detach')
+    const detach = vi.spyOn(first!, 'detach')
     el.applyStyle()
     expect(detach).toHaveBeenCalled()
     expect(el.styleSheet).not.toBe(first)

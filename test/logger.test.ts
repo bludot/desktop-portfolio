@@ -86,7 +86,7 @@ describe('Logger', () => {
     ['error', LOG_TYPE.ERROR],
     ['debug', LOG_TYPE.DEBUG],
   ])('%s() records a log at the matching level', (method, type) => {
-    logger[method]('a message')
+    (logger as any)[method]('a message')
     const last = logger.getLastLog()
     expect(last.type).toBe(type)
     expect(last.message).toBe('a message')
@@ -96,7 +96,7 @@ describe('Logger', () => {
   it.each(['info', 'warn', 'error', 'debug'])(
     '%s() records one log per argument',
     (method) => {
-      logger[method]('one', 'two', 'three')
+      (logger as any)[method]('one', 'two', 'three')
       expect(logger.getLogs()).toHaveLength(3)
       expect(logger.getLogs().map((l) => l.message)).toEqual(['one', 'two', 'three'])
     },

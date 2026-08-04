@@ -1,4 +1,5 @@
 import OSElement from "../../utils/OSElement";
+// @ts-ignore -- uuid v8 ships no types and @types/uuid targets a newer API
 import { v4 as uuidv4 } from 'uuid';
 
 class Loader extends OSElement {

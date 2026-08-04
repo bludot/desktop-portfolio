@@ -1,7 +1,7 @@
 export class LNode<T> {
   value: T;
-  next: LNode<T>;
-  prev: LNode<T>;
+  next: LNode<T> | null;
+  prev: LNode<T> | null;
   constructor(value: T) {
     this.value = value;
     this.next = null;
@@ -10,8 +10,8 @@ export class LNode<T> {
 }
 
 export class DoublyLinkedList<T> {
-  head: LNode<T>;
-  tail: LNode<T>;
+  head: LNode<T> | null;
+  tail: LNode<T> | null;
   length: number;
   constructor() {
     this.head = null;
@@ -24,7 +24,7 @@ export class DoublyLinkedList<T> {
     if (!this.head) {
       this.head = this.tail = newLNode;
     } else {
-      var temp = this.tail;
+      const temp = this.tail!;
       this.tail = newLNode;
       newLNode.prev = temp;
       temp.next = newLNode;
@@ -33,21 +33,21 @@ export class DoublyLinkedList<T> {
     return this;
   }
 
-  pop(): LNode<T> {
+  pop(): LNode<T> | null {
     //in case of empty list
     if (this.length === 0) {
       return null;
     }
     //get popped LNode
-    const popped = this.tail;
+    const popped = this.tail!;
     //save newTail to a variable (could be null)
-    const newTail = this.tail.prev;
+    const newTail = popped.prev;
     //if newTail is not null
     if (newTail) {
       //sever connection to popped LNode
       newTail.next = null;
       //sever connection from popped LNode
-      this.tail.prev = null;
+      popped.prev = null;
       //in case of 1 length list
     } else {
       //make sure to edit head in case newTail is null
@@ -61,7 +61,7 @@ export class DoublyLinkedList<T> {
     return popped;
   }
 
-  shift(): LNode<T> {
+  shift(): LNode<T> | null {
     //in case list is empty
     if (!this.head) {
       return null;
@@ -72,7 +72,7 @@ export class DoublyLinkedList<T> {
     const newHead = this.head.next; //might be null
     //if list is more than 1
     if (this.head !== this.tail) {
-      newHead.prev = null;
+      newHead!.prev = null;
       shiftedLNode.next = null;
     } else {
       this.tail = null;
@@ -96,7 +96,7 @@ export class DoublyLinkedList<T> {
     return this;
   }
 
-  insertAtIndex(index: number, val: T): DoublyLinkedList<T> {
+  insertAtIndex(index: number, val: T): DoublyLinkedList<T> | null {
     //if index doesn't exist
     if (index > this.length) {
       return null;
@@ -107,8 +107,8 @@ export class DoublyLinkedList<T> {
       this.push(val);
     } else {
       const newLNode = new LNode(val);
-      const after = this.getLNodeAtIndex(index);
-      const before = after.prev;
+      const after = this.getLNodeAtIndex(index)!;
+      const before = after.prev!;
       after.prev = newLNode;
       before.next = newLNode;
       newLNode.next = after;
@@ -118,8 +118,8 @@ export class DoublyLinkedList<T> {
     return this;
   }
 
-  removeAtIndex(index): LNode<T> {
-    let removedLNode;
+  removeAtIndex(index: number): LNode<T> | null {
+    let removedLNode: LNode<T> | null;
     if (index >= this.length) {
       return null;
     }
@@ -128,9 +128,9 @@ export class DoublyLinkedList<T> {
     } else if (index == this.length - 1) {
       removedLNode = this.pop();
     } else {
-      removedLNode = this.getLNodeAtIndex(index);
-      const after = removedLNode.next;
-      const before = removedLNode.prev;
+      removedLNode = this.getLNodeAtIndex(index)!;
+      const after = removedLNode.next!;
+      const before = removedLNode.prev!;
       removedLNode.next = null;
       removedLNode.prev = null;
       before.next = after;
@@ -140,19 +140,19 @@ export class DoublyLinkedList<T> {
     return removedLNode;
   }
 
-  getLNodeAtIndex(index: number): LNode<T> {
+  getLNodeAtIndex(index: number): LNode<T> | null {
     if (index >= this.length || index < 0) {
       return null;
     }
     let currentIndex = 0;
     let currentLNode = this.head;
     while (currentIndex !== index) {
-      currentLNode = currentLNode.next;
+      currentLNode = currentLNode!.next;
       currentIndex++;
     }
     return currentLNode;
   }
-  getLNodeByValue(val: T): LNode<T> {
+  getLNodeByValue(val: T): LNode<T> | null {
     if (this.head) {
       let current = this.head;
       while (current.next && current.value !== val) {
@@ -164,7 +164,7 @@ export class DoublyLinkedList<T> {
     }
   }
 
-  setLNodeAtIndex(index: number, val: T): LNode<T> {
+  setLNodeAtIndex(index: number, val: T): LNode<T> | null {
     const foundLNode = this.getLNodeAtIndex(index);
     if (foundLNode === this.head) {
       const head = new LNode<T>(val);
@@ -177,23 +177,21 @@ export class DoublyLinkedList<T> {
       const node = new LNode<T>(val);
       node.prev = foundLNode.prev;
       node.next = foundLNode;
-      foundLNode.prev.next = node;
+      foundLNode.prev!.next = node;
       foundLNode.prev = node;
       return node;
     }
     // this.push(val);
     return null;
   }
-  removeByNode(node: LNode<T>): LNode<T> {
+  removeByNode(node: LNode<T>): LNode<T> | null {
     if (this.head === null) {
       return null;
     }
 
-    var temp = this.head;
-
-    var next;
-
-    var prev;
+    let temp: LNode<T> | null = this.head;
+    let next: LNode<T> | null;
+    let prev: LNode<T> | null;
 
     while (temp) {
       if (temp === node) {

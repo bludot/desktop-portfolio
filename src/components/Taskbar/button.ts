@@ -6,7 +6,7 @@ import type Desktop from "../Desktop";
 class TaskbarButton extends OSElement {
   icon: HTMLElement;
   action: (element: HTMLElement) => void;
-  color: string;
+  color?: string;
   constructor({ action, icon }: TaskbarButtonContruct) {
     super("taskbar-button", "taskbar-button");
     this.action = action;
@@ -95,7 +95,7 @@ class TaskbarButtons extends OSElement {
           return container;
         })(),
         action: (element: HTMLElement) => {
-          startMenu.load(document.querySelector("#app"));
+          startMenu.load(document.querySelector("#app") as HTMLElement);
           const unload = startMenu.unload.bind(startMenu);
           window.addEventListener("click", unload, true);
           window.addEventListener(

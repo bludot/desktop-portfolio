@@ -1,8 +1,8 @@
 import OSElement from "../../utils/OSElement";
 
 class MenuGrid extends OSElement {
-  text: string;
-  action: () => void;
+  text?: string;
+  action?: () => void;
   constructor() {
     super("menugrid", "menu-grid");
     this.style = () => ({

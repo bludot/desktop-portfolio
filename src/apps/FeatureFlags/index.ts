@@ -6,7 +6,7 @@ import OSElement from "../../utils/OSElement";
 import SwitchToggle from "../../components/SwitchToggle";
 import db, {FeatureFlag, type IFeatureFlag} from './../../Store'
 
-const flags = {
+const flags: Record<string, { name: string; enabled: boolean }> = {
   "custom_scrollbar": {
     name: "custom scrollbar",
     enabled: false
@@ -14,7 +14,7 @@ const flags = {
 }
 
 class FeatureFlagsApp extends App {
-  featureFlags: FeatureFlag[]
+  featureFlags: FeatureFlag[] = []
 
   constructor(private readonly desktop: Desktop) {
     super("FeatureFlagsApp");
@@ -52,7 +52,7 @@ class FeatureFlagsContent extends OSElement {
     super("FeatureFlagsContent", "feature-flags-content");
     const element: HTMLElement = document.createElement('div')
     for (const flag of featureFlags) {
-      const switchToggle = new SwitchToggle(10, null, null, flag.enabled)
+      const switchToggle = new SwitchToggle(10, undefined, undefined, flag.enabled)
       const container = document.createElement('div')
       const span = document.createElement('span')
       span.appendChild(document.createTextNode(flag.name))
@@ -60,7 +60,7 @@ class FeatureFlagsContent extends OSElement {
       switchToggle.load(container)
       // `this` is the SwitchToggle: setOnClick binds the handler to it.
       switchToggle.setOnClick(function (this: SwitchToggle) {
-        flag.enabled = this.element.querySelector<HTMLInputElement>('input[type=checkbox]').checked
+        flag.enabled = this.element.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked
         flag.save()
       })
       element.appendChild(container)

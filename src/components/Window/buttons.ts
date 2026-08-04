@@ -1,5 +1,5 @@
 import OSElement from "../../utils/OSElement";
-import type { TopbarButtonContruct } from "./interfaces";
+import type { TopbarButtonContruct, WindowButtonsContruct } from "./interfaces";
 
 class TopbarButton extends OSElement {
   icon: HTMLElement;
@@ -43,7 +43,7 @@ class TopbarButton extends OSElement {
 }
 class WindowButtons extends OSElement {
   buttons: TopbarButton[];
-  constructor({ isDialog, close, maximize, minimize }) {
+  constructor({ isDialog, close, maximize, minimize }: WindowButtonsContruct) {
     super("topbar-buttons", "topbar-buttons");
     if (isDialog) {
       this.buttons = [
@@ -103,7 +103,7 @@ class WindowButtons extends OSElement {
           `;
             return icon;
           })(),
-          action: maximize,
+          action: maximize ?? (() => {}),
           color: "#ccc"
         })
       ];

@@ -5,7 +5,7 @@ class MenuItem extends OSElement {
   text: string;
   action: () => void;
   icon: HTMLElement;
-  constructor({ icon, text, action }) {
+  constructor({ icon, text, action }: { icon: HTMLElement; text: string; action: () => void }) {
     super("menuitem", "menu-item");
     this.text = text;
     this.action = action;

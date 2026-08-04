@@ -131,11 +131,16 @@ class ResizableBorder extends OSElement {
     }, 0);
   }
 
+  /** The element being resized. Only read from handlers wired in load(). */
+  private get resizeTarget(): HTMLElement {
+    return this.parent as HTMLElement;
+  }
+
   mouseDown(e: MouseEvent) {
-    this.parentDimensions.width = this.parent.clientWidth;
-    this.parentDimensions.height = this.parent.clientHeight;
-    this.parentDimensions.x = this.parent.offsetLeft;
-    this.parentDimensions.y = this.parent.offsetTop;
+    this.parentDimensions.width = this.resizeTarget.clientWidth;
+    this.parentDimensions.height = this.resizeTarget.clientHeight;
+    this.parentDimensions.x = this.resizeTarget.offsetLeft;
+    this.parentDimensions.y = this.resizeTarget.offsetTop;
     this.cursorPosition.y = e.clientY;
     this.cursorPosition.x = e.clientX;
     const mousemove = this.mouseMove.bind(this);
@@ -162,7 +167,7 @@ class ResizableBorder extends OSElement {
     e.preventDefault();
     if (this.type === ResizeType.RIGHT) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x,
         this.parentDimensions.y,
         this.parentDimensions.width + (e.clientX - this.cursorPosition.x),
@@ -170,7 +175,7 @@ class ResizableBorder extends OSElement {
       );
     } else if (this.type === ResizeType.LEFT) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x + (e.clientX - this.cursorPosition.x),
         this.parentDimensions.y,
         this.parentDimensions.width - (e.clientX - this.cursorPosition.x),
@@ -178,7 +183,7 @@ class ResizableBorder extends OSElement {
       );
     } else if (this.type === ResizeType.TOP) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x,
         this.parentDimensions.y + (e.clientY - this.cursorPosition.y),
         this.parentDimensions.width,
@@ -186,7 +191,7 @@ class ResizableBorder extends OSElement {
       );
     } else if (this.type === ResizeType.BOTTOM) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x,
         this.parentDimensions.y,
         this.parentDimensions.width,
@@ -194,7 +199,7 @@ class ResizableBorder extends OSElement {
       );
     } else if (this.type === ResizeType.BOTTOM_RIGHT) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x,
         this.parentDimensions.y,
         this.parentDimensions.width + (e.clientX - this.cursorPosition.x),
@@ -202,7 +207,7 @@ class ResizableBorder extends OSElement {
       );
     } else if (this.type === ResizeType.TOP_LEFT) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x + (e.clientX - this.cursorPosition.x),
         this.parentDimensions.y + (e.clientY - this.cursorPosition.y),
         this.parentDimensions.width - (e.clientX - this.cursorPosition.x),
@@ -210,7 +215,7 @@ class ResizableBorder extends OSElement {
       );
     } else if (this.type === ResizeType.TOP_RIGHT) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x,
         this.parentDimensions.y + (e.clientY - this.cursorPosition.y),
         this.parentDimensions.width + (e.clientX - this.cursorPosition.x),
@@ -218,7 +223,7 @@ class ResizableBorder extends OSElement {
       );
     } else if (this.type === ResizeType.BOTTOM_LEFT) {
       this.updateParentDimensions(
-        this.parent,
+        this.resizeTarget,
         this.parentDimensions.x + (e.clientX - this.cursorPosition.x),
         this.parentDimensions.y,
         this.parentDimensions.width - (e.clientX - this.cursorPosition.x),

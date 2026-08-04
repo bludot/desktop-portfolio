@@ -29,12 +29,12 @@ describe('blurImage', () => {
     const pending = blurImage('/assets/bg.jpg', 30)
 
     // The helper appends a hidden <img> and waits on its load event.
-    const img = document.body.querySelector('img')
+    const img = document.body.querySelector('img')!
     expect(img).toBeTruthy()
     expect(img.getAttribute('crossorigin')).toBe('Anonymous')
     expect(img.style.opacity).toBe('0')
 
-    img.onload(new Event('load'))
+    img.onload!(new Event('load'))
     await vi.advanceTimersByTimeAsync(500)
 
     await expect(pending).resolves.toBe('data:image/png;base64,blurred')
@@ -45,8 +45,8 @@ describe('blurImage', () => {
     const { blurImage } = await import('../src/utils/blurimage')
 
     const pending = blurImage('/assets/bg.jpg', undefined)
-    const img = document.body.querySelector('img')
-    img.onload(new Event('load'))
+    const img = document.body.querySelector('img')!
+    img.onload!(new Event('load'))
     await vi.advanceTimersByTimeAsync(500)
 
     await expect(pending).resolves.toBe('data:image/png;base64,blurred')

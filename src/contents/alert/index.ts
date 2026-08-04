@@ -1,6 +1,6 @@
 import OSElement from "./../../utils/OSElement";
 
-const content = ({title, text}) => `
+const content = ({title, text}: { title: string; text: string }) => `
 <div>
   <h1>${title}</h1>
   <div class="content">
@@ -10,7 +10,7 @@ const content = ({title, text}) => `
 `;
 
 class AlertContent extends OSElement {
-  constructor({title, text}) {
+  constructor({title, text}: { title: string; text: string }) {
     super("alert", "alert-content");
     const element: HTMLElement = new DOMParser().parseFromString(
       content({title, text}),

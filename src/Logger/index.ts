@@ -49,15 +49,15 @@ class Transport {
     this.event.emit("log", log);
   }
 
-  public subscribe(...args): any {
-    return this.event.on.apply(this.event, args);
+  public subscribe(name: string, cb: (...args: any[]) => void): any {
+    return this.event.on(name, cb);
   }
 
   public emit(type: LOG_TYPE, log: Log): void {
     this.event.emit(type, log);
   }
-  public unsubscribe(...args): any {
-    return this.event.off.apply(this.event, args);
+  public unsubscribe(name: string, cb: (...args: any[]) => void): any {
+    return this.event.off(name, cb);
   }
 }
 
@@ -82,7 +82,7 @@ class Logger {
   logs: Log[] = [];
   transport: ITransport = new DefaultTransport({});
   serviceName: string;
-  constructor(serviceName) {
+  constructor(serviceName: string) {
     this.logs = [];
     this.serviceName = serviceName;
   }
@@ -105,11 +105,11 @@ class Logger {
     return this.logs[this.logs.length - 1];
   }
 
-  getLastLogs(n) {
+  getLastLogs(n: number) {
     return this.logs.slice(-n);
   }
 
-  info(...messages) {
+  info(...messages: any[]) {
     const type = LOG_TYPE.INFO;
     const logs = messages.map(
       (message) => new Log(type, message, this.serviceName)
@@ -122,7 +122,7 @@ class Logger {
       logs.forEach((log) => this.log(log));
     }
   }
-  warn(...messages) {
+  warn(...messages: any[]) {
     const type = LOG_TYPE.WARNING;
     const logs = messages.map(
       (message) => new Log(type, message, this.serviceName)
@@ -135,7 +135,7 @@ class Logger {
       logs.forEach((log) => this.log(log));
     }
   }
-  error(...messages) {
+  error(...messages: any[]) {
     const type = LOG_TYPE.ERROR;
     const logs = messages.map(
       (message) => new Log(type, message, this.serviceName)
@@ -148,7 +148,7 @@ class Logger {
       logs.forEach((log) => this.log(log));
     }
   }
-  debug(...messages) {
+  debug(...messages: any[]) {
     const type = LOG_TYPE.DEBUG;
     const logs = messages.map(
       (message) => new Log(type, message, this.serviceName)

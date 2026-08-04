@@ -62,7 +62,7 @@ describe('OSWindow', () => {
 
   it('loads its content and topbar into the desktop', async () => {
     const win = makeWindow()
-    await win.load(null)
+    await win.load(null as unknown as HTMLElement)
     expect(win.getElement().querySelector('.topbar-window')).toBeTruthy()
     expect(win.parent).toBeTruthy()
   })
@@ -81,7 +81,7 @@ describe('OSWindow', () => {
     // handler that stayed live for the lifetime of the page.
     it('removes both window listeners when the drag ends', async () => {
       const win = makeWindow()
-      await win.load(null)
+      await win.load(null as unknown as HTMLElement)
       win.makeMovable()
 
       const added: unknown[] = []
@@ -111,7 +111,7 @@ describe('OSWindow', () => {
 
     it('leaves no live mousemove handler after repeated drags', async () => {
       const win = makeWindow()
-      await win.load(null)
+      await win.load(null as unknown as HTMLElement)
       win.makeMovable()
 
       const live = new Set<unknown>()
@@ -138,14 +138,14 @@ describe('OSWindow', () => {
 
     it('binds each handler once, so makeMovable is idempotent', async () => {
       const win = makeWindow()
-      await win.load(null)
-      const titlebar = win.getElement().querySelector('.topbar-window')
+      await win.load(null as unknown as HTMLElement)
+      const titlebar = win.getElement().querySelector('.topbar-window')!
       const spy = vi.spyOn(titlebar, 'addEventListener')
 
       win.makeMovable()
       win.makeMovable()
 
-      const handlers = spy.mock.calls
+      const handlers = (spy.mock.calls as Array<[string, unknown]>)
         .filter(([type]) => type === 'mousedown')
         .map(([, fn]) => fn)
       expect(handlers).toHaveLength(2)
@@ -155,7 +155,7 @@ describe('OSWindow', () => {
 
     it('moves the element while dragging', async () => {
       const win = makeWindow()
-      await win.load(null)
+      await win.load(null as unknown as HTMLElement)
       win.makeMovable()
 
       win.mousedown(mouse('mousedown', 200, 50) as MouseEvent)
@@ -184,7 +184,7 @@ describe('OSWindow', () => {
     it('is left off when the flag is absent', async () => {
       const win = makeWindow({ content: loadableContent() })
       const scrollbarLoad = vi.spyOn((win as any).scrollbar, 'load')
-      await win.load(null)
+      await win.load(null as unknown as HTMLElement)
       expect(scrollbarLoad).not.toHaveBeenCalled()
     })
 
@@ -197,7 +197,7 @@ describe('OSWindow', () => {
 
       const win = makeWindow({ content: loadableContent() })
       const scrollbarLoad = vi.spyOn((win as any).scrollbar, 'load')
-      await win.load(null)
+      await win.load(null as unknown as HTMLElement)
       expect(scrollbarLoad).not.toHaveBeenCalled()
     })
 
@@ -212,7 +212,7 @@ describe('OSWindow', () => {
       const scrollbarLoad = vi
         .spyOn((win as any).scrollbar, 'load')
         .mockResolvedValue(undefined as any)
-      await win.load(null)
+      await win.load(null as unknown as HTMLElement)
       expect(scrollbarLoad).toHaveBeenCalled()
     })
   })
@@ -221,7 +221,7 @@ describe('OSWindow', () => {
     const content = document.createElement('p')
     content.textContent = 'plain'
     const win = makeWindow({ content })
-    await win.load(null)
+    await win.load(null as unknown as HTMLElement)
     expect(win.getElement().textContent).toContain('plain')
   })
 })

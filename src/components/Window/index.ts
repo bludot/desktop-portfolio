@@ -142,8 +142,8 @@ class OSWindow extends OSElement {
 
   public makeMovable(): void {
     this.element
-      .querySelector(".topbar-window")
-      .addEventListener("mousedown", this.onTitlebarMouseDown);
+      .querySelector(".topbar-window")!
+      .addEventListener("mousedown", this.onTitlebarMouseDown as EventListener);
     this.element.addEventListener("mousedown", this.onWindowMouseDown);
   }
 

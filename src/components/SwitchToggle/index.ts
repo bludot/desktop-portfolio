@@ -1,15 +1,15 @@
 import OSElement from "../../utils/OSElement";
 
 class SwitchToggle extends OSElement {
-  onClick: (e: MouseEvent) => void;
+  onClick?: (e: MouseEvent) => void;
   size: number;
   offColor: string;
   onColor: string;
   value: boolean;
   constructor(
     size: number = 20,
-    offColor: string = "#ccc",
-    onColor: string = "#2196F3",
+    offColor?: string,
+    onColor?: string,
     value: boolean = false
   ) {
     super("switch", "switch");

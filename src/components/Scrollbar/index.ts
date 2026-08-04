@@ -7,7 +7,7 @@ const flickThreshold = 100;
 const animateScroll = (container: HTMLElement, endY: number, duration: number) => {
   const startY = container.scrollTop;
   const distanceY = endY - startY;
-  let startTime = null;
+  let startTime: number | null = null;
 
   const animate = (currentTime: number) => {
     if (startTime === null) startTime = currentTime;
@@ -30,10 +30,15 @@ const animateScroll = (container: HTMLElement, endY: number, duration: number) =
 class ScrollBar extends OSElement {
   private scrollHeight: number;
   private debounceHide: any;
-  private touchStartY: number;
-  private touchMoveY: number;
-  private touchDelta: number;
-  private scrollTop: number;
+  private touchStartY = 0;
+  private touchMoveY = 0;
+  private touchDelta = 0;
+  private scrollTop = 0;
+
+  /** The scrollable container. Only read after load(), so it is always present. */
+  private get scrollParent(): HTMLElement {
+    return this.element.parentElement as HTMLElement;
+  }
   constructor() {
     super("scrollbar", "scrollbar");
     const bar = document.createElement("div");
@@ -59,7 +64,7 @@ class ScrollBar extends OSElement {
   // add touch events
   touchStart(e: TouchEvent) {
     this.element.style.right = "0px";
-    const parent = this.element.parentElement;
+    const parent = this.scrollParent;
     this.touchStartY = e.touches[0].clientY;
     this.scrollTop = parent.scrollTop
     
@@ -70,7 +75,7 @@ class ScrollBar extends OSElement {
     this.touchMoveY = e.touches[0].clientY;
     this.touchDelta = this.touchStartY - this.touchMoveY;
 
-    const parent = this.element.parentElement;
+    const parent = this.scrollParent;
     const top =
       (parent.scrollTop / parent.clientHeight) *
       this.element.children[0].clientHeight;
@@ -105,7 +110,7 @@ class ScrollBar extends OSElement {
     this.debounceHide();
   }
   handleFlick( deltaY: number) {
-    const parent = this.element.parentElement;
+    const parent = this.scrollParent;
     let flickDirection: string;
         if (deltaY > 0) {
             flickDirection = "down";
@@ -129,7 +134,7 @@ class ScrollBar extends OSElement {
     // @ts-ignore
     const deltas = normalizeWheel(e);
     const delta = deltas.pixelY;
-    const parent = this.element.parentElement;
+    const parent = this.scrollParent;
     parent.scrollTop += delta;
     const top =
       (parent.scrollTop / parent.clientHeight) *
@@ -144,14 +149,13 @@ class ScrollBar extends OSElement {
     this.element.style.top = parent.scrollTop + "px";
     this.debounceHide();
     const height =
-      (this.element.parentElement.clientHeight /
-        this.element.parentElement.scrollHeight) *
-      this.element.parentElement.clientHeight;
+      (this.scrollParent.clientHeight / this.scrollParent.scrollHeight) *
+      this.scrollParent.clientHeight;
     this.style = () => ({
       [this.id]: {
         position: "absolute",
         top: 0,
-        height: this.element.parentElement?.clientHeight + "px",
+        height: this.scrollParent.clientHeight + "px",
         right: "-10px",
         width: "10px",
         zIndex: "1",
@@ -177,15 +181,15 @@ class ScrollBar extends OSElement {
     super.load(element);
     setTimeout(() => {
       const height =
-        (this.element.parentElement.clientHeight /
-          this.element.parentElement.scrollHeight) *
-        this.element.parentElement.clientHeight;
-      this.element.parentElement.style.overflow = "hidden"
+        (this.scrollParent.clientHeight /
+          this.scrollParent.scrollHeight) *
+        this.scrollParent.clientHeight;
+      this.scrollParent.style.overflow = "hidden"
       this.style = () => ({
         [this.id]: {
           position: "absolute",
           top: 0,
-          height: this.element.parentElement?.clientHeight + "px",
+          height: this.scrollParent.clientHeight + "px",
           right: "-10px",
           width: "10px",
           zIndex: "1",
@@ -199,24 +203,24 @@ class ScrollBar extends OSElement {
           // overflow: "hidden"
         }
       });
-      this.scrollHeight = this.element.parentElement.scrollHeight;
+      this.scrollHeight = this.scrollParent.scrollHeight;
       this.applyStyle();
-      this.element.parentNode?.addEventListener(
+      this.scrollParent.addEventListener(
         "mousewheel",
-        this.scroll.bind(this)
+        this.scroll.bind(this) as EventListener
       );
       // listener for touch events
-      this.element.parentNode?.addEventListener(
+      this.scrollParent.addEventListener(
         "touchstart",
-        this.touchStart.bind(this)
+        this.touchStart.bind(this) as EventListener
       );
-      this.element.parentNode?.addEventListener(
+      this.scrollParent.addEventListener(
         "touchmove",
-        this.touchMove.bind(this)
+        this.touchMove.bind(this) as EventListener
       );
-      this.element.parentNode?.addEventListener(
+      this.scrollParent.addEventListener(
         "touchend",
-        this.touchEnd.bind(this)
+        this.touchEnd.bind(this) as EventListener
       );
 
     }, 0);

@@ -4,8 +4,8 @@ import Bootlogo from "./bootlogo";
 
 class Bootscreen extends OSElement {
   loader: Loader;
-  canvas: SVGSVGElement;
-  path: SVGPathElement;
+  canvas!: SVGSVGElement;
+  path!: SVGPathElement;
   bootlogo: Bootlogo;
   constructor() {
     super("Bootscreen", "bootscreen");

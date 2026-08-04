@@ -1,8 +1,8 @@
 import OSElement from "../../utils/OSElement";
 
 class Bootlogo extends OSElement {
-  canvas: SVGSVGElement;
-  path: SVGPathElement;
+  canvas!: SVGSVGElement;
+  path!: SVGPathElement;
   constructor() {
     super("Bootlogo", "bootlogo");
     this.style = () => ({

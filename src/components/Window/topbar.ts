@@ -5,7 +5,7 @@ import WindowButtons from "./buttons";
 class TopBar extends OSElement {
   titlebar: TitleBar;
   windowButtons: WindowButtons;
-  constructor({ title, close, isDialog }) {
+  constructor({ title, close, isDialog }: { title: string; close: () => void; isDialog?: boolean }) {
     super("topbar", "topbar");
     this.titlebar = new TitleBar({ title, className: "title-bar" });
     this.element.className = "topbar-window";

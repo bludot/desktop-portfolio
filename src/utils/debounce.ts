@@ -1,14 +1,14 @@
-function debounce(func, wait, immediate) {
+function debounce(func: (...args: any[]) => void, wait: number, immediate?: boolean) {
   // 'private' variable for instance
   // The returned function will be able to reference this due to closure.
   // Each call to the returned function will share this common timer.
-  var timeout;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
 
   // Calling debounce returns a new anonymous function
-  return function () {
+  return function (this: unknown, ...callArgs: any[]) {
     // reference the context and args for the setTimeout function
-    var context = this,
-      args = arguments;
+    const context = this,
+      args = callArgs;
 
     // Should the function be called now? If immediate is true
     //   and not already in a timeout then the answer is: Yes
@@ -18,7 +18,7 @@ function debounce(func, wait, immediate) {
     //   function several times, but it will only execute once
     //   [before or after imposing a delay].
     //   Each time the returned function is called, the timer starts over.
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
 
     // Set the new timeout
     timeout = setTimeout(function () {

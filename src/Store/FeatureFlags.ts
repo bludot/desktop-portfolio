@@ -1,6 +1,6 @@
 import db from "./database"
 class FeatureFlag implements IFeatureFlag {
-  id: number;
+  id!: number;
   code: string;
   name: string;
   enabled: boolean;

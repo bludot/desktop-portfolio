@@ -5,7 +5,7 @@ export class Log {
   message: string;
   timestamp: Date;
   formattedMessage: string;
-  serviceName: string;
+  serviceName?: string;
   constructor(type: LOG_TYPE, message: any, serviceName?: string) {
     this.type = type;
     this.message = message;

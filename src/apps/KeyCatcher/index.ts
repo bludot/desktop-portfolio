@@ -6,10 +6,10 @@ import type Desktop from "../../components/Desktop";
 const logger = new Logger("KeyCatcher");
 
 class KeyCatcher extends App {
-  sequences: Record<string, () => void>
+  sequences: Record<string, () => void> = {}
   static _instance: KeyCatcher
 
-  desktop: Desktop
+  desktop!: Desktop
 
   constructor(desktop: Desktop) {
     super('Keycatcher')
@@ -35,7 +35,7 @@ class KeyCatcher extends App {
     });
   }
 
-  catchKeys(sequence) {
+  catchKeys(sequence: string[]) {
     if (this.sequences[sequence.join('')]) {
       this.sequences[sequence.join('')]()
     }
@@ -46,20 +46,23 @@ class KeyCatcher extends App {
   }
 }
 
-function keyMapper(callbackList, options) {
-  const delay = hasProperty('keystrokeDelay', options) && options.keystrokeDelay >= 300 && options.keystrokeDelay;
-  const keystrokeDelay = delay || 1000;
-  const eventType = hasProperty('eventType', options) && options.eventType || 'keydown';
+function keyMapper(
+  callbackList: Array<(buffer: string[]) => void>,
+  options: { eventType?: string; keystrokeDelay?: number }
+) {
+  const requested = options?.keystrokeDelay;
+  const keystrokeDelay = requested !== undefined && requested >= 300 ? requested : 1000;
+  const eventType = options?.eventType || 'keydown';
 
-  let state = {
+  let state: { buffer: string[]; lastKeyTime: number } = {
     buffer: [],
     lastKeyTime: Date.now()
   };
 
-  document.addEventListener(eventType, event => {
-    const key = event.key;
+  document.addEventListener(eventType, (event: Event) => {
+    const key = (event as KeyboardEvent).key;
     const currentTime = Date.now();
-    let buffer = [];
+    let buffer: string[] = [];
 
     if (currentTime - state.lastKeyTime > keystrokeDelay) {
       buffer = [key];
@@ -72,9 +75,6 @@ function keyMapper(callbackList, options) {
     callbackList.forEach(callback => callback(buffer));
   });
 
-  function hasProperty(property, object) {
-    return object && object.hasOwnProperty(property);
-  }
 }
 
 

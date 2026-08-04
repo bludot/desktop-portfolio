@@ -63,7 +63,7 @@ describe('pop', () => {
 
   it('empties the list when popping the only node', () => {
     const list = listOf('a')
-    expect(list.pop().value).toBe('a')
+    expect(list.pop()!.value).toBe('a')
     expect(list.head).toBeNull()
     expect(list.tail).toBeNull()
     expect(list.length).toBe(0)
@@ -72,10 +72,10 @@ describe('pop', () => {
   it('detaches the popped node from the list', () => {
     const list = listOf('a', 'b')
     const popped = list.pop()
-    expect(popped.value).toBe('b')
-    expect(popped.prev).toBeNull()
-    expect(list.tail.value).toBe('a')
-    expect(list.tail.next).toBeNull()
+    expect(popped!.value).toBe('b')
+    expect(popped!.prev).toBeNull()
+    expect(list.tail!.value).toBe('a')
+    expect(list.tail!.next).toBeNull()
     expect(toArray(list)).toEqual(['a'])
   })
 })
@@ -87,7 +87,7 @@ describe('shift', () => {
 
   it('empties the list when shifting the only node', () => {
     const list = listOf('a')
-    expect(list.shift().value).toBe('a')
+    expect(list.shift()!.value).toBe('a')
     expect(list.head).toBeNull()
     expect(list.tail).toBeNull()
     expect(list.length).toBe(0)
@@ -96,10 +96,10 @@ describe('shift', () => {
   it('detaches the shifted node and promotes the next head', () => {
     const list = listOf('a', 'b', 'c')
     const shifted = list.shift()
-    expect(shifted.value).toBe('a')
-    expect(shifted.next).toBeNull()
-    expect(list.head.value).toBe('b')
-    expect(list.head.prev).toBeNull()
+    expect(shifted!.value).toBe('a')
+    expect(shifted!.next).toBeNull()
+    expect(list.head!.value).toBe('b')
+    expect(list.head!.prev).toBeNull()
     expect(toArray(list)).toEqual(['b', 'c'])
   })
 })
@@ -153,19 +153,19 @@ describe('removeAtIndex', () => {
 
   it('removes the first node via shift', () => {
     const list = listOf('a', 'b', 'c')
-    expect(list.removeAtIndex(0).value).toBe('a')
+    expect(list.removeAtIndex(0)!.value).toBe('a')
     expect(toArray(list)).toEqual(['b', 'c'])
   })
 
   it('removes the last node via pop', () => {
     const list = listOf('a', 'b', 'c')
-    expect(list.removeAtIndex(2).value).toBe('c')
+    expect(list.removeAtIndex(2)!.value).toBe('c')
     expect(toArray(list)).toEqual(['a', 'b'])
   })
 
   it('removes a middle node and closes the gap', () => {
     const list = listOf('a', 'b', 'c')
-    const removed = list.removeAtIndex(1)
+    const removed = list.removeAtIndex(1)!
     expect(removed.value).toBe('b')
     expect(removed.next).toBeNull()
     expect(removed.prev).toBeNull()
@@ -184,8 +184,8 @@ describe('getLNodeAtIndex', () => {
 
   it('walks to the requested position', () => {
     const list = listOf('a', 'b', 'c')
-    expect(list.getLNodeAtIndex(0).value).toBe('a')
-    expect(list.getLNodeAtIndex(2).value).toBe('c')
+    expect(list.getLNodeAtIndex(0)!.value).toBe('a')
+    expect(list.getLNodeAtIndex(2)!.value).toBe('c')
   })
 })
 
@@ -196,7 +196,7 @@ describe('getLNodeByValue', () => {
 
   it('finds a matching node', () => {
     const list = listOf('a', 'b', 'c')
-    expect(list.getLNodeByValue('b').value).toBe('b')
+    expect(list.getLNodeByValue('b')!.value).toBe('b')
   })
 
   it('stops at the tail when nothing matches', () => {
@@ -214,14 +214,14 @@ describe('setLNodeAtIndex', () => {
 
   it('replaces the head', () => {
     const list = listOf('a', 'b')
-    const node = list.setLNodeAtIndex(0, 'z')
+    const node = list.setLNodeAtIndex(0, 'z')!
     expect(node.value).toBe('z')
     expect(list.head).toBe(node)
   })
 
   it('splices a new node in before the target', () => {
     const list = listOf('a', 'b', 'c')
-    const node = list.setLNodeAtIndex(1, 'z')
+    const node = list.setLNodeAtIndex(1, 'z')!
     expect(node.value).toBe('z')
     expect(toArray(list)).toEqual(['a', 'z', 'b', 'c'])
   })
@@ -238,7 +238,7 @@ describe('removeByNode', () => {
 
   it('unlinks a middle node', () => {
     const list = listOf('a', 'b', 'c')
-    const middle = list.getLNodeAtIndex(1)
+    const middle = list.getLNodeAtIndex(1)!
     expect(list.removeByNode(middle)).toBe(middle)
     expect(toArray(list)).toEqual(['a', 'c'])
     expect(toArrayReverse(list)).toEqual(['c', 'a'])
@@ -251,14 +251,14 @@ describe('removeByNode', () => {
   it('decrements length, keeping it in step with the nodes', () => {
     const list = listOf('a', 'b', 'c')
 
-    list.removeByNode(list.getLNodeAtIndex(1))
+    list.removeByNode(list.getLNodeAtIndex(1)!)
     expect(list.length).toBe(2)
     expect(toArray(list)).toHaveLength(2)
 
-    list.removeByNode(list.head)
+    list.removeByNode(list.head!)
     expect(list.length).toBe(1)
 
-    list.removeByNode(list.head)
+    list.removeByNode(list.head!)
     expect(list.length).toBe(0)
     expect(toArray(list)).toEqual([])
   })
@@ -271,15 +271,15 @@ describe('removeByNode', () => {
 
   it('moves head forward when removing the head', () => {
     const list = listOf('a', 'b')
-    list.removeByNode(list.head)
-    expect(list.head.value).toBe('b')
+    list.removeByNode(list.head!)
+    expect(list.head!.value).toBe('b')
     expect(toArray(list)).toEqual(['b'])
   })
 
   it('moves tail back when removing the tail', () => {
     const list = listOf('a', 'b')
-    list.removeByNode(list.tail)
-    expect(list.tail.value).toBe('a')
+    list.removeByNode(list.tail!)
+    expect(list.tail!.value).toBe('a')
     expect(toArray(list)).toEqual(['a'])
   })
 })

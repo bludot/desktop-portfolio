@@ -30,14 +30,14 @@ const openWindow = async (title: string) => {
     windowPosition: { top: 10, left: 10 },
     center: false,
   } as any)
-  const win = windowManager.windows.head.value.window
+  const win = windowManager.windows.head!.value.window
   await vi.waitFor(() => expect(win.parent).toBeTruthy())
   return win
 }
 
 const titles = () => {
   const out: string[] = []
-  let node = windowManager.windows.head
+  let node: any = windowManager.windows.head
   while (node) {
     out.push(node.value.window.title)
     node = node.next
@@ -69,7 +69,7 @@ describe('WindowManager', () => {
     await openWindow('Second')
     expect(windowManager.windows.length).toBe(2)
 
-    windowManager.onActive(windowManager.windows.tail.value.window)
+    windowManager.onActive(windowManager.windows.tail!.value.window)
     expect(windowManager.windows.length).toBe(2)
   })
 
@@ -83,7 +83,7 @@ describe('WindowManager', () => {
     await openWindow('First')
     await openWindow('Second')
     const zIndexes: string[] = []
-    let node = windowManager.windows.head
+    let node: any = windowManager.windows.head
     while (node) {
       zIndexes.push(node.value.window.getElement().style.zIndex)
       node = node.next
@@ -95,7 +95,7 @@ describe('WindowManager', () => {
   it('getNodeByWindow finds the node holding a window', async () => {
     const first = await openWindow('First')
     await openWindow('Second')
-    expect(windowManager.getNodeByWindow(first).value.window).toBe(first)
+    expect(windowManager.getNodeByWindow(first)!.value.window).toBe(first)
   })
 
   it('getNodeByWindow returns null when nothing is open', async () => {

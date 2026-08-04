@@ -30,7 +30,7 @@ class Title extends OSElement {
 class TitleBar extends OSElement {
   title: Title;
   className: string;
-  parent: HTMLElement;
+  parent!: HTMLElement;
   constructor({ title, className }: { title: string; className: string }) {
     super("titlebar", "title-bar");
     this.className = className;
@@ -43,7 +43,7 @@ class TitleBar extends OSElement {
     });
   }
 
-  applyTitle(title) {
+  applyTitle(title: any) {
     this.title = title;
     // this.element.append(this.title);
     this.title.load(this.element);

@@ -1,3 +1,5 @@
+// @ts-nocheck -- vendored third-party source, kept as imported rather than
+// retyped. Excluded from coverage for the same reason.
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.

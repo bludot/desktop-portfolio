@@ -2,12 +2,12 @@ import jss, { StyleSheet } from "jss";
 import Logger from "../Logger";
 
 class OSElement {
-  parent: HTMLElement;
+  parent: HTMLElement | null = null;
   element: HTMLElement;
   id: string;
-  style: () => any;
-  className: string;
-  styleSheet: StyleSheet;
+  style!: () => any;
+  className?: string;
+  styleSheet: StyleSheet | null = null;
   instanceName: string;
   logger: Logger;
   constructor(tagName: string, id: string, instanceName?: string) {
@@ -78,7 +78,7 @@ class OSElement {
     await this.beforeUnload();
     this.logger.debug(`Finished beforeUnload hook`);
 
-    this.parent.removeChild(this.element);
+    this.parent?.removeChild(this.element);
     this.parent = null;
 
     this.unloadStyle();

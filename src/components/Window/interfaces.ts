@@ -21,3 +21,10 @@ export interface TopbarButtonContruct {
   icon: HTMLElement;
   color: string;
 }
+
+export interface WindowButtonsContruct {
+  isDialog?: boolean;
+  close: () => void;
+  maximize: (() => void) | null;
+  minimize: () => void;
+}

@@ -7,8 +7,8 @@ const logger = new Logger("Desktop");
 
 class Desktop extends OSElement {
   mainElement: HTMLElement;
-  element: HTMLElement;
-  id: string;
+  element!: HTMLElement;
+  id!: string;
   backgroundColor: string;
   taskbar: Taskbar;
   instanceName: string = "Desktop";
@@ -45,7 +45,7 @@ class Desktop extends OSElement {
   async load(element: HTMLElement) {
     super.load(element);
   }
-  async startup(bootscreen) {
+  async startup(bootscreen: { unload: () => Promise<void> }) {
     logger.debug("Starting desktop");
     this.mainElement.appendChild(this.element);
     this.taskbar.load(this.element);

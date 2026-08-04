@@ -40,7 +40,7 @@ class Taskbar extends OSElement {
     });
   }
 
-  async load(element) {
+  async load(element: HTMLElement) {
     super.load(element);
   }
 }

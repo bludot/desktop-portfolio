@@ -1,7 +1,7 @@
 import Blur from "./blur";
 
-function blur(img, blurAmount, resolve) {
-  var blur = new Blur({
+function blur(img: HTMLImageElement, blurAmount: number | undefined, resolve: (data: string) => void) {
+  const blur = new (Blur as any)({
     radius: blurAmount || 30,
     // gaussian: true
     stack: true,
@@ -17,13 +17,13 @@ function blur(img, blurAmount, resolve) {
   return resolve(data);
 }
 
-export function blurImage(src, blurAmount): Promise<string> {
+export function blurImage(src: string, blurAmount?: number): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.style.position = "absolute";
     img.crossOrigin = "Anonymous";
-    img.onload = function () {
-      const complete = (data) => {
+    img.onload = function (this: HTMLImageElement) {
+      const complete = (data: string) => {
         return setTimeout(() => {
           resolve(data);
         }, 500);

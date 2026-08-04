@@ -134,7 +134,7 @@ describe('FeatureFlagsApp', () => {
     app.load()
 
     await vi.waitFor(() => expect(windowManager.windows.head).toBeTruthy())
-    const win = windowManager.windows.head.value.window
+    const win = windowManager.windows.head!.value.window
     expect(win.title).toBe('FeatureFlagsApp')
     expect(app.featureFlags.map((f) => f.code)).toEqual(['custom_scrollbar'])
   })

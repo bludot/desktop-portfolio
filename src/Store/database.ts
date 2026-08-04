@@ -3,7 +3,7 @@ import Dexie from "dexie";
 import type { FeatureFlag } from "./FeatureFlags";
 
 export class AppDatabase extends Dexie {
-  public featureFlags: Dexie.Table<FeatureFlag, number>;
+  public featureFlags!: Dexie.Table<FeatureFlag, number>;
 
   constructor() {
     super("AppDatabase");

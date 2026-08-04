@@ -6,6 +6,8 @@ import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
 import isMobile from 'is-mobile'
+// `blur` is aliased: the constructor already has a WindowBlur named blur.
+import { blur as blurFx, color, radius, shadow } from "../../theme";
 import ScrollBar from "../Scrollbar";
 
 class OSWindow extends OSElement {
@@ -52,7 +54,8 @@ class OSWindow extends OSElement {
                   width: 400,
                   height: 400,
                 },
-                windowPosition
+                windowPosition,
+                meta
               }: IWindow) {
     super("window", "window");
     this.isMobile = isMobile()
@@ -67,28 +70,24 @@ class OSWindow extends OSElement {
     this.onClose = onClose;
     this.center = center;
     this.dimensions = dimensions;
-    this.topbar = new TopBar({title, close: () => this.onClose(this), isDialog});
+    this.topbar = new TopBar({title, close: () => this.onClose(this), isDialog, meta});
     this.windowPosition = windowPosition || {}
     this.style = () => ({
       [this.id]: {
-        background: "rgba(200,200,200, .5)",
+        background: this.active ? color.glass : color.glassRest,
+        backdropFilter: blurFx.window,
+        WebkitBackdropFilter: blurFx.window,
+        color: color.ink,
         position: "fixed",
         top: this.windowPosition.top || 0,
         left: this.windowPosition.left || 0,
         height: `${this.dimensions.height}px`,
         width: `${this.dimensions.width}px`,
-        ...(this.isMobile ? {
-          } : {
-            borderRadius: "8px",
-          }
-        ),
-        // overflow: "hidden",
-        // overflow: "auto",
+        ...(this.isMobile ? {} : { borderRadius: radius.window }),
+        overflow: "hidden",
         boxShadow: this.active
-          ? `0 17px 50px 0 rgba(0, 0, 0, 0.19),
-        0 12px 15px 0 rgba(0, 0, 0, 0.24)`
-          : `0px 2px 5px 0px rgba(0, 0, 0, 0.16),
-                0 2px 5px 0 rgba(0, 0, 0, 0.26)`,
+          ? `${shadow.window}, ${shadow.edge}`
+          : `${shadow.windowRest}, ${shadow.edgeRest}`,
         display: "flex",
         flexFlow: "column nowrap",
       },

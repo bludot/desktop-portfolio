@@ -325,7 +325,8 @@ describe('contents', () => {
     await content.load(host)
     const text = content.getElement().textContent!
 
-    expect(text).toContain('Experience')
+    // The window's titlebar names it now, so the content no longer repeats it.
+    expect(text).not.toContain('Experience')
     expect(text).toContain('Backend Engineer')
     expect(text).toContain('08/2021') // not 07/2021
     expect(text).toContain('07/2020')

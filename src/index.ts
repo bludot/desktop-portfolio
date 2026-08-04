@@ -45,6 +45,7 @@ const makeMainWindows = (desktop: Desktop) => ({
   "experience": ({top, left}: { top?: number, left?: number }) => {
     windowManager.new({
       title: `Experience`,
+      meta: `7 roles \u00b7 2012-now`,
       content: new ExperienceContent(),
       desktop: desktop,
       dimensions: {
@@ -72,8 +73,8 @@ const makeMainWindows = (desktop: Desktop) => ({
   },
   "alert": () => {
     windowManager.new({
-      title: `Unexpected Error`,
-      content: new AlertContent({title: "Unexpected Error", text: "Unable to do this action"}),
+      title: `Couldn't open that`,
+      content: new AlertContent({title: "That window isn't ready yet", text: "It's the next thing being built. Everything else on the desktop works."}),
       dimensions: {
         width: 250,
         height: 150

@@ -1,4 +1,5 @@
 import OSElement from "../../utils/OSElement";
+import { color, font, size, tracking, weight } from "../../theme";
 
 class User extends OSElement {
   constructor() {
@@ -14,8 +15,10 @@ class User extends OSElement {
     });
     const header = document.createElement("h1");
     header.style.cssText = `
-      font-size: 34px;
-      font-weight: 200;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #2b2530;
       white-space: nowrap;
       margin: 5px 0;
       flex: 1 1 auto;
@@ -24,8 +27,12 @@ class User extends OSElement {
     const subtitle = document.createElement("sub");
 
     subtitle.style.cssText = `
-      font-size: 16px;
+      font-size: 11px;
       font-weight: 400;
+      font-family: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #9c4f6a;
       white-space: nowrap;
       margin: 5px 0;
       flex: 1 1 auto;

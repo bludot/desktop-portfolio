@@ -1,4 +1,5 @@
 import OSElement from "./../../utils/OSElement";
+import { color, font, size, tracking, weight } from "../../theme";
 import {format } from 'date-fns'
 
 interface ExperienceI {
@@ -20,20 +21,17 @@ const content = ({
                    start,
                    end
                  }: ExperienceI) => `
-  <div>
-    <h2>${position}</h2>
-    <h3>${company}</h3>
-    
-    <div class="flex">
-        <div>
-            <span>${format(start, "MM/yyyy")}</span> - <span>${typeof end == "string" ? end : format(end, "MM/yyyy")}</span>
-        </div>
-        <div>
-             
-            <span>${locationSVG} ${location}</span>
-        </div>
+  <div class="entry">
+    <div class="entry-meta">
+      <h2 class="entry-company">${company}</h2>
+      <p class="entry-role">${position}</p>
+      <p class="entry-dates">${format(start, "MM/yyyy")} &rarr; ${typeof end == "string" ? end : format(end, "MM/yyyy")}</p>
+      ${typeof end == "string" ? `<p class="entry-now">Current</p>` : ``}
     </div>
-    <ul>${description.map(item => `<li>${item}</li>`).join("")}</ul>
+    <div class="entry-detail">
+      <ul>${description.map(item => `<li>${item}</li>`).join("")}</ul>
+      <p class="entry-where">${locationSVG} ${location}</p>
+    </div>
   </div>
     
 `
@@ -48,36 +46,87 @@ class ExperiencesContent extends OSElement {
     this.element.appendChild(element);
     this.style = () => ({
       [this.id]: {
-        color: "#333",
-        "& > div > *": {
-          paddingBottom: "0.25em !important"
+        color: color.ink,
+        fontFamily: font.ui,
+        // Two columns: who and when on the left, what on the right.
+        "& > .entry": {
+          display: "grid",
+          gridTemplateColumns: "148px 1fr",
+          gap: "22px",
+          padding: "15px 0",
+          borderTop: `1px solid ${color.lineSoft}`
         },
-        "& h2": {
-          padding: "0",
-          margin: "0",
-          fontWeight: 300
+        "& > .entry:first-child": {
+          borderTop: "0",
+          paddingTop: "2px"
         },
-        "& h3": {
-          padding: "0",
-          margin: "0",
-        },
-        "& .flex": {
+        "& .entry-meta": {
           display: "flex",
+          flexDirection: "column",
+          gap: "2px"
         },
-        "& .flex > div": {
-          flex: "auto 1 0"
+        // Company leads at 600. It used to be an h3 under a lighter, larger
+        // role, which read as though the job title was the employer.
+        "& .entry-company": {
+          margin: "0",
+          padding: "0",
+          fontSize: size.heading,
+          fontWeight: weight.announce,
+          letterSpacing: tracking.heading,
+          lineHeight: 1.25
         },
-        "& .flex > div:nth-child(2)": {
-          textAlign: "right"
+        "& .entry-role": {
+          margin: "0",
+          padding: "0",
+          fontSize: size.small,
+          color: color.inkSoft,
+          lineHeight: 1.35
         },
-        "& ul": {
-          paddingLeft:"1em"
+        "& .entry-dates": {
+          margin: "3px 0 0",
+          padding: "0",
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.mono,
+          color: color.inkFaint,
+          fontVariantNumeric: "tabular-nums"
         },
-        "& ul li": {
-          padding: "0.25em 0"
+        "& .entry-now": {
+          alignSelf: "flex-start",
+          margin: "5px 0 0",
+          padding: "1px 5px",
+          fontFamily: font.mono,
+          fontSize: "9.5px",
+          textTransform: "uppercase",
+          letterSpacing: ".1em",
+          color: color.current,
+          border: `1px solid ${color.current}`,
+          borderRadius: "3px"
         },
-        "& .flex svg > path": {
-          fill: "#738dff"
+        "& .entry-detail ul": {
+          margin: "0",
+          paddingLeft: "16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px"
+        },
+        "& .entry-detail li": {
+          padding: "0",
+          fontSize: size.bodyTight,
+          lineHeight: 1.55
+        },
+        "& .entry-detail li::marker": {
+          color: color.inkFaint
+        },
+        "& .entry-where": {
+          margin: "9px 0 0",
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.mono,
+          color: color.inkFaint
+        },
+        "& .entry-where svg > path": {
+          fill: color.inkFaint
         }
       }
     });

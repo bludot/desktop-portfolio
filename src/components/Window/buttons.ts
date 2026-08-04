@@ -1,23 +1,26 @@
 import OSElement from "../../utils/OSElement";
+import { color as palette, radius } from "../../theme";
 import type { TopbarButtonContruct, WindowButtonsContruct } from "./interfaces";
 
 class TopbarButton extends OSElement {
   icon: HTMLElement;
   action: () => void;
   color: string;
-  constructor({ action, icon, color }: TopbarButtonContruct) {
+  constructor({ action, icon, color, isClose }: TopbarButtonContruct) {
     super("topbar-button", "topbar-button");
     this.action = action;
     this.color = color;
+    if (isClose) this.element.classList.add("window-close");
     this.icon = icon;
     this.element.appendChild(this.icon);
     this.style = () => ({
       [this.id]: {
-        height: "24px",
+        height: "22px",
         position: "relative",
         width: "24px",
         background: "transparent",
-        lineHeight: "24px",
+        borderRadius: radius.control,
+        lineHeight: "22px",
         textAlign: "center",
         padding: "4px",
         flex: "0 0 auto",
@@ -25,13 +28,26 @@ class TopbarButton extends OSElement {
         justifyContent: "center",
         flexFlow: "column nowrap",
         alignItems: "center",
-        color: "#666",
-        fill: "#666",
+        cursor: "pointer",
+        color: palette.inkFaint,
+        fill: palette.inkFaint,
+        transition: "background-color 130ms ease, color 130ms ease",
         "&:hover": {
-          color: "#000",
-          fill: "#000"
+          background: "rgba(43,37,48,.08)",
+          color: palette.ink,
+          fill: palette.ink
+        },
+        // Close is the only control that ever takes the accent, so the
+        // destructive one is the only thing in the chrome that turns colour.
+        "&.window-close:hover": {
+          background: palette.accent,
+          color: "#fff",
+          fill: "#fff"
+        },
+        "&:focus-visible": {
+          outline: `2px solid ${palette.accent}`,
+          outlineOffset: "1px"
         }
-        // zIndex: 9001,
       }
     });
   }
@@ -59,25 +75,12 @@ class WindowButtons extends OSElement {
             return icon;
           })(),
           action: close,
-          color: "red"
+          color: "red",
+          isClose: true
         }),
         ]
     } else {
       this.buttons = [
-        new TopbarButton({
-          icon: (() => {
-            const icon = new DOMParser().parseFromString(
-              `<svg class="MuiSvgIcon-root jss179" focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"></path></svg>`,
-              "text/html"
-            ).body.childNodes[0] as HTMLElement;
-            icon.style.cssText = `
-            width: 20px;
-          `;
-            return icon;
-          })(),
-          action: close,
-          color: "red"
-        }),
         new TopbarButton({
           icon: (() => {
             const icon = new DOMParser().parseFromString(
@@ -105,6 +108,21 @@ class WindowButtons extends OSElement {
           })(),
           action: maximize ?? (() => {}),
           color: "#ccc"
+        }),
+        new TopbarButton({
+          icon: (() => {
+            const icon = new DOMParser().parseFromString(
+              `<svg class="MuiSvgIcon-root jss179" focusable="false" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"></path></svg>`,
+              "text/html"
+            ).body.childNodes[0] as HTMLElement;
+            icon.style.cssText = `
+            width: 20px;
+          `;
+            return icon;
+          })(),
+          action: close,
+          color: "red",
+          isClose: true
         })
       ];
     }

@@ -1,13 +1,19 @@
 import OSElement from "../../utils/OSElement";
+import { color, space } from "../../theme";
 import TitleBar from "./titlebar";
 import WindowButtons from "./buttons";
 
 class TopBar extends OSElement {
   titlebar: TitleBar;
   windowButtons: WindowButtons;
-  constructor({ title, close, isDialog }: { title: string; close: () => void; isDialog?: boolean }) {
+  constructor({
+    title,
+    close,
+    isDialog,
+    meta
+  }: { title: string; close: () => void; isDialog?: boolean; meta?: string }) {
     super("topbar", "topbar");
-    this.titlebar = new TitleBar({ title, className: "title-bar" });
+    this.titlebar = new TitleBar({ title, className: "title-bar", meta });
     this.element.className = "topbar-window";
     this.windowButtons = new WindowButtons({
       isDialog,
@@ -15,20 +21,20 @@ class TopBar extends OSElement {
       maximize: null,
       minimize: () => {}
     });
-    this.windowButtons.load(this.element);
+    // Order matters: the title leads, the controls sit at the trailing edge.
     this.titlebar.load(this.element);
+    this.windowButtons.load(this.element);
     this.style = () => ({
       [this.id]: {
-        borderTop: "#ccc",
-        height: "32px",
+        height: space.titlebarHeight,
         position: "relative",
-        bottom: 0,
-        left: 0,
-        right: 0,
         background: "transparent",
-        // zIndex: 9001,
+        borderBottom: `1px solid ${color.lineSoft}`,
+        padding: "0 7px 0 13px",
+        gap: "9px",
         flex: "0 0 auto",
         display: "flex",
+        alignItems: "center",
         flexFlow: "row nowrap",
         // The titlebar is a drag handle, so its label should never take a
         // selection or show a caret.

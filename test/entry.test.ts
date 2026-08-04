@@ -110,6 +110,7 @@ describe('entry point window routing', () => {
 
   it('opens the alert window when asked for', async () => {
     await bootWith('?windows=alert')
-    expect(names()).toEqual(['Unexpected Error'])
+    // Titled by what happened, not by a generic error class.
+    expect(names()).toEqual(["Couldn't open that"])
   })
 })

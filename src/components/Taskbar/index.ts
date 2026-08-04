@@ -3,6 +3,8 @@ import type Desktop from "../Desktop";
 import TaskbarButtons from "./button";
 import WindowBlur from "../Window/blur";
 import isMobile from 'is-mobile'
+// Aliased: the constructor already has a WindowBlur named blur.
+import { blur as blurFx, color, radius, shadow } from "../../theme";
 
 class Taskbar extends OSElement {
   taskbarButtons: TaskbarButtons;
@@ -22,20 +24,18 @@ class Taskbar extends OSElement {
         bottom: 0,
         left: 0,
         right: 0,
-        display: "block",
+        display: "flex",
+        alignItems: "center",
+        padding: "0 8px",
         zIndex: "1000",
-        backgroundColor: "rgba(255,255,255,.5)",
+        backgroundColor: color.chrome,
+        backdropFilter: blurFx.chrome,
+        WebkitBackdropFilter: blurFx.chrome,
         margin: this.isMobile ? "0px" : "15px",
-        ...(this.isMobile ? {
-          } : {
-            borderRadius: "8px",
-          }
-        ),
-
+        ...(this.isMobile ? {} : { borderRadius: radius.window }),
         overflow: "hidden",
-        boxShadow: `0 17px 50px 0 rgba(0, 0, 0, 0.19),
-        0 12px 15px 0 rgba(0, 0, 0, 0.24)`,
-        color: "#000"
+        boxShadow: `${shadow.chrome}, ${shadow.edge}`,
+        color: color.ink
       }
     });
   }

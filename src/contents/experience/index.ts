@@ -3,7 +3,6 @@ import ExperiencesContent, {type ExperienceI} from "./experiences";
 
 const content = `
 <div>
-  <h1>Experience</h1>
   <div class="content"></div>
 </div>
 `;

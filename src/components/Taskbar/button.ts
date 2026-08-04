@@ -55,11 +55,22 @@ class TaskbarButton extends OSElement {
     });
   }
 }
+/** Chip glyphs, matching the ones the launcher uses. */
+const GLYPHS: Record<string, string> = {
+  About: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></svg>`,
+  Experience: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="7.5" width="18" height="12.5" rx="1.6"/><path d="M8.5 7.5V6A1.5 1.5 0 0 1 10 4.5h4A1.5 1.5 0 0 1 15.5 6v1.5"/></svg>`,
+  Debugger: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5.5 8.5 4 3.5-4 3.5M12.5 16h6"/></svg>`
+};
+
+const glyphFor = (title: string): string | undefined => GLYPHS[title];
+
 class TaskbarButtons extends OSElement {
   buttons: TaskbarButton[];
   private openList!: HTMLElement;
   private status!: HTMLElement;
   private subscription?: { unsubscribe: () => void };
+  private clock?: HTMLElement;
+  private tick?: ReturnType<typeof setInterval>;
   constructor(desktop: Desktop) {
     super("taskbar-buttons", "taskbar-buttons");
     const startMenu = new StartMenu(desktop);
@@ -77,14 +88,12 @@ class TaskbarButtons extends OSElement {
           `;
           const icon = document.createElement("div");
           icon.style.cssText = `
-            flex: 1 1 auto;
-            width: 25px;
-            height: 25px;
-            background-image: url(http://placekitten.com/40/40);
-            background-size: cover;
-            background-position: center;
+            flex: 0 0 auto;
+            width: 26px;
+            height: 26px;
+            background: linear-gradient(150deg, #d8b4c4, #a87d97);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,.5);
             border-radius: 100%;
-            border: 1px solid #666;
             display: inline-block;
             margin: 0 4px;
           `;
@@ -138,6 +147,7 @@ class TaskbarButtons extends OSElement {
         "& .taskbar-chip": {
           display: "flex",
           alignItems: "center",
+          gap: "8px",
           height: "32px",
           padding: "0 12px",
           border: "0",
@@ -152,6 +162,11 @@ class TaskbarButtons extends OSElement {
           position: "relative",
           whiteSpace: "nowrap",
           transition: "background-color 130ms ease, color 130ms ease"
+        },
+        "& .taskbar-chip svg": {
+          width: "14px",
+          height: "14px",
+          flex: "0 0 auto"
         },
         "& .taskbar-chip:hover": {
           background: color.chrome,
@@ -208,10 +223,30 @@ class TaskbarButtons extends OSElement {
       const chip = document.createElement("button");
       chip.className = "taskbar-chip" + (open.active ? " is-active" : "");
       chip.type = "button";
-      chip.appendChild(document.createTextNode(open.title));
+      const glyph = glyphFor(open.title);
+      if (glyph) {
+        chip.appendChild(
+          new DOMParser().parseFromString(glyph, "image/svg+xml").documentElement
+        );
+      }
+      const label = document.createElement("span");
+      label.appendChild(document.createTextNode(open.title));
+      chip.appendChild(label);
+
       chip.addEventListener("click", () => open.window.onActive(open.window));
       this.openList.appendChild(chip);
     });
+  }
+
+  private renderClock() {
+    if (!this.clock) return;
+    // Bangkok, since that is what the line beside it claims.
+    this.clock.textContent = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Bangkok"
+    }).format(new Date());
   }
 
   private renderStatus() {
@@ -224,9 +259,15 @@ class TaskbarButtons extends OSElement {
     const where = document.createElement("span");
     where.appendChild(document.createTextNode("Bangkok \u00b7 UTC+7"));
 
+    this.clock = document.createElement("span");
+
     this.status.textContent = "";
     this.status.appendChild(available);
     this.status.appendChild(where);
+    this.status.appendChild(this.clock);
+
+    this.renderClock();
+    this.tick = setInterval(() => this.renderClock(), 30_000);
   }
 
   async load(element: HTMLElement) {
@@ -244,6 +285,7 @@ class TaskbarButtons extends OSElement {
 
   async beforeUnload() {
     this.subscription?.unsubscribe();
+    if (this.tick) clearInterval(this.tick);
   }
 }
 

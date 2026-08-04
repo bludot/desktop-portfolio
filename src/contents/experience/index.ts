@@ -1,4 +1,5 @@
 import OSElement from "./../../utils/OSElement";
+import { space } from "../../theme";
 import ExperiencesContent, {type ExperienceI} from "./experiences";
 
 const content = `
@@ -123,11 +124,8 @@ class ExperienceContent extends OSElement {
     this.element.appendChild(element);
     this.style = () => ({
       [this.id]: {
-        padding: "1em 1em",
-        display: "block",
-        "& > div > h1": {
-          marginTop: 0
-        }
+        padding: `${space.windowPadY} ${space.windowPadX}`,
+        display: "block"
       },
     });
   }

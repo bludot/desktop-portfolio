@@ -49,8 +49,8 @@ const makeMainWindows = (desktop: Desktop) => ({
       content: new ExperienceContent(),
       desktop: desktop,
       dimensions: {
-        width: 600,
-        height: 500,
+        width: 588,
+        height: 470,
       },
       windowPosition: top || left ? {
         top,
@@ -64,6 +64,10 @@ const makeMainWindows = (desktop: Desktop) => ({
       title: `About`,
       content: new AboutContent(),
       desktop: desktop,
+      dimensions: {
+        width: 330,
+        height: 430,
+      },
       windowPosition: top || left ? {
         top,
         left,

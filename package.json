@@ -7,7 +7,10 @@
     "dev": "bun --bun vite --host 0.0.0.0",
     "build": "bun --bun tsc && bun --bun vite build",
     "serve": "bun --bun vite preview",
-    "typecheck": "bun --bun tsc"
+    "typecheck": "bun --bun tsc",
+    "test": "bun --bun vitest run",
+    "test:watch": "bun --bun vitest",
+    "coverage": "bun --bun vitest run --coverage"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "1.2.25",
@@ -29,8 +32,12 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
+    "@vitest/coverage-istanbul": "^4.1.10",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^30.0.1",
     "typescript": "^7.0.2",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   },
   "keywords": []
 }

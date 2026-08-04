@@ -1,0 +1,193 @@
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import jss from 'jss'
+import preset from 'jss-preset-default'
+import nested from 'jss-plugin-nested'
+import App from '../src/apps/App'
+import KeyCatcher from '../src/apps/KeyCatcher'
+import FeatureFlagsApp from '../src/apps/FeatureFlags'
+import KeyShortcut from '../src/utils/secrets'
+import settings from '../src/utils/settings'
+import bridge from '../src/utils/bridge'
+import windowManager from '../src/utils/windowManager'
+import db from '../src/Store'
+
+jss.setup(preset())
+jss.use(nested())
+
+const type = (text: string) => {
+  for (const key of text) {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  }
+}
+
+describe('App', () => {
+  it('keeps the name it was given', () => {
+    expect(new App('Thing').name).toBe('Thing')
+  })
+})
+
+describe('KeyCatcher', () => {
+  it('is a singleton', () => {
+    expect(new KeyCatcher()).toBe(new KeyCatcher())
+  })
+
+  it('runs the handler when a registered sequence is typed', () => {
+    const catcher = new KeyCatcher()
+    const action = vi.fn()
+    catcher.addSequence('opensesame', action)
+    catcher.startListener()
+
+    type('opensesame')
+
+    expect(action).toHaveBeenCalled()
+  })
+
+  it('ignores sequences that were never registered', () => {
+    const catcher = new KeyCatcher()
+    const action = vi.fn()
+    catcher.addSequence('zzzunique', action)
+    catcher.startListener()
+
+    type('somethingelse')
+
+    expect(action).not.toHaveBeenCalled()
+  })
+
+  it('starts a fresh buffer once the keystroke delay lapses', () => {
+    vi.useFakeTimers()
+    const catcher = new KeyCatcher()
+    const action = vi.fn()
+    catcher.addSequence('ab', action)
+    catcher.startListener()
+
+    type('a')
+    vi.advanceTimersByTime(1000)
+    type('b')
+
+    // The pause split the buffer, so "ab" was never seen as one sequence.
+    expect(action).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('addSequence overwrites an existing binding', () => {
+    const catcher = new KeyCatcher()
+    const first = vi.fn()
+    const second = vi.fn()
+    catcher.addSequence('dup', first)
+    catcher.addSequence('dup', second)
+    catcher.startListener()
+
+    type('dup')
+
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalled()
+  })
+})
+
+describe('FeatureFlagsApp', () => {
+  beforeEach(async () => {
+    await db.featureFlags.clear()
+    bridge.set('Desktop', {
+      getElement: () => {
+        const el = document.createElement('div')
+        document.body.appendChild(el)
+        return el
+      },
+      getTaskbar: () => ({ getElement: () => document.createElement('div') }),
+    } as any)
+  })
+
+  afterEach(() => {
+    ;(bridge as any).Desktop = null
+    windowManager.windows.head = null
+    windowManager.windows.tail = null
+    windowManager.windows.length = 0
+  })
+
+  it('seeds the known flags on first run', async () => {
+    const app = new FeatureFlagsApp()
+    const flags = await app.loadFeatures()
+
+    expect(flags.map((f) => f.code)).toContain('custom_scrollbar')
+    expect(await db.featureFlags.count()).toBe(1)
+  })
+
+  it('does not duplicate flags that already exist', async () => {
+    const app = new FeatureFlagsApp()
+    await app.loadFeatures()
+    await app.loadFeatures()
+
+    expect(await db.featureFlags.count()).toBe(1)
+  })
+
+  it('preserves an already-enabled flag when re-seeding', async () => {
+    const app = new FeatureFlagsApp()
+    const [flag] = await app.loadFeatures()
+    flag.enabled = true
+    await flag.save()
+
+    const reloaded = await app.loadFeatures()
+    expect(reloaded[0].enabled).toBe(true)
+  })
+
+  it('opens a window listing each flag', async () => {
+    const app = new FeatureFlagsApp()
+    app.load()
+
+    await vi.waitFor(() => expect(windowManager.windows.head).toBeTruthy())
+    const win = windowManager.windows.head.value.window
+    expect(win.title).toBe('FeatureFlagsApp')
+    expect(app.featureFlags.map((f) => f.code)).toEqual(['custom_scrollbar'])
+  })
+})
+
+describe('KeyShortcut', () => {
+  it('tracks keys while they are held and clears them on release', () => {
+    const shortcut = new KeyShortcut()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))
+    expect(shortcut.keysPressed).toHaveProperty('a')
+
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a' }))
+    expect(shortcut.keysPressed).not.toHaveProperty('a')
+  })
+
+  it('also records the character for a legacy keyCode', () => {
+    const shortcut = new KeyShortcut()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', keyCode: 66 }))
+    expect(shortcut.keysPressed).toHaveProperty('b')
+    expect(shortcut.keysPressed).toHaveProperty('B')
+
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'b', keyCode: 66 }))
+    expect(shortcut.keysPressed).not.toHaveProperty('B')
+  })
+})
+
+describe('settings', () => {
+  it('exposes the default desktop image', () => {
+    expect(settings.getDesktopImage().original).toBeTruthy()
+  })
+
+  it('setBootScreenImage stores the path', async () => {
+    await settings.setBootScreenImage('/assets/boot.png')
+    expect(settings.bootScreenImage).toBe('/assets/boot.png')
+  })
+
+  it('setDesktopImage records the original and both blurred variants', async () => {
+    const blurimage = await import('../src/utils/blurimage')
+    const spy = vi
+      .spyOn(blurimage, 'blurImage')
+      .mockResolvedValue('data:image/png;base64,stub')
+
+    await settings.setDesktopImage('/assets/desk.jpg')
+
+    expect(settings.getDesktopImage().original).toBe('/assets/desk.jpg')
+    expect(settings.getDesktopImage().blurred30).toBe('data:image/png;base64,stub')
+    expect(settings.getDesktopImage().blurred60).toBe('data:image/png;base64,stub')
+    spy.mockRestore()
+  })
+
+  it('getSetting is a stub that returns nothing', () => {
+    expect(settings.getSetting('anything')).toBeUndefined()
+  })
+})

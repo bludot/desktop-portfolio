@@ -244,17 +244,29 @@ describe('removeByNode', () => {
     expect(toArrayReverse(list)).toEqual(['c', 'a'])
   })
 
-  // KNOWN DEFECT, pinned so a fix is a deliberate change rather than a
-  // surprise. Every other remove path decrements `length`; this one does not,
-  // so the counter drifts above the number of nodes actually in the list.
-  // WindowManager.onActive() calls removeByNode() then insertAtIndex(), which
-  // means `windows.length` grows by two for every window opened.
-  it('does NOT decrement length (known defect)', () => {
+  // Regression: removeByNode was the one remove path that did not decrement
+  // `length`, so the counter drifted above the real node count. WindowManager
+  // removes then re-inserts on every focus change, which made `windows.length`
+  // grow by two per window opened.
+  it('decrements length, keeping it in step with the nodes', () => {
     const list = listOf('a', 'b', 'c')
-    list.removeByNode(list.getLNodeAtIndex(1))
 
-    expect(toArray(list)).toEqual(['a', 'c'])
-    expect(list.length).toBe(3) // should be 2
+    list.removeByNode(list.getLNodeAtIndex(1))
+    expect(list.length).toBe(2)
+    expect(toArray(list)).toHaveLength(2)
+
+    list.removeByNode(list.head)
+    expect(list.length).toBe(1)
+
+    list.removeByNode(list.head)
+    expect(list.length).toBe(0)
+    expect(toArray(list)).toEqual([])
+  })
+
+  it('leaves length alone when the node is not a member', () => {
+    const list = listOf('a', 'b')
+    list.removeByNode(new LNode('zzz'))
+    expect(list.length).toBe(2)
   })
 
   it('moves head forward when removing the head', () => {

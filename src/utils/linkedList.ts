@@ -217,6 +217,8 @@ export class DoublyLinkedList<T> {
           this.tail = prev;
         }
 
+        this.length--;
+
         return node;
       }
 

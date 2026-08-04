@@ -35,9 +35,6 @@ const openWindow = async (title: string) => {
   return win
 }
 
-// Count by walking the list rather than reading `windows.length`: removeByNode
-// does not decrement the counter, so `length` overstates the real size.
-// See the "does NOT decrement length" case in linkedList.test.ts.
 const titles = () => {
   const out: string[] = []
   let node = windowManager.windows.head
@@ -62,11 +59,17 @@ describe('WindowManager', () => {
     expect(titles()).toEqual(['First'])
   })
 
-  it('windows.length overstates the real count (known defect)', async () => {
+  // Regression: onActive() removes then re-inserts the node on every focus
+  // change, and removeByNode used not to decrement, so this counter climbed by
+  // two per window opened.
+  it('windows.length matches the number of open windows', async () => {
     await openWindow('First')
-    expect(titles()).toHaveLength(1)
-    // onActive() removes then re-inserts the node, and removeByNode never
-    // decrements, so the counter climbs by two per window.
+    expect(windowManager.windows.length).toBe(1)
+
+    await openWindow('Second')
+    expect(windowManager.windows.length).toBe(2)
+
+    windowManager.onActive(windowManager.windows.tail.value.window)
     expect(windowManager.windows.length).toBe(2)
   })
 

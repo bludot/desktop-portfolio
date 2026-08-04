@@ -8,6 +8,11 @@ const content = `
 </div>
 `;
 
+// Build months in local time. The ISO string form is parsed as UTC midnight
+// while date-fns formats in local time, so any viewer west of Greenwich saw
+// every role start a month early.
+const month = (year: number, monthOfYear: number) => new Date(year, monthOfYear - 1, 1);
+
 const experience: ExperienceI[] = [
   {
     position: "Backend Engineer",
@@ -19,7 +24,7 @@ const experience: ExperienceI[] = [
       "Develop open source libraries and terraform modules, such as KP (kafka processing with retries), databricks module to deploy entire databricks into AWS, aws-iam AWS module for handling iam related tasks while ensuring checkov checks are followed to minimize vulnerabilities.",
       "Introduced \"Guilds\" which streamline a process for doing engineering tasks such as migrations to new systems, tech debt, and improvements on areas of interest"
     ],
-    start: new Date("2021-08-01"),
+    start: month(2021, 8),
     end: "present"
   },
   {
@@ -34,8 +39,8 @@ const experience: ExperienceI[] = [
       "Introduce full dockerization in the dev environment to increase productivity and reduce infrastructure bugs.",
       "Improve team performance by improving agile meetings with a focus on value. (less meatings, more value in meetings)"
     ],
-    start: new Date("2020-07-01"),
-    end: new Date("2021-08-01"),
+    start: month(2020, 7),
+    end: month(2021, 8),
   },
   {
     position: "Software Engineer",
@@ -47,8 +52,8 @@ const experience: ExperienceI[] = [
       "Setup processes for managing company projects and development (from idea to deployment).",
       "Development of an E-commerce system to sell parts using nodeJS, Postgres, ReactJS."
     ],
-    start: new Date("2019-05-01"),
-    end: new Date("2021-06-01"),
+    start: month(2019, 5),
+    end: month(2021, 6),
   },
   {
     position: "Full-Stack Developer",
@@ -61,8 +66,8 @@ const experience: ExperienceI[] = [
       "Dockerize our applications and utilize s3 for our frontend. This sped up deployments up to 10 seconds (after tests have run) and sped up our tests.",
       "Create more minor services such as a Typeform replacement.",
     ],
-    start: new Date("2017-07-01"),
-    end: new Date("2019-02-01"),
+    start: month(2017, 7),
+    end: month(2019, 2),
   },
   {
     position: "Full-Stack Developer",
@@ -74,8 +79,8 @@ const experience: ExperienceI[] = [
       "Generate a fast responsive frontend using react by minimizing the size of ajax calls and client side processes that slow down the interface.",
       "Decrease wait time of user from 3 min initial load to < 5 seconds due to a max of 15kb ajax responses."
     ],
-    start: new Date("2016-09-01"),
-    end: new Date("2017-04-01"),
+    start: month(2016, 9),
+    end: month(2017, 4),
   },
   {
     position: "Technical Assistant",
@@ -86,8 +91,8 @@ const experience: ExperienceI[] = [
       "Using the college CMS build pages and web applications such as calendar, success story, sponsorship application, html enews, majorknowledge design, what can I do with this major design.",
       "Introduce ticket system to CDC department for handling requests."
     ],
-    start: new Date("2013-12-01"),
-    end: new Date("2016-06-01"),
+    start: month(2013, 12),
+    end: month(2016, 6),
   },
   {
     position: "Web Developer",
@@ -98,8 +103,8 @@ const experience: ExperienceI[] = [
       "Maintain any updates or changes to the website.",
       "Provide consultation on changes",
     ],
-    start: new Date("2012-11-01"),
-    end: new Date("2014-05-01"),
+    start: month(2012, 11),
+    end: month(2014, 5),
   }
 ]
 

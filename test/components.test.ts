@@ -310,10 +310,21 @@ describe('contents', () => {
     expect(entry.getElement().textContent).toContain('08/2021')
   })
 
-  it('ExperienceContent renders the experience window', async () => {
+  // Regression: the roles were declared as new Date("2021-08-01"), parsed as
+  // UTC midnight and then formatted in local time, so every start date rendered
+  // a month early for viewers west of Greenwich. This suite runs in whatever
+  // timezone CI provides, so the assertion is meaningful either way.
+  it('ExperienceContent renders start dates in the declared month', async () => {
     const content = new ExperienceContent()
     await content.load(host)
-    expect(content.getElement().textContent).toContain('Experience')
+    const text = content.getElement().textContent
+
+    expect(text).toContain('Experience')
+    expect(text).toContain('Backend Engineer')
+    expect(text).toContain('08/2021') // not 07/2021
+    expect(text).toContain('07/2020')
+    expect(text).toContain('11/2012')
+    expect(text).not.toContain('07/2021 - present')
   })
 
   it('LoggerWindow appends a line for each new global log', async () => {
@@ -326,5 +337,20 @@ describe('contents', () => {
     const spans = logger.getElement().querySelectorAll('span')
     expect(spans.length).toBe(before + 1)
     expect(spans[spans.length - 1].textContent).toContain('streamed line')
+  })
+
+  // Regression: GlobalLogger.subscribe() used to return the eventemitter3
+  // instance, which has no unsubscribe method, so closing the debugger window
+  // threw and left the subscription (and the detached DOM) alive.
+  it('LoggerWindow unloads cleanly and stops listening', async () => {
+    const logger = new LoggerWindow()
+    await logger.load(host)
+
+    await expect(logger.unload()).resolves.not.toThrow()
+    expect(host.contains(logger.getElement())).toBe(false)
+
+    const after = logger.getElement().querySelectorAll('span').length
+    GlobalLogger.getInstance().log(new Log(LOG_TYPE.INFO, 'post-unload line'))
+    expect(logger.getElement().querySelectorAll('span').length).toBe(after)
   })
 })

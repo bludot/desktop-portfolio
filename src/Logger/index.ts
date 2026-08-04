@@ -26,9 +26,16 @@ class GlobalLogger {
   public getLogs(): Log[] {
     return this.logs;
   }
-  public subscribe(...args): any {
-    return this.event.on.apply(this.event, args);
-    //return this.event.subscribe.apply(this.event, args);
+  // Returns a handle rather than the emitter: callers unsubscribe on teardown,
+  // and eventemitter3's `on` returns the emitter itself, which has no
+  // unsubscribe method.
+  public subscribe(name: string, cb: (...args: any[]) => void) {
+    this.event.on(name, cb);
+    return {
+      unsubscribe: () => {
+        this.event.off(name, cb);
+      },
+    };
   }
 }
 

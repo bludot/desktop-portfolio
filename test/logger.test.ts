@@ -49,6 +49,23 @@ describe('GlobalLogger', () => {
     expect(logs.length).toBe(before + 1)
     expect(logs[logs.length - 1]).toBe(log)
   })
+
+  // Regression: subscribe() used to return the eventemitter3 instance, which
+  // has no unsubscribe method, so every caller trying to detach threw.
+  it('subscribe returns a handle that actually detaches the listener', () => {
+    const global = GlobalLogger.getInstance()
+    const handler = vi.fn()
+    const subscription = global.subscribe('log', handler)
+
+    global.log(new Log(LOG_TYPE.INFO, 'first'))
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    expect(subscription.unsubscribe).toBeTypeOf('function')
+    subscription.unsubscribe()
+
+    global.log(new Log(LOG_TYPE.INFO, 'second'))
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('Logger', () => {

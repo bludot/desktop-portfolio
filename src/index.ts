@@ -103,33 +103,30 @@ startup().then(async () => {
       desktop: bridge.get<Desktop>("Desktop"),
     });
   }
-  if (params.windows) {
+  // Side-by-side placement is only meaningful when both are on screen together;
+  // a window opened on its own is centred instead.
+  const sideBySidePositions: Record<string, { top: number, left: number }> = {
+    about: {top: 30, left: 30},
+    experience: {top: 30, left: 600},
+  }
 
-    const windows = (params.windows as string).split(',')
-    windows.forEach(windowToOpen => {
-      if (windows.includes("experience") && windows.includes("about")) {
-        if (windowToOpen == "about") {
-          mainWindows[windowToOpen]({top: 30, left: 30})
-          return
-        }
-        if (windowToOpen == "experience") {
-          mainWindows[windowToOpen]({top: 30, left: 600})
-          return
-
-        }
-        if (mainWindows[windowToOpen]) {
-          mainWindows[windowToOpen]({})
-        }
-
-        return
-      }
-      if (mainWindows[windowToOpen]) {
-        mainWindows[windowToOpen]({})
-      }
+  const openWindows = (names: string[]) => {
+    const sideBySide = names.includes("about") && names.includes("experience")
+    names.forEach(name => {
+      if (!Object.prototype.hasOwnProperty.call(mainWindows, name)) return
+      mainWindows[name](sideBySide ? sideBySidePositions[name] || {} : {})
     })
   }
-  mainWindows["about"]({top: 30, left: 30})
-  mainWindows["experience"]({top: 30, left: 600})
+
+  if (params.windows) {
+    // Repeating the param (?windows=a&windows=b) yields an array, not a string.
+    const requested = Array.isArray(params.windows)
+      ? params.windows.join(',')
+      : params.windows as string
+    openWindows(requested.split(','))
+  } else {
+    openWindows(["about", "experience"])
+  }
 
   const keyCatcher: KeyCatcher = new KeyCatcher();
   keyCatcher.startListener()

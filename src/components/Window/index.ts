@@ -30,6 +30,13 @@ class OSWindow extends OSElement {
     height: 400,
   };
   isMobile: boolean;
+  // Bound once at construction: .bind() returns a new function on every call,
+  // so binding inline would give removeEventListener a reference that never
+  // matches what addEventListener registered.
+  private readonly onMouseMove = this.mousemove.bind(this);
+  private readonly onMouseUp = this.mouseup.bind(this);
+  private readonly onTitlebarMouseDown = this.mousedown.bind(this);
+  private readonly onWindowMouseDown = this.mousedownWindow.bind(this);
 
   constructor({
                 isDialog,
@@ -102,8 +109,8 @@ class OSWindow extends OSElement {
   }
 
   mouseup(e: MouseEvent): void {
-    window.removeEventListener("mousemove", this.mousemove.bind(this));
-    window.removeEventListener("mouseup", this.mouseup.bind(this));
+    window.removeEventListener("mousemove", this.onMouseMove);
+    window.removeEventListener("mouseup", this.onMouseUp);
 
     this.windowPosition = {};
   }
@@ -125,8 +132,8 @@ class OSWindow extends OSElement {
     };
 
     this.onActive(this);
-    window.addEventListener("mouseup", this.mouseup.bind(this));
-    window.addEventListener("mousemove", this.mousemove.bind(this));
+    window.addEventListener("mouseup", this.onMouseUp);
+    window.addEventListener("mousemove", this.onMouseMove);
   }
 
   mousedownWindow() {
@@ -137,8 +144,8 @@ class OSWindow extends OSElement {
     console.log("making movable");
     this.element
       .querySelector(".topbar-window")
-      .addEventListener("mousedown", this.mousedown.bind(this));
-    this.element.addEventListener("mousedown", this.mousedownWindow.bind(this));
+      .addEventListener("mousedown", this.onTitlebarMouseDown);
+    this.element.addEventListener("mousedown", this.onWindowMouseDown);
   }
 
   public async load(element: HTMLElement): Promise<void> {

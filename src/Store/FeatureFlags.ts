@@ -15,20 +15,23 @@ class FeatureFlag implements IFeatureFlag {
   }
 
   save() {
-    return db.transaction('rw', db.featureFlags,async () => {
-      try {
-        const exists = await db.featureFlags.get(this.id)
-        if (exists) {
+    return db.transaction('rw', db.featureFlags, async () => {
+      // An id of undefined means this flag was never persisted, so there is
+      // nothing to look up — Dexie rejects an undefined key.
+      if (this.id !== undefined) {
+        const existing = await db.featureFlags.get(this.id)
+        if (existing) {
           return db.featureFlags.update(this.id, {enabled: this.enabled})
         }
-        return
-      } catch (e) {
-        return db.featureFlags.put(new FeatureFlag(this.code, this.name, this.enabled, this.id))
-          .then(id => this.id = id);
-
       }
+      // Insert is the explicit fallthrough rather than an exception handler, so
+      // a row that has gone missing is re-created instead of silently dropped.
+      const id = await db.featureFlags.put(
+        new FeatureFlag(this.code, this.name, this.enabled, this.id)
+      )
+      this.id = id
+      return id
     });
-
   }
 }
 

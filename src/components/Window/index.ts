@@ -38,7 +38,6 @@ class OSWindow extends OSElement {
   private readonly onTitlebarMouseDown = this.mousedown.bind(this);
   private readonly onWindowMouseDown = this.mousedownWindow.bind(this);
   // Drag state: the pointer and box position at press, and the offset since.
-  private dragFrame: number | null = null;
   private dragStart = { pointerX: 0, pointerY: 0, left: 0, top: 0 };
   private dragDelta = { x: 0, y: 0 };
 
@@ -116,11 +115,6 @@ class OSWindow extends OSElement {
     window.removeEventListener("mousemove", this.onMouseMove);
     window.removeEventListener("mouseup", this.onMouseUp);
 
-    if (this.dragFrame !== null) {
-      cancelAnimationFrame(this.dragFrame);
-      this.dragFrame = null;
-    }
-
     // Bake the transform back into top/left. Everything else — resizing,
     // centring, the mobile layout — reads offsetLeft/offsetTop, so those have
     // to stay authoritative once the drag ends.
@@ -140,17 +134,16 @@ class OSWindow extends OSElement {
       y: e.pageY - this.dragStart.pointerY,
     };
 
-    // Pointer events outpace frames, and moving via top/left costs a layout and
-    // paint each time, which is what makes the window trail the cursor. Collapse
-    // to one write per frame and move with a transform the compositor can apply
-    // on its own.
-    if (this.dragFrame === null) {
-      this.dragFrame = requestAnimationFrame(() => {
-        this.dragFrame = null;
-        this.element.style.transform =
-          `translate3d(${this.dragDelta.x}px, ${this.dragDelta.y}px, 0)`;
-      });
-    }
+    // Written synchronously, not deferred to requestAnimationFrame. Chrome
+    // already delivers mousemove aligned to the frame, so batching would only
+    // push the write into the *next* frame — a fixed delay, which is why the
+    // window trailed further the faster you moved. The write costs ~0.002ms, so
+    // there is nothing worth batching away.
+    //
+    // translate3d rather than top/left: the compositor can apply a transform
+    // without a layout and paint pass, which is the part that actually costs.
+    this.element.style.transform =
+      `translate3d(${this.dragDelta.x}px, ${this.dragDelta.y}px, 0)`;
   }
 
   mousedown(e: MouseEvent): void {

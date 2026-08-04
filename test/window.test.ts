@@ -166,26 +166,25 @@ describe('OSWindow', () => {
       expect(win.getElement().style.willChange).toBe('transform')
 
       win.mousemove(mouse('mousemove', 500, 300) as MouseEvent)
-      await vi.waitFor(() =>
-        expect(win.getElement().style.transform).toContain('translate3d'),
-      )
+      expect(win.getElement().style.transform).toContain('translate3d')
       expect(win.getElement().style.transform).not.toContain('NaN')
     })
 
-    it('collapses several moves in one frame into a single write', async () => {
+    // The write is synchronous rather than deferred to requestAnimationFrame:
+    // batching would land the position a frame late, which shows up as the
+    // window trailing further the faster it is dragged.
+    it('applies each move immediately, without waiting for a frame', async () => {
       const win = makeWindow()
       await win.load(null as unknown as HTMLElement)
       win.makeMovable()
 
       win.mousedown(mouse('mousedown', 200, 50) as MouseEvent)
-      for (let i = 0; i < 20; i++) {
-        win.mousemove(mouse('mousemove', 200 + i, 50 + i) as MouseEvent)
-      }
-      await vi.waitFor(() =>
-        expect(win.getElement().style.transform).toContain('translate3d'),
-      )
-      // The last position wins, not an intermediate one.
-      expect(win.getElement().style.transform).toBe('translate3d(19px, 19px, 0)')
+      win.mousemove(mouse('mousemove', 260, 90) as MouseEvent)
+      // No await: the transform must already reflect this move.
+      expect(win.getElement().style.transform).toBe('translate3d(60px, 40px, 0)')
+
+      win.mousemove(mouse('mousemove', 300, 120) as MouseEvent)
+      expect(win.getElement().style.transform).toBe('translate3d(100px, 70px, 0)')
     })
 
     it('bakes the transform back into top/left on release', async () => {

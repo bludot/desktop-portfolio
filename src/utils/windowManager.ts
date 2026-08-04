@@ -10,6 +10,8 @@ interface IManagedWindow {
   window: OSWindow;
   index: number;
   setIndex: (index: number) => void;
+  /** Order the window was opened in. Stable across focus changes. */
+  seq: number;
 }
 
 /** What the taskbar needs to draw a chip. */
@@ -24,6 +26,7 @@ type Listener = () => void;
 class WindowManager {
   windows: DoublyLinkedList<IManagedWindow>;
   private listeners: Listener[] = [];
+  private nextSeq = 0;
 
   constructor() {
     this.windows = new DoublyLinkedList<IManagedWindow>();
@@ -43,19 +46,26 @@ class WindowManager {
     this.listeners.forEach((l) => l());
   }
 
-  /** Open windows, front-most first. */
+  /**
+   * Open windows in the order they were opened — deliberately not the z-order
+   * the list itself keeps. Focusing a window moves it to the head of that list,
+   * and a taskbar whose buttons rearrange themselves as you click is unusable.
+   */
   list(): OpenWindow[] {
-    const out: OpenWindow[] = [];
+    const out: (OpenWindow & { seq: number })[] = [];
     let node = this.windows.head;
     while (node) {
       out.push({
         window: node.value.window,
         title: node.value.window.title,
-        active: node.value.window.active
+        active: node.value.window.active,
+        seq: node.value.seq
       });
       node = node.next;
     }
-    return out;
+    return out
+      .sort((a, b) => a.seq - b.seq)
+      .map(({ window, title, active }) => ({ window, title, active }));
   }
   new(windowOptions: Partial<IWindow>) {
     const fullWindowOptions: IWindow = {
@@ -67,7 +77,8 @@ class WindowManager {
     const oswindow = {
       window: oswindowInstance,
       index: this.windows.length + 1,
-      setIndex: oswindowInstance.setIndex.bind(oswindowInstance)
+      setIndex: oswindowInstance.setIndex.bind(oswindowInstance),
+      seq: this.nextSeq++
     };
     oswindow.window.load(null as unknown as HTMLElement);
     oswindow.setIndex(oswindow.index);

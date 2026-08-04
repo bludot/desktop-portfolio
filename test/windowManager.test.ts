@@ -140,6 +140,53 @@ describe('WindowManager', () => {
     expect(titles()).toEqual([])
   })
 
+  // Regression: list() used to return the z-order, so focusing a window moved
+  // its taskbar chip to the front and the buttons rearranged as you clicked.
+  it('list() keeps the order windows were opened in', async () => {
+    const first = await openWindow('First')
+    await openWindow('Second')
+    await openWindow('Third')
+
+    expect(windowManager.list().map((w) => w.title)).toEqual([
+      'First', 'Second', 'Third',
+    ])
+
+    // Raising the oldest window must not move it in the list.
+    windowManager.onActive(first)
+    expect(windowManager.list().map((w) => w.title)).toEqual([
+      'First', 'Second', 'Third',
+    ])
+    // ...but it is the one now marked active.
+    expect(windowManager.list().find((w) => w.title === 'First')!.active).toBe(true)
+  })
+
+  it('list() drops a window once it closes, leaving the rest in place', async () => {
+    await openWindow('First')
+    const second = await openWindow('Second')
+    await openWindow('Third')
+
+    windowManager.remove(second)
+
+    expect(windowManager.list().map((w) => w.title)).toEqual(['First', 'Third'])
+  })
+
+  it('notifies subscribers when windows open, focus and close', async () => {
+    const seen = vi.fn()
+    const sub = windowManager.subscribe(seen)
+
+    const win = await openWindow('First')
+    const afterOpen = seen.mock.calls.length
+    expect(afterOpen).toBeGreaterThan(0)
+
+    windowManager.onActive(win)
+    expect(seen.mock.calls.length).toBeGreaterThan(afterOpen)
+
+    sub.unsubscribe()
+    const afterUnsub = seen.mock.calls.length
+    await openWindow('Second')
+    expect(seen.mock.calls.length).toBe(afterUnsub)
+  })
+
   it('setIndexes is a no-op on an empty list', async () => {
     expect(() => windowManager.setIndexes()).not.toThrow()
   })

@@ -39,4 +39,5 @@ interface IFeatureFlag {
   enabled: boolean
 }
 
-export {FeatureFlag, IFeatureFlag}
+export {FeatureFlag}
+export type {IFeatureFlag}

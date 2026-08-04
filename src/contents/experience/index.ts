@@ -1,5 +1,5 @@
 import OSElement from "./../../utils/OSElement";
-import ExperiencesContent, {ExperienceI} from "./experiences";
+import ExperiencesContent, {type ExperienceI} from "./experiences";
 
 const content = `
 <div>

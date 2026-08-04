@@ -5,7 +5,7 @@ import bridge from "../../utils/bridge";
 import Desktop from "../../components/Desktop";
 import OSElement from "../../utils/OSElement";
 import SwitchToggle from "../../components/SwitchToggle";
-import db, {FeatureFlag, IFeatureFlag} from './../../Store'
+import db, {FeatureFlag, type IFeatureFlag} from './../../Store'
 
 const flags = {
   "custom_scrollbar": {

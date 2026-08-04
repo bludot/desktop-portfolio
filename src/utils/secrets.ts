@@ -34,4 +34,5 @@ class KeyShortcut {
   }
 }
 
-export { KeyShortcut as default, IShortcut };
+export { KeyShortcut as default };
+export type { IShortcut };

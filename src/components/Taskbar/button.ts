@@ -1,5 +1,5 @@
 import OSElement from "../../utils/OSElement";
-import { TaskbarButtonContruct } from "./interfaces";
+import type { TaskbarButtonContruct } from "./interfaces";
 import StartMenu from "./../StartMenu";
 
 class TaskbarButton extends OSElement {

@@ -1,5 +1,5 @@
 import EventEmitter from "eventemitter3";
-import { BrowserTransportOptions, ITransport, LOG_TYPE } from "./interfaces";
+import { LOG_TYPE, type BrowserTransportOptions, type ITransport } from "./interfaces";
 import { Log } from "./Log";
 
 class GlobalLogger {

@@ -1,6 +1,6 @@
 import OSWindow from "./../components/Window";
 import { DoublyLinkedList, LNode } from "./linkedList";
-import { IWindow } from "./../components/Window/interfaces";
+import type { IWindow } from "./../components/Window/interfaces";
 
 const between = (initial, first, second) => {
   return initial >= first && initial <= second;

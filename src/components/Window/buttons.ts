@@ -1,5 +1,5 @@
 import OSElement from "../../utils/OSElement";
-import { TopbarButtonContruct } from "./interfaces";
+import type { TopbarButtonContruct } from "./interfaces";
 
 class TopbarButton extends OSElement {
   icon: HTMLElement;

@@ -1,7 +1,7 @@
 import OSElement from "../../utils/OSElement";
 import {getWindowWidth, getWindowHeight} from "./../../utils/utils";
 import Desktop from "./../Desktop";
-import {IWindow} from "./interfaces";
+import type {IWindow} from "./interfaces";
 import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";

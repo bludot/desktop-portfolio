@@ -84,4 +84,5 @@ class ExperiencesContent extends OSElement {
   }
 }
 
-export {ExperiencesContent as default, ExperienceI}
+export {ExperiencesContent as default}
+export type {ExperienceI}

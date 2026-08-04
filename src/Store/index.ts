@@ -1,4 +1,4 @@
-import {FeatureFlag, IFeatureFlag} from './FeatureFlags'
+import {FeatureFlag, type IFeatureFlag} from './FeatureFlags'
 import Dexie from "dexie";
 
 export class AppDatabase extends Dexie {
@@ -27,4 +27,5 @@ export class AppDatabase extends Dexie {
 
 const db = new AppDatabase();
 
-export {db as default, IFeatureFlag, FeatureFlag}
+export {db as default, FeatureFlag}
+export type {IFeatureFlag}

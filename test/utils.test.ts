@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { getWindowWidth, getWindowHeight } from '../src/utils/utils'
 import { getSupport } from '../src/utils/support'
-import bridge from '../src/utils/bridge'
 import debounce from '../src/utils/debounce'
 
 describe('getWindowWidth / getWindowHeight', () => {
@@ -29,27 +28,6 @@ describe('getSupport', () => {
     const support = getSupport()
     expect(support.css).toHaveProperty('backdropFilter')
     expect(typeof support.css.backdropFilter).toBe('boolean')
-  })
-})
-
-describe('bridge', () => {
-  afterEach(() => {
-    // The bridge is a module-level singleton; put it back as we found it.
-    ;(bridge as any).Desktop = null
-  })
-
-  it('stores and returns a registered value', () => {
-    const desktop = { name: 'desktop' }
-    bridge.set('Desktop', desktop)
-    expect(bridge.get('Desktop')).toBe(desktop)
-  })
-
-  it('refuses to set a key it does not declare', () => {
-    expect(() => bridge.set('Nope', 1)).toThrow('Not valid')
-  })
-
-  it('throws when reading a key that was never set', () => {
-    expect(() => bridge.get('Desktop')).toThrow('Not valid')
   })
 })
 

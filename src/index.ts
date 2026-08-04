@@ -9,7 +9,6 @@ import jss from "jss";
 import preset from "jss-preset-default";
 import nested from "jss-plugin-nested";
 import settings from "./utils/settings";
-import bridge from "./utils/bridge";
 import Bootscreen from "./components/Bootscreen";
 import queryString from "query-string";
 import Logger, {GlobalLogger} from "./Logger";
@@ -40,12 +39,14 @@ async function startup() {
   logger.debug(`Dekstop Image Set:  ${settings.desktopImage.original}`);
 }
 
-const mainWindows = {
+// Built once the desktop exists, so each opener can be handed it directly
+// rather than reaching for a global.
+const makeMainWindows = (desktop: Desktop) => ({
   "experience": ({top, left}: { top?: number, left?: number }) => {
     windowManager.new({
       title: `Experience`,
       content: new ExperienceContent(),
-      desktop: bridge.get<Desktop>("Desktop"),
+      desktop: desktop,
       dimensions: {
         width: 600,
         height: 500,
@@ -61,7 +62,7 @@ const mainWindows = {
     windowManager.new({
       title: `About`,
       content: new AboutContent(),
-      desktop: bridge.get<Desktop>("Desktop"),
+      desktop: desktop,
       windowPosition: top || left ? {
         top,
         left,
@@ -77,18 +78,18 @@ const mainWindows = {
         width: 250,
         height: 150
       },
-      desktop: bridge.get<Desktop>("Desktop"),
+      desktop: desktop,
       isDialog: true
     });
   }
-}
+})
 
 startup().then(async () => {
   const desktop = new Desktop({
     backgroundColor: "#EEEEEE",
     mainElement: document.querySelector("#app"),
   });
-  bridge.set<Desktop>("Desktop", desktop);
+  const mainWindows = makeMainWindows(desktop);
   const params = queryString.parse(location.search);
 
   if (params.bootscreen === "1") {
@@ -100,7 +101,7 @@ startup().then(async () => {
       title: "Debugger",
       content: new LoggerWindow(),
       dimensions: {width: 800, height: 400},
-      desktop: bridge.get<Desktop>("Desktop"),
+      desktop: desktop,
     });
   }
   // Side-by-side placement is only meaningful when both are on screen together;
@@ -128,14 +129,14 @@ startup().then(async () => {
     openWindows(["about", "experience"])
   }
 
-  const keyCatcher: KeyCatcher = new KeyCatcher();
+  const keyCatcher: KeyCatcher = new KeyCatcher(desktop);
   keyCatcher.startListener()
   keyCatcher.addSequence('debug', () => {
     windowManager.new({
       title: "Debugger",
       content: new LoggerWindow(),
       dimensions: {width: 800, height: 400},
-      desktop: bridge.get<Desktop>("Desktop"),
+      desktop: desktop,
     });
   })
   // We are only using the user-astronaut icon

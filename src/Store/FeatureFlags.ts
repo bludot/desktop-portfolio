@@ -1,5 +1,4 @@
-import Dexie from "dexie";
-import db from "./index"
+import db from "./database"
 class FeatureFlag implements IFeatureFlag {
   id: number;
   code: string;

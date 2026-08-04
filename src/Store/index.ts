@@ -1,31 +1,11 @@
-import {FeatureFlag, type IFeatureFlag} from './FeatureFlags'
-import Dexie from "dexie";
+import db, { AppDatabase } from './database'
+import { FeatureFlag, type IFeatureFlag } from './FeatureFlags'
 
-export class AppDatabase extends Dexie {
-  public featureFlags: Dexie.Table<FeatureFlag, number>;
+// Wire rows to their class here rather than in the AppDatabase constructor:
+// this module is the one place that already depends on both halves, so the
+// database and the record class never have to import each other at runtime.
+db.featureFlags.mapToClass(FeatureFlag)
 
-  constructor() {
-
-    super("AppDatabase");
-
-    var db = this;
-
-    //
-    // Define tables and indexes
-    //
-    db.version(1).stores({
-      featureFlags: '++id, code, name, enabled',
-    });
-
-    // Let's physically map Contact class to contacts table.
-    // This will make it possible to call loadEmailsAndPhones()
-    // directly on retrieved database objects.
-    db.featureFlags.mapToClass(FeatureFlag);
-  }
-
-}
-
-const db = new AppDatabase();
-
-export {db as default, FeatureFlag}
-export type {IFeatureFlag}
+export { AppDatabase }
+export { db as default, FeatureFlag }
+export type { IFeatureFlag }

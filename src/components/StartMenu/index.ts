@@ -3,7 +3,6 @@ import WindowBlur from "../Window/blur";
 import MenuItem from "./menuItem";
 import User from "./user";
 import MenuGrid from "./menuGrid";
-import bridge from "./../../utils/bridge";
 import windowManager from "../../utils/windowManager";
 import Desktop from "../Desktop";
 import AboutContent from "./../../contents/about";
@@ -18,7 +17,7 @@ import FeatureFlagsApp from "../../apps/FeatureFlags";
 class StartMenu extends OSElement {
   menuItems: MenuItem[];
   isMobile: boolean;
-  constructor() {
+  constructor(private readonly desktop: Desktop) {
     super("startmenu", "start-menu");
     this.isMobile = isMobile()
     this.style = () => ({
@@ -63,7 +62,7 @@ class StartMenu extends OSElement {
         windowManager.new({
           title: `About`,
           content: new AboutContent(),
-          desktop: bridge.get<Desktop>("Desktop")
+          desktop: this.desktop
         });
       }
     });
@@ -85,7 +84,7 @@ class StartMenu extends OSElement {
         windowManager.new({
           title: `Experience`,
           content: new ExperienceContent(),
-          desktop: bridge.get<Desktop>("Desktop"),
+          desktop: this.desktop,
           dimensions: {
             width: 600,
             height: 500,
@@ -115,7 +114,7 @@ class StartMenu extends OSElement {
             width: 250,
             height: 180
           },
-          desktop: bridge.get<Desktop>("Desktop"),
+          desktop: this.desktop,
           isDialog: true
         });
       }
@@ -142,7 +141,7 @@ class StartMenu extends OSElement {
             width: 250,
             height: 180
           },
-          desktop: bridge.get<Desktop>("Desktop"),
+          desktop: this.desktop,
           isDialog: true
         });
       }
@@ -169,7 +168,7 @@ class StartMenu extends OSElement {
             width: 250,
             height: 180
           },
-          desktop: bridge.get<Desktop>("Desktop"),
+          desktop: this.desktop,
           isDialog: true
         });
       }
@@ -190,7 +189,7 @@ class StartMenu extends OSElement {
         })(),
         text: "feature flags",
         action: () => {
-          new FeatureFlagsApp().load()
+          new FeatureFlagsApp(this.desktop).load()
         }
       });
       featureflags.load(menuGrid.getElement());
@@ -219,7 +218,7 @@ class StartMenu extends OSElement {
             width: 250,
             height: 180
           },
-          desktop: bridge.get<Desktop>("Desktop"),
+          desktop: this.desktop,
           isDialog: true
         });
       }

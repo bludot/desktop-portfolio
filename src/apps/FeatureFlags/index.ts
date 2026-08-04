@@ -1,7 +1,6 @@
 import App from "../App";
 import windowManager from "../../utils/windowManager";
 import AboutContent from "../../contents/about";
-import bridge from "../../utils/bridge";
 import Desktop from "../../components/Desktop";
 import OSElement from "../../utils/OSElement";
 import SwitchToggle from "../../components/SwitchToggle";
@@ -17,9 +16,8 @@ const flags = {
 class FeatureFlagsApp extends App {
   featureFlags: FeatureFlag[]
 
-  constructor() {
+  constructor(private readonly desktop: Desktop) {
     super("FeatureFlagsApp");
-
   }
 
   async loadFeatures(): Promise<FeatureFlag[]> {
@@ -42,7 +40,7 @@ class FeatureFlagsApp extends App {
       windowManager.new({
         title: this.name,
         content: new FeatureFlagsContent(this.featureFlags),
-        desktop: bridge.get<Desktop>("Desktop")
+        desktop: this.desktop
       });
     })
 

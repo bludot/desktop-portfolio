@@ -22,7 +22,7 @@ class Desktop extends OSElement {
     super("desktop", "desktop", "Desktop");
     this.mainElement = mainElement;
     this.backgroundColor = backgroundColor;
-    this.taskbar = new Taskbar();
+    this.taskbar = new Taskbar(this);
     this.style = () => ({
       [this.id]: {
         position: "fixed",

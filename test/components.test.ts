@@ -33,6 +33,12 @@ jss.use(nested())
 
 let host: HTMLElement
 
+const makeDesktop = () =>
+  ({
+    getElement: () => host,
+    getTaskbar: () => ({ getElement: () => document.createElement('div') }),
+  }) as any
+
 beforeEach(() => {
   host = document.createElement('div')
   host.id = 'app'
@@ -168,21 +174,21 @@ describe('TitleBar / TopBar', () => {
 
 describe('Taskbar', () => {
   it('loads with its buttons attached', async () => {
-    const taskbar = new Taskbar()
+    const taskbar = new Taskbar(makeDesktop())
     await taskbar.load(host)
     expect(host.contains(taskbar.getElement())).toBe(true)
     expect(taskbar.taskbarButtons).toBeDefined()
   })
 
   it('TaskbarButtons renders one button showing the user name', async () => {
-    const buttons = new TaskbarButtons()
+    const buttons = new TaskbarButtons(makeDesktop())
     await buttons.load(host)
     expect(buttons.buttons).toHaveLength(1)
     expect(buttons.getElement().textContent).toContain('James')
   })
 
   it('the taskbar button opens the start menu, and the next click closes it', async () => {
-    const buttons = new TaskbarButtons()
+    const buttons = new TaskbarButtons(makeDesktop())
     await buttons.load(host)
     const button = buttons.buttons[0]
 
@@ -250,7 +256,7 @@ describe('StartMenu pieces', () => {
 
 describe('StartMenu', () => {
   it('builds its menu items and loads', async () => {
-    const menu = new StartMenu()
+    const menu = new StartMenu(makeDesktop())
     await menu.load(host)
     expect(host.contains(menu.getElement())).toBe(true)
     expect(menu.getElement().textContent).toContain('James Trotter')

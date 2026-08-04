@@ -6,12 +6,21 @@ import App from '../src/apps/App'
 import KeyCatcher from '../src/apps/KeyCatcher'
 import FeatureFlagsApp from '../src/apps/FeatureFlags'
 import settings from '../src/utils/settings'
-import bridge from '../src/utils/bridge'
 import windowManager from '../src/utils/windowManager'
 import db from '../src/Store'
 
 jss.setup(preset())
 jss.use(nested())
+
+const makeDesktop = () =>
+  ({
+    getElement: () => {
+      const el = document.createElement('div')
+      document.body.appendChild(el)
+      return el
+    },
+    getTaskbar: () => ({ getElement: () => document.createElement('div') }),
+  }) as any
 
 const type = (text: string) => {
   for (const key of text) {
@@ -27,11 +36,11 @@ describe('App', () => {
 
 describe('KeyCatcher', () => {
   it('is a singleton', () => {
-    expect(new KeyCatcher()).toBe(new KeyCatcher())
+    expect(new KeyCatcher(makeDesktop())).toBe(new KeyCatcher(makeDesktop()))
   })
 
   it('runs the handler when a registered sequence is typed', () => {
-    const catcher = new KeyCatcher()
+    const catcher = new KeyCatcher(makeDesktop())
     const action = vi.fn()
     catcher.addSequence('opensesame', action)
     catcher.startListener()
@@ -42,7 +51,7 @@ describe('KeyCatcher', () => {
   })
 
   it('ignores sequences that were never registered', () => {
-    const catcher = new KeyCatcher()
+    const catcher = new KeyCatcher(makeDesktop())
     const action = vi.fn()
     catcher.addSequence('zzzunique', action)
     catcher.startListener()
@@ -54,7 +63,7 @@ describe('KeyCatcher', () => {
 
   it('starts a fresh buffer once the keystroke delay lapses', () => {
     vi.useFakeTimers()
-    const catcher = new KeyCatcher()
+    const catcher = new KeyCatcher(makeDesktop())
     const action = vi.fn()
     catcher.addSequence('ab', action)
     catcher.startListener()
@@ -69,7 +78,7 @@ describe('KeyCatcher', () => {
   })
 
   it('addSequence overwrites an existing binding', () => {
-    const catcher = new KeyCatcher()
+    const catcher = new KeyCatcher(makeDesktop())
     const first = vi.fn()
     const second = vi.fn()
     catcher.addSequence('dup', first)
@@ -86,25 +95,16 @@ describe('KeyCatcher', () => {
 describe('FeatureFlagsApp', () => {
   beforeEach(async () => {
     await db.featureFlags.clear()
-    bridge.set('Desktop', {
-      getElement: () => {
-        const el = document.createElement('div')
-        document.body.appendChild(el)
-        return el
-      },
-      getTaskbar: () => ({ getElement: () => document.createElement('div') }),
-    } as any)
   })
 
   afterEach(() => {
-    ;(bridge as any).Desktop = null
     windowManager.windows.head = null
     windowManager.windows.tail = null
     windowManager.windows.length = 0
   })
 
   it('seeds the known flags on first run', async () => {
-    const app = new FeatureFlagsApp()
+    const app = new FeatureFlagsApp(makeDesktop())
     const flags = await app.loadFeatures()
 
     expect(flags.map((f) => f.code)).toContain('custom_scrollbar')
@@ -112,7 +112,7 @@ describe('FeatureFlagsApp', () => {
   })
 
   it('does not duplicate flags that already exist', async () => {
-    const app = new FeatureFlagsApp()
+    const app = new FeatureFlagsApp(makeDesktop())
     await app.loadFeatures()
     await app.loadFeatures()
 
@@ -120,7 +120,7 @@ describe('FeatureFlagsApp', () => {
   })
 
   it('preserves an already-enabled flag when re-seeding', async () => {
-    const app = new FeatureFlagsApp()
+    const app = new FeatureFlagsApp(makeDesktop())
     const [flag] = await app.loadFeatures()
     flag.enabled = true
     await flag.save()
@@ -130,7 +130,7 @@ describe('FeatureFlagsApp', () => {
   })
 
   it('opens a window listing each flag', async () => {
-    const app = new FeatureFlagsApp()
+    const app = new FeatureFlagsApp(makeDesktop())
     app.load()
 
     await vi.waitFor(() => expect(windowManager.windows.head).toBeTruthy())

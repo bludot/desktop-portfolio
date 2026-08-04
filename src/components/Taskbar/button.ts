@@ -1,6 +1,7 @@
 import OSElement from "../../utils/OSElement";
 import type { TaskbarButtonContruct } from "./interfaces";
 import StartMenu from "./../StartMenu";
+import type Desktop from "../Desktop";
 
 class TaskbarButton extends OSElement {
   icon: HTMLElement;
@@ -53,9 +54,9 @@ class TaskbarButton extends OSElement {
 }
 class TaskbarButtons extends OSElement {
   buttons: TaskbarButton[];
-  constructor() {
+  constructor(desktop: Desktop) {
     super("taskbar-buttons", "taskbar-buttons");
-    const startMenu = new StartMenu();
+    const startMenu = new StartMenu(desktop);
     this.buttons = [
       new TaskbarButton({
         icon: (() => {

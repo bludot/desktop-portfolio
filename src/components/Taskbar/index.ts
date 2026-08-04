@@ -1,4 +1,5 @@
 import OSElement from "./../../utils/OSElement";
+import type Desktop from "../Desktop";
 import TaskbarButtons from "./button";
 import WindowBlur from "../Window/blur";
 import isMobile from 'is-mobile'
@@ -7,12 +8,12 @@ class Taskbar extends OSElement {
   taskbarButtons: TaskbarButtons;
   isMobile: boolean
 
-  constructor() {
+  constructor(desktop: Desktop) {
     super("taskbar", "taskbar");
     this.isMobile = isMobile()
     const blur = new WindowBlur(30, 8);
     blur.load(this.element);
-    this.taskbarButtons = new TaskbarButtons();
+    this.taskbarButtons = new TaskbarButtons(desktop);
     this.taskbarButtons.load(this.element);
     this.style = () => ({
       [this.id]: {

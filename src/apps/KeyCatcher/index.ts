@@ -1,6 +1,7 @@
 import App from "../App";
 import Logger from "../../Logger";
 import FeatureFlagsApp from "../FeatureFlags";
+import type Desktop from "../../components/Desktop";
 
 const logger = new Logger("KeyCatcher");
 
@@ -8,18 +9,21 @@ class KeyCatcher extends App {
   sequences: Record<string, () => void>
   static _instance: KeyCatcher
 
-  constructor() {
+  desktop: Desktop
+
+  constructor(desktop: Desktop) {
     super('Keycatcher')
     if (KeyCatcher._instance) {
       return KeyCatcher._instance
     }
     KeyCatcher._instance = this;
+    this.desktop = desktop;
     this.sequences = {
       'demo': () => {
         logger.info("demo!")
       },
       "feature": () => {
-        new FeatureFlagsApp().load()
+        new FeatureFlagsApp(this.desktop).load()
       }
     }
   }

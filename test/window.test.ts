@@ -236,11 +236,15 @@ describe('OSWindow', () => {
     // node is appended directly and skips the flag check entirely.
     const loadableContent = () => ({ load: vi.fn().mockResolvedValue(undefined) })
 
-    it('is left off when the flag is absent', async () => {
+    // Rows are only written when the Feature Flags app is opened, so most
+    // sessions have nothing stored and the default is what ships.
+    it('is on by default when nothing is stored', async () => {
       const win = makeWindow({ content: loadableContent() })
-      const scrollbarLoad = vi.spyOn((win as any).scrollbar, 'load')
+      const scrollbarLoad = vi
+        .spyOn((win as any).scrollbar, 'load')
+        .mockResolvedValue(undefined as any)
       await win.load(null as unknown as HTMLElement)
-      expect(scrollbarLoad).not.toHaveBeenCalled()
+      expect(scrollbarLoad).toHaveBeenCalled()
     })
 
     it('is left off when the flag exists but is disabled', async () => {

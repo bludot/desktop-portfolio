@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
@@ -7,127 +7,228 @@ import ScrollBar from '../src/components/Scrollbar'
 jss.setup(preset())
 jss.use(nested())
 
-let container: HTMLElement
+let host: HTMLElement
+let scroller: HTMLElement
 
-// jsdom has no layout, so clientHeight/scrollHeight are 0 unless we define
-// them. Give the container a believable scrollable geometry.
+// jsdom has no layout, so these have to be declared.
 const withGeometry = (el: HTMLElement, client: number, scroll: number) => {
   Object.defineProperty(el, 'clientHeight', { value: client, configurable: true })
   Object.defineProperty(el, 'scrollHeight', { value: scroll, configurable: true })
+  Object.defineProperty(el, 'offsetTop', { value: 32, configurable: true })
+  el.getBoundingClientRect = () =>
+    ({ top: 32, left: 0, right: 300, bottom: 32 + client, width: 300, height: client }) as DOMRect
   return el
 }
 
-const mountScrollbar = async () => {
+const makeScroller = (client = 200, scroll = 1000) => {
+  const el = withGeometry(document.createElement('div'), client, scroll)
+  host.appendChild(el)
+  return el
+}
+
+const mountScrollbar = async (target?: HTMLElement) => {
   const bar = new ScrollBar()
-  await bar.load(container)
-  // load() defers its wiring to a setTimeout(0).
+  bar.attachTo(target ?? scroller)
+  // Mounted on the window, not inside the scrolling box.
+  await bar.load(host)
   await vi.advanceTimersByTimeAsync(0)
   return bar
 }
 
-const touch = (type: string, clientY: number) =>
-  ({
-    type,
-    touches: [{ clientY }],
-    changedTouches: [{ clientY }],
-    preventDefault: () => {},
-  }) as unknown as TouchEvent
+const thumb = (bar: ScrollBar) => bar.getElement().querySelector<HTMLElement>('.bar')!
+
+const mouse = (type: string, clientX: number, clientY: number) =>
+  new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY })
 
 describe('ScrollBar', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    container = withGeometry(document.createElement('div'), 100, 400)
-    document.body.appendChild(container)
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    // 200px viewport over 1000px of content: 800px of scroll range.
+    scroller = makeScroller()
   })
 
-  it('renders a bar element', () => {
-    const bar = new ScrollBar()
-    expect(bar.getElement().querySelector('.bar')).toBeTruthy()
-  })
-
-  it('sizes itself against the parent once mounted', async () => {
-    const bar = await mountScrollbar()
-    expect(container.contains(bar.getElement())).toBe(true)
-    expect(container.style.overflow).toBe('hidden')
+  afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('hide tucks the bar off the right edge', () => {
-    const bar = new ScrollBar()
-    bar.hide()
-    expect(bar.getElement().style.right).toBe('-10px')
-    vi.useRealTimers()
+  it('renders a thumb', () => {
+    expect(thumb(new ScrollBar())).toBeTruthy()
   })
 
-  it('scrolling moves the parent and reveals the bar', async () => {
-    const bar = await mountScrollbar()
-    const wheel = new WheelEvent('mousewheel', { deltaY: 40 })
-
-    bar.scroll(wheel)
-
-    expect(bar.getElement().style.right).toBe('0px')
-    expect(container.scrollTop).toBeGreaterThan(0)
-    vi.useRealTimers()
-  })
-
-  it('hides again once scrolling stops', async () => {
-    const bar = await mountScrollbar()
-    bar.scroll(new WheelEvent('mousewheel', { deltaY: 40 }))
-    expect(bar.getElement().style.right).toBe('0px')
-
-    await vi.advanceTimersByTimeAsync(1000)
-
-    expect(bar.getElement().style.right).toBe('-10px')
-    vi.useRealTimers()
-  })
-
-  describe('touch', () => {
-    it('touchStart records the origin and current scroll offset', async () => {
-      const bar = await mountScrollbar()
-      container.scrollTop = 25
-
-      bar.touchStart(touch('touchstart', 200))
-
-      expect(bar.getElement().style.right).toBe('0px')
-      expect((bar as any).touchStartY).toBe(200)
-      expect((bar as any).scrollTop).toBe(25)
-      vi.useRealTimers()
+  // The whole point: the container keeps scrolling itself, so trackpad
+  // momentum, OS scroll settings, keyboard paging and find-in-page all survive.
+  describe('does not hijack scrolling', () => {
+    it('leaves the container scrollable natively', async () => {
+      await mountScrollbar()
+      expect(scroller.style.overflowY).toBe('auto')
+      expect(scroller.style.overflow).not.toBe('hidden')
     })
 
-    it('touchMove scrolls the parent by the drag delta', async () => {
-      const bar = await mountScrollbar()
-      bar.touchStart(touch('touchstart', 200))
-
-      // Dragging up by 50px scrolls down by 50px.
-      bar.touchMove(touch('touchmove', 150))
-
-      expect(container.scrollTop).toBe(50)
-      vi.useRealTimers()
+    it('hides the platform bar rather than disabling scrolling', async () => {
+      await mountScrollbar()
+      expect(scroller.classList.contains('hide-native-scrollbar')).toBe(true)
+      expect((scroller.style as any).scrollbarWidth).toBe('none')
     })
 
-    it('touchEnd schedules the hide', async () => {
+    it('does not intercept the wheel', async () => {
+      await mountScrollbar()
+      const event = new WheelEvent('wheel', { deltaY: 120, cancelable: true, bubbles: true })
+      scroller.dispatchEvent(event)
+      // Untouched, so the browser scrolls it however the platform prefers.
+      expect(event.defaultPrevented).toBe(false)
+      expect(scroller.scrollTop).toBe(0)
+    })
+
+    it('mounts outside the scrolling box so it never scrolls away', async () => {
       const bar = await mountScrollbar()
-      bar.touchStart(touch('touchstart', 200))
-      bar.touchMove(touch('touchmove', 150))
-      bar.touchEnd(touch('touchend', 150))
+      expect(scroller.contains(bar.getElement())).toBe(false)
+      expect(host.contains(bar.getElement())).toBe(true)
+    })
+  })
+
+  describe('geometry', () => {
+    it('sizes the thumb in proportion to how much content there is', async () => {
+      const bar = await mountScrollbar()
+      // 200/1000 of a 200px track = 40px.
+      expect(thumb(bar).style.height).toBe('40px')
+    })
+
+    it('never shrinks the thumb below a grabbable size', async () => {
+      const bar = await mountScrollbar(makeScroller(200, 100000))
+      expect(parseFloat(thumb(bar).style.height)).toBeGreaterThanOrEqual(24)
+    })
+
+    it('hides itself entirely when the content fits', async () => {
+      const bar = await mountScrollbar(makeScroller(200, 200))
+      expect(bar.getElement().style.display).toBe('none')
+    })
+
+    it('lines the track up with the scrolling box', async () => {
+      const bar = await mountScrollbar()
+      expect(bar.getElement().style.top).toBe('32px')
+      expect(bar.getElement().style.height).toBe('200px')
+    })
+
+    it('follows the native scroll position, ending flush at the bottom', async () => {
+      const bar = await mountScrollbar()
+
+      scroller.scrollTop = 800
+      scroller.dispatchEvent(new Event('scroll'))
+      expect(thumb(bar).style.top).toBe('160px')
+
+      scroller.scrollTop = 400
+      scroller.dispatchEvent(new Event('scroll'))
+      expect(thumb(bar).style.top).toBe('80px')
+
+      scroller.scrollTop = 0
+      scroller.dispatchEvent(new Event('scroll'))
+      expect(thumb(bar).style.top).toBe('0px')
+    })
+  })
+
+  describe('visibility', () => {
+    it('appears when the pointer comes near the right edge', async () => {
+      const bar = await mountScrollbar()
+      bar.hide()
+      // The box spans x 0..300; 280 is within 40px of the edge.
+      scroller.dispatchEvent(mouse('mousemove', 280, 100))
+      expect(bar.getElement().style.opacity).toBe('1')
+    })
+
+    it('stays hidden while the pointer is far from the edge', async () => {
+      const bar = await mountScrollbar()
+      bar.hide()
+      scroller.dispatchEvent(mouse('mousemove', 20, 100))
+      expect(bar.getElement().style.opacity).toBe('0')
+    })
+
+    it('does not appear when there is nothing to scroll', async () => {
+      const shortScroller = makeScroller(200, 200)
+      const bar = await mountScrollbar(shortScroller)
+      bar.hide()
+      shortScroller.dispatchEvent(mouse('mousemove', 295, 100))
+      expect(bar.getElement().style.opacity).toBe('0')
+    })
+
+    it('appears while scrolling and hides once it stops', async () => {
+      const bar = await mountScrollbar()
+      scroller.scrollTop = 100
+      scroller.dispatchEvent(new Event('scroll'))
+      expect(bar.getElement().style.opacity).toBe('1')
 
       await vi.advanceTimersByTimeAsync(1000)
-      expect(bar.getElement().style.right).toBe('-10px')
-      vi.useRealTimers()
+      expect(bar.getElement().style.opacity).toBe('0')
     })
 
-    it('handleFlick animates in the requested direction', async () => {
+    it('hides when the pointer leaves', async () => {
       const bar = await mountScrollbar()
-      const raf = vi
-        .spyOn(globalThis, 'requestAnimationFrame')
-        .mockImplementation(() => 0 as any)
+      scroller.dispatchEvent(mouse('mousemove', 295, 100))
+      expect(bar.getElement().style.opacity).toBe('1')
 
-      bar.handleFlick(120)
-      bar.handleFlick(-120)
-
-      expect(raf).toHaveBeenCalled()
-      raf.mockRestore()
-      vi.useRealTimers()
+      scroller.dispatchEvent(new MouseEvent('mouseleave'))
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(bar.getElement().style.opacity).toBe('0')
     })
+
+    it('stays visible while the thumb is being dragged', async () => {
+      const bar = await mountScrollbar()
+      thumb(bar).dispatchEvent(mouse('mousedown', 295, 10))
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(bar.getElement().style.opacity).toBe('1')
+    })
+  })
+
+  describe('dragging the thumb', () => {
+    it('scrolls the container proportionally to the drag', async () => {
+      const bar = await mountScrollbar()
+      thumb(bar).dispatchEvent(mouse('mousedown', 295, 0))
+
+      // Track travel is 200-40=160px; 80px of it is half the 800px range.
+      window.dispatchEvent(mouse('mousemove', 295, 80))
+
+      expect(scroller.scrollTop).toBe(400)
+      expect(thumb(bar).style.top).toBe('80px')
+    })
+
+    it('clamps at both ends', async () => {
+      const bar = await mountScrollbar()
+      thumb(bar).dispatchEvent(mouse('mousedown', 295, 0))
+
+      window.dispatchEvent(mouse('mousemove', 295, 10000))
+      expect(scroller.scrollTop).toBe(800)
+
+      window.dispatchEvent(mouse('mousemove', 295, -10000))
+      expect(scroller.scrollTop).toBe(0)
+    })
+
+    it('suppresses the text selection a drag would otherwise start', async () => {
+      const bar = await mountScrollbar()
+      const event = mouse('mousedown', 295, 10)
+      thumb(bar).dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(true)
+    })
+
+    it('stops scrolling once released', async () => {
+      const bar = await mountScrollbar()
+      thumb(bar).dispatchEvent(mouse('mousedown', 295, 0))
+      window.dispatchEvent(mouse('mousemove', 295, 40))
+      const atRelease = scroller.scrollTop
+      window.dispatchEvent(mouse('mouseup', 295, 40))
+
+      window.dispatchEvent(mouse('mousemove', 295, 160))
+      expect(scroller.scrollTop).toBe(atRelease)
+    })
+  })
+
+  it('detaches its listeners on unload', async () => {
+    const bar = await mountScrollbar()
+    await bar.unload()
+
+    scroller.scrollTop = 500
+    scroller.dispatchEvent(new Event('scroll'))
+    // No longer tracking, so the thumb stays where it was.
+    expect(thumb(bar).style.top).toBe('0px')
   })
 })

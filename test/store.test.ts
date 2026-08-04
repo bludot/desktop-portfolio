@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import db, { FeatureFlag } from '../src/Store'
+import db, { FeatureFlag, FEATURE_FLAG_DEFAULTS, isFeatureEnabled } from '../src/Store'
 
 describe('FeatureFlag', () => {
   beforeEach(async () => {
@@ -87,6 +87,26 @@ describe('FeatureFlag', () => {
       expect(found).toHaveLength(1)
       expect(found[0].enabled).toBe(true)
     })
+  })
+})
+
+describe('isFeatureEnabled', () => {
+  beforeEach(async () => {
+    await db.featureFlags.clear()
+  })
+
+  it('falls back to the default when nothing is stored', async () => {
+    expect(FEATURE_FLAG_DEFAULTS.custom_scrollbar.enabled).toBe(true)
+    await expect(isFeatureEnabled('custom_scrollbar')).resolves.toBe(true)
+  })
+
+  it('lets a stored value override the default', async () => {
+    await new FeatureFlag('custom_scrollbar', 'custom scrollbar', false).save()
+    await expect(isFeatureEnabled('custom_scrollbar')).resolves.toBe(false)
+  })
+
+  it('reports unknown flags as off', async () => {
+    await expect(isFeatureEnabled('not_a_flag')).resolves.toBe(false)
   })
 })
 

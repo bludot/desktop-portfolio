@@ -7,10 +7,11 @@ import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
 import isMobile from 'is-mobile'
 import ScrollBar from "../Scrollbar";
-import db from "../../Store";
+import { isFeatureEnabled } from "../../Store";
 
 class OSWindow extends OSElement {
   private scrollbar: ScrollBar;
+  private scrollbarWanted = false;
   isDialog: boolean = false;
   windowPosition: any;
   className: string = "window";
@@ -202,9 +203,9 @@ class OSWindow extends OSElement {
     if (typeof this.content.load === "function") {
 
       await this.content.load(main);
-      const scrollbarFeature = await db.featureFlags.where({code: "custom_scrollbar"}).toArray()
-      if (scrollbarFeature[0]?.enabled) {
-        this.scrollbar.load(main);
+      if (await isFeatureEnabled("custom_scrollbar")) {
+        this.scrollbar.attachTo(main);
+        this.scrollbarWanted = true;
       }
     } else {
       main.appendChild(this.content);
@@ -215,6 +216,10 @@ class OSWindow extends OSElement {
     await this.topbar.load(this.element);
 
     this.element.appendChild(main);
+
+    if (this.scrollbarWanted) {
+      await this.scrollbar.load(this.element);
+    }
 
     super.load(this.desktop.getElement());
     if (this.windowPosition.top) {

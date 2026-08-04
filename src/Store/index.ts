@@ -6,6 +6,8 @@ import { FeatureFlag, type IFeatureFlag } from './FeatureFlags'
 // database and the record class never have to import each other at runtime.
 db.featureFlags.mapToClass(FeatureFlag)
 
+export { FEATURE_FLAG_DEFAULTS, isFeatureEnabled } from './features'
+export type { FeatureFlagDefault } from './features'
 export { AppDatabase }
 export { db as default, FeatureFlag }
 export type { IFeatureFlag }

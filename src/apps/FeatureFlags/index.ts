@@ -4,14 +4,7 @@ import AboutContent from "../../contents/about";
 import Desktop from "../../components/Desktop";
 import OSElement from "../../utils/OSElement";
 import SwitchToggle from "../../components/SwitchToggle";
-import db, {FeatureFlag, type IFeatureFlag} from './../../Store'
-
-const flags: Record<string, { name: string; enabled: boolean }> = {
-  "custom_scrollbar": {
-    name: "custom scrollbar",
-    enabled: false
-  }
-}
+import db, {FeatureFlag, FEATURE_FLAG_DEFAULTS} from './../../Store'
 
 class FeatureFlagsApp extends App {
   featureFlags: FeatureFlag[] = []
@@ -22,12 +15,12 @@ class FeatureFlagsApp extends App {
 
   async loadFeatures(): Promise<FeatureFlag[]> {
     const featureFlags = await db.featureFlags.toArray()
-    for (const code of Object.keys(flags)) {
+    for (const code of Object.keys(FEATURE_FLAG_DEFAULTS)) {
       const isSaved = featureFlags.find((item: FeatureFlag): boolean => {
         return item.code == code
       })
       if (!isSaved) {
-        const newFeature = new FeatureFlag(code, flags[code].name, flags[code].enabled)
+        const newFeature = new FeatureFlag(code, FEATURE_FLAG_DEFAULTS[code].name, FEATURE_FLAG_DEFAULTS[code].enabled)
         await newFeature.save()
       }
     }

@@ -101,6 +101,13 @@
       transition-delay: 0.7s
     }
 
+    /* Containers managed by the custom overlay scrollbar keep native scrolling
+       but hide the platform bar. */
+    .hide-native-scrollbar::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+
     #os_name {
       position: absolute;
       bottom: 0;

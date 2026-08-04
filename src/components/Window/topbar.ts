@@ -29,7 +29,10 @@ class TopBar extends OSElement {
         // zIndex: 9001,
         flex: "0 0 auto",
         display: "flex",
-        flexFlow: "row nowrap"
+        flexFlow: "row nowrap",
+        // The titlebar is a drag handle, so its label should never take a
+        // selection or show a caret.
+        userSelect: "none"
       }
     });
   }

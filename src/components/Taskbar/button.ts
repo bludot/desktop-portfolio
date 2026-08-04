@@ -24,6 +24,7 @@ class TaskbarButton extends OSElement {
         flexFlow: "column nowrap",
         alignItems: "center",
         cursor: "pointer",
+        userSelect: "none",
         "&:before": {
           content: "''",
           position: "absolute",

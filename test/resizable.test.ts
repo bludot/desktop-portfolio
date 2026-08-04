@@ -115,6 +115,50 @@ describe('Resizable', () => {
     expect(box()).toEqual({ left: '100px', top: '85px', width: '425px', height: '265px' })
   })
 
+  // Regression: the borders did not preventDefault on mousedown, so resizing
+  // dragged a text selection across the page.
+  it('suppresses the browser text selection when a resize starts', () => {
+    const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 })
+    borders[ORDER.indexOf('right')].dispatchEvent(event)
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  // Regression: each resize registered a fresh anonymous mouseup listener and
+  // never removed it.
+  it('removes both window listeners when the resize ends', () => {
+    const live = new Set<unknown>()
+    const border = borders[ORDER.indexOf('right')]
+
+    for (let i = 0; i < 3; i++) {
+      border.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }),
+      )
+      // Record what this drag attached, then release for real so the component
+      // runs its own teardown.
+      const origAdd = window.addEventListener
+      const origRemove = window.removeEventListener
+      window.addEventListener = ((t: string, f: unknown, ...rest: unknown[]) => {
+        if (t === 'mousemove' || t === 'mouseup') live.add(f)
+        return (origAdd as any).call(window, t, f, ...rest)
+      }) as any
+      window.removeEventListener = ((t: string, f: unknown, ...rest: unknown[]) => {
+        if (t === 'mousemove' || t === 'mouseup') live.delete(f)
+        return (origRemove as any).call(window, t, f, ...rest)
+      }) as any
+
+      border.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }),
+      )
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+
+      window.addEventListener = origAdd
+      window.removeEventListener = origRemove
+    }
+
+    expect(live.size).toBe(0)
+  })
+
   it('stops resizing once the mouse is released', () => {
     const right = borders[ORDER.indexOf('right')]
     drag(right, 50, 0)

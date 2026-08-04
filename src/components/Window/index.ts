@@ -37,6 +37,10 @@ class OSWindow extends OSElement {
   private readonly onMouseUp = this.mouseup.bind(this);
   private readonly onTitlebarMouseDown = this.mousedown.bind(this);
   private readonly onWindowMouseDown = this.mousedownWindow.bind(this);
+  // Drag state: the pointer and box position at press, and the offset since.
+  private dragFrame: number | null = null;
+  private dragStart = { pointerX: 0, pointerY: 0, left: 0, top: 0 };
+  private dragDelta = { x: 0, y: 0 };
 
   constructor({
                 isDialog,
@@ -112,17 +116,49 @@ class OSWindow extends OSElement {
     window.removeEventListener("mousemove", this.onMouseMove);
     window.removeEventListener("mouseup", this.onMouseUp);
 
+    if (this.dragFrame !== null) {
+      cancelAnimationFrame(this.dragFrame);
+      this.dragFrame = null;
+    }
+
+    // Bake the transform back into top/left. Everything else — resizing,
+    // centring, the mobile layout — reads offsetLeft/offsetTop, so those have
+    // to stay authoritative once the drag ends.
+    this.element.style.transform = "";
+    this.element.style.willChange = "";
+    this.element.style.left = `${this.dragStart.left + this.dragDelta.x}px`;
+    this.element.style.top = `${this.dragStart.top + this.dragDelta.y}px`;
+
     this.windowPosition = {};
   }
 
   mousemove(e: MouseEvent): void {
     e.preventDefault();
-    this.element.style.top = e.pageY - this.windowPosition.top + "px";
-    this.element.style.left = e.pageX - this.windowPosition.left + "px";
+
+    this.dragDelta = {
+      x: e.pageX - this.dragStart.pointerX,
+      y: e.pageY - this.dragStart.pointerY,
+    };
+
+    // Pointer events outpace frames, and moving via top/left costs a layout and
+    // paint each time, which is what makes the window trail the cursor. Collapse
+    // to one write per frame and move with a transform the compositor can apply
+    // on its own.
+    if (this.dragFrame === null) {
+      this.dragFrame = requestAnimationFrame(() => {
+        this.dragFrame = null;
+        this.element.style.transform =
+          `translate3d(${this.dragDelta.x}px, ${this.dragDelta.y}px, 0)`;
+      });
+    }
   }
 
   mousedown(e: MouseEvent): void {
-
+    // Without this the browser starts a text selection at the press point and
+    // extends it as the window moves, so dragging a titlebar highlights
+    // whatever the pointer passes over. Only the titlebar is suppressed —
+    // window content stays selectable.
+    e.preventDefault();
 
     this.windowPosition = {
       y: e.pageY,
@@ -130,6 +166,16 @@ class OSWindow extends OSElement {
       top: e.pageY - this.element.offsetTop || e.pageY,
       left: e.pageX - this.element.offsetLeft || e.pageX,
     };
+
+    this.dragStart = {
+      pointerX: e.pageX,
+      pointerY: e.pageY,
+      left: this.element.offsetLeft,
+      top: this.element.offsetTop,
+    };
+    this.dragDelta = { x: 0, y: 0 };
+    // Promote the layer before the first move rather than on it.
+    this.element.style.willChange = "transform";
 
     this.onActive(this);
     window.addEventListener("mouseup", this.onMouseUp);

@@ -31,8 +31,10 @@ const makeWindow = (overrides = {}) =>
     ...overrides,
   } as any)
 
+// cancelable matters: preventDefault() is a no-op on a non-cancelable event,
+// and real browser mouse events are cancelable.
 const mouse = (type: string, x: number, y: number) =>
-  new MouseEvent(type, { bubbles: true, clientX: x, clientY: y })
+  new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })
 
 describe('OSWindow', () => {
   beforeEach(async () => {
@@ -153,18 +155,72 @@ describe('OSWindow', () => {
       expect(handlers[0]).toBe(handlers[1])
     })
 
-    it('moves the element while dragging', async () => {
+    // Dragging moves the window with a compositor-only transform rather than
+    // top/left, so it does not trail the cursor behind a layout and paint.
+    it('moves via a transform while dragging', async () => {
       const win = makeWindow()
       await win.load(null as unknown as HTMLElement)
       win.makeMovable()
 
       win.mousedown(mouse('mousedown', 200, 50) as MouseEvent)
-      win.mousemove(mouse('mousemove', 500, 300) as MouseEvent)
+      expect(win.getElement().style.willChange).toBe('transform')
 
-      expect(win.getElement().style.left).not.toBe('')
-      expect(win.getElement().style.top).not.toBe('')
+      win.mousemove(mouse('mousemove', 500, 300) as MouseEvent)
+      await vi.waitFor(() =>
+        expect(win.getElement().style.transform).toContain('translate3d'),
+      )
+      expect(win.getElement().style.transform).not.toContain('NaN')
+    })
+
+    it('collapses several moves in one frame into a single write', async () => {
+      const win = makeWindow()
+      await win.load(null as unknown as HTMLElement)
+      win.makeMovable()
+
+      win.mousedown(mouse('mousedown', 200, 50) as MouseEvent)
+      for (let i = 0; i < 20; i++) {
+        win.mousemove(mouse('mousemove', 200 + i, 50 + i) as MouseEvent)
+      }
+      await vi.waitFor(() =>
+        expect(win.getElement().style.transform).toContain('translate3d'),
+      )
+      // The last position wins, not an intermediate one.
+      expect(win.getElement().style.transform).toBe('translate3d(19px, 19px, 0)')
+    })
+
+    it('bakes the transform back into top/left on release', async () => {
+      const win = makeWindow()
+      await win.load(null as unknown as HTMLElement)
+      win.makeMovable()
+
+      win.mousedown(mouse('mousedown', 200, 50) as MouseEvent)
+      win.mousemove(mouse('mousemove', 260, 110) as MouseEvent)
+      win.mouseup(mouse('mouseup', 260, 110) as MouseEvent)
+
+      // offsetLeft/offsetTop stay authoritative for resizing and centring.
+      expect(win.getElement().style.transform).toBe('')
+      expect(win.getElement().style.willChange).toBe('')
+      expect(win.getElement().style.left).toBe('60px')
+      expect(win.getElement().style.top).toBe('60px')
       expect(win.getElement().style.left).not.toContain('NaN')
-      expect(win.getElement().style.top).not.toContain('NaN')
+    })
+
+    // Regression: mousedown did not preventDefault, so the browser began a text
+    // selection at the press point and dragged it across whatever the window
+    // passed over.
+    it('suppresses the browser text selection when a drag starts', () => {
+      const win = makeWindow()
+      const event = mouse('mousedown', 200, 50)
+      win.mousedown(event as MouseEvent)
+      expect(event.defaultPrevented).toBe(true)
+    })
+
+    it('leaves window content selectable', () => {
+      const win = makeWindow()
+      const event = mouse('mousedown', 200, 300)
+      // Pressing the window body only raises it; it must not block selection.
+      win.mousedownWindow()
+      expect(event.defaultPrevented).toBe(false)
     })
 
     it('clears the drag origin on mouseup', () => {

@@ -29,10 +29,10 @@ class ResizableBorder extends OSElement {
     };
     const style = {
       position: "absolute",
-
-
       zIndex: "1",
-      overflow: "hidden"
+      overflow: "hidden",
+      // Resize handles are grab targets, never text.
+      userSelect: "none"
     };
     if (type == ResizeType.TOP) {
       this.style = () => ({
@@ -137,17 +137,26 @@ class ResizableBorder extends OSElement {
   }
 
   mouseDown(e: MouseEvent) {
+    // Same reason as the titlebar: stop the browser starting a selection that
+    // would then be dragged across the page while resizing.
+    e.preventDefault();
+
     this.parentDimensions.width = this.resizeTarget.clientWidth;
     this.parentDimensions.height = this.resizeTarget.clientHeight;
     this.parentDimensions.x = this.resizeTarget.offsetLeft;
     this.parentDimensions.y = this.resizeTarget.offsetTop;
     this.cursorPosition.y = e.clientY;
     this.cursorPosition.x = e.clientX;
+    // Both handlers are removed on release. The previous version registered a
+    // fresh anonymous mouseup listener per drag and never took it off, so every
+    // resize left one behind for the life of the page.
     const mousemove = this.mouseMove.bind(this);
-    window.addEventListener("mousemove", mousemove);
-    window.addEventListener("mouseup", (e) => {
+    const mouseup = () => {
       window.removeEventListener("mousemove", mousemove);
-    });
+      window.removeEventListener("mouseup", mouseup);
+    };
+    window.addEventListener("mousemove", mousemove);
+    window.addEventListener("mouseup", mouseup);
   }
 
   updateParentDimensions(

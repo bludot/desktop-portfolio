@@ -8,7 +8,8 @@ class User extends OSElement {
         borderRadius: "100%",
         position: "relative",
         flex: "1 1 auto",
-        margin: "10px 10px"
+        margin: "10px 10px",
+        userSelect: "none"
       }
     });
     const header = document.createElement("h1");

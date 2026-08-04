@@ -21,6 +21,7 @@ class MenuItem extends OSElement {
         flexFlow: "row nowrap",
         borderRadius: "0px",
         cursor: "pointer",
+        userSelect: "none",
         transition: "background 250ms ease",
         "&:hover": {
           background: "rgba(255,255,255,.5)"

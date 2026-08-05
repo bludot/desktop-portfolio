@@ -1,5 +1,5 @@
 import OSElement from "../../utils/OSElement";
-import { color } from "../../theme";
+import { color, font } from "../../theme";
 import WindowBlur from "../Window/blur";
 import MenuItem from "./menuItem";
 import User from "./user";
@@ -35,6 +35,11 @@ class StartMenu extends OSElement {
         borderRadius: "8px",
         zIndex: "999",
         background: color.chrome,
+        // The items set no colour of their own, so it is inherited from here.
+        // Without this they took whatever the page happened to be using, which
+        // was near-white — fine on the dark launcher, invisible on the light.
+        color: color.ink,
+        fontFamily: font.ui,
         boxShadow: `0 17px 50px 0 rgba(0, 0, 0, 0.19),
         0 12px 15px 0 rgba(0, 0, 0, 0.24)`
       }

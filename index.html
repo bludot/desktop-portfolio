@@ -21,7 +21,14 @@
       font-family: "Roboto", sans-serif;
       overflow: hidden;
       font-size: 14px;
-      background: #EEEEEE;
+      /*
+       * The page under the desktop. It is barely seen — the desktop covers it —
+       * but it was a hard #EEEEEE, so in dark mode the one strip that did show
+       * was light grey. The fallback matches the dark desktop rather than the
+       * light one, since a dark theme is what a device asking for dark gets
+       * before any script has run.
+       */
+      background: var(--desktop, #1b1724);
     }
 
     #flower {

@@ -17,7 +17,17 @@ export const light: Theme = {
   tokens: {
     "--ink": "#2b2530",
     "--ink-soft": "#6a6272",
-    "--ink-faint": "#948da0",
+    /*
+     * Darkened from #948da0, which came out at 2.7:1 on window glass — every
+     * date, label and meta line on the desktop was drawn in it.
+     *
+     * It now sits very close to `--ink-soft`, which loses the two tiers as
+     * colours. That is the trade: at 10.5px there is no room under 4.5:1 for a
+     * lighter one. The tiers still read, because everything faint is also mono,
+     * smaller, and usually uppercase — the hierarchy is carried by the
+     * typography rather than by the ink.
+     */
+    "--ink-faint": "#6b6478",
 
     "--line": "rgba(43, 37, 48, .12)",
     "--line-soft": "rgba(43, 37, 48, .07)",
@@ -51,7 +61,10 @@ export const dark: Theme = {
   tokens: {
     "--ink": "#ece7f2",
     "--ink-soft": "#a9a2b8",
-    "--ink-faint": "#7b7490",
+    // Lifted from #7b7490, which came out at 3.6:1 against a dark window and
+    // was the one thing on the desktop that failed to be readable. Everything
+    // faint — dates, meta lines, labels — is drawn in this.
+    "--ink-faint": "#928ba6",
 
     "--line": "rgba(236, 231, 242, .14)",
     "--line-soft": "rgba(236, 231, 242, .07)",

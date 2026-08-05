@@ -122,6 +122,14 @@ export const motion = {
   fast: 140,
   base: 220,
   slow: 320,
+  /**
+   * A change that crosses the whole screen.
+   *
+   * Longer than anything else here on purpose: the others move one thing a
+   * short distance, this one travels the diagonal of the display, and at 320ms
+   * that reads as a flash rather than as something spreading.
+   */
+  sweep: 620,
   standard: "cubic-bezier(.2, .8, .3, 1)",
   exit: "cubic-bezier(.4, 0, 1, 1)",
 } as const;

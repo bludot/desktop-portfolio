@@ -18,7 +18,11 @@ import { motion } from "../../utils/motion";
 
 export interface MenuItem {
   label: string;
-  onPress?: () => void | Promise<void>;
+  /**
+   * Handed the press that ran it, so an action that wants to animate out of
+   * where it was chosen — the theme swap does — has somewhere to start from.
+   */
+  onPress?: (event: MouseEvent) => void | Promise<void>;
   /** Shown, but not selectable — a menu that loses items is harder to learn. */
   disabled?: boolean;
   /** Draws a tick in the leading slot. */
@@ -256,13 +260,13 @@ class ContextMenu extends OSElement {
         button.appendChild(shortcut);
       }
 
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
         if (item.disabled) return;
         // Closed before the action runs, not after. Several of these close or
         // minimise the window the menu was opened from, and a menu still on
         // screen while that happens is left pointing at nothing.
         this.close();
-        void item.onPress?.();
+        void item.onPress?.(event);
       });
 
       this.element.appendChild(button);

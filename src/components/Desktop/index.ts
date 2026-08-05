@@ -5,6 +5,7 @@ import SelectionLayer from "../Selection";
 import contextMenu, { bindContextMenu } from "../ContextMenu";
 import { desktopMenuItems } from "../ContextMenu/menus";
 import windowManager from "../../utils/windowManager";
+import { centreOf, swapAppearance } from "../../utils/motion";
 import appearance from "../../utils/appearance";
 import { saveSettings } from "../../Store";
 import SettingsApp from "../../apps/Settings";
@@ -147,16 +148,21 @@ class Desktop extends OSElement {
            * here is picking a side, and leaving it following the OS would let
            * the choice undo itself the next time the OS changed its mind.
            *
-           * Written down as well as applied. `appearance.set` only repaints —
-           * persisting is the caller's job, as it is in the Settings window —
-           * so without this the theme would go back on the next reload, which
-           * is not what flipping a switch means.
+           * Opened out of the item that was pressed, and both the change and
+           * the write live inside the callback — it runs after the old picture
+           * has been taken, so anything reading `appearance.get()` outside it
+           * would be reading the theme this is replacing.
            */
-          toggleTheme: () => {
-            appearance.set({
-              theme: appearance.scheme() === "dark" ? "light" : "dark"
-            });
-            void saveSettings(appearance.get());
+          toggleTheme: (event) => {
+            const next = appearance.scheme() === "dark" ? "light" : "dark";
+            swapAppearance(() => {
+              appearance.set({ theme: next });
+              // `appearance.set` only repaints; persisting is the caller's job,
+              // as it is in the Settings window. Without this the theme would
+              // go back on the next reload, which is not what flipping a switch
+              // means.
+              void saveSettings(appearance.get());
+            }, centreOf(event.currentTarget as Element));
           },
           showAll: () => void this.taskbar.showOverview(this.mainElement),
           minimizeAll: () =>

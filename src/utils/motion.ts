@@ -1,4 +1,4 @@
-import { motion as token } from "../theme";
+import { motion as token, FEATHER_PX } from "../theme";
 import appearance from "./appearance";
 
 /**
@@ -58,6 +58,179 @@ export function clearAnimations(el: HTMLElement): void {
 
 const canAnimate = (el: Element): boolean =>
   typeof (el as HTMLElement).animate === "function";
+
+interface ViewTransition {
+  ready: Promise<void>;
+  finished: Promise<void>;
+}
+
+/** The class that replaces the default cross-fade with a circular reveal. */
+const REVEALING = "is-revealing";
+
+/** The point on screen a change came from, for a reveal to open out of. */
+export interface Origin {
+  x: number;
+  y: number;
+}
+
+/** The middle of a control, for a change made by pressing one. */
+export function centreOf(el: Element): Origin {
+  const rect = el.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+/**
+ * The distance from a point to the furthest corner of the screen.
+ *
+ * The ripple has to reach it, or it stops short and leaves a ring of the old
+ * desktop around the edge.
+ */
+export function reachFrom(origin: Origin, viewport: Origin): number {
+  return Math.hypot(
+    Math.max(origin.x, viewport.x - origin.x),
+    Math.max(origin.y, viewport.y - origin.y)
+  );
+}
+
+/**
+ * Register the property the ripple rides on, once.
+ *
+ * Custom properties are strings as far as the browser is concerned, and strings
+ * do not interpolate — an unregistered `--ripple` would jump from its first
+ * value to its last at the halfway mark and take the gradient with it.
+ * Registering it as a length is what makes it a number that can be animated.
+ *
+ * Returns false where the API is missing, which is the signal to fall back to
+ * the browser's own cross-fade rather than to a mask that cannot move.
+ */
+let registered = false;
+function canRipple(): boolean {
+  const api = (
+    globalThis as unknown as {
+      CSS?: { registerProperty?: (definition: object) => void };
+    }
+  ).CSS;
+
+  // Asked every time rather than remembered: the answer is a property lookup,
+  // and remembering it would pin the first answer for the life of the page.
+  if (typeof api?.registerProperty !== "function") return false;
+  if (registered) return true;
+
+  try {
+    api.registerProperty({
+      name: "--ripple",
+      syntax: "<length>",
+      inherits: false,
+      initialValue: "0px"
+    });
+  } catch {
+    // Already registered — the dev server evaluates this module twice on
+    // reload. Registering is the only thing that must happen once.
+  }
+
+  registered = true;
+  return true;
+}
+
+/**
+ * Change how the desktop looks, over a moment rather than between two frames.
+ *
+ * A theme swap rewrites every colour token at once, so without this the whole
+ * screen changes on a single frame — correct, and abrupt enough to read as a
+ * glitch rather than as something you did.
+ *
+ * This is the one animation on the desktop that is not built on the Web
+ * Animations API, because it is not animating an element: the browser is asked
+ * to hold a picture of the old desktop, the tokens are rewritten underneath it,
+ * and the new one spreads over the top from wherever the change was made.
+ * Nothing here knows or cares which tokens changed, which is what lets the same
+ * call cover a theme, an accent and a wallpaper.
+ *
+ * One ripple, always — not a wipe here and a dissolve there. A change with no
+ * place to start from, as when the operating system swaps theme on its own,
+ * opens from the middle of the screen.
+ *
+ * Where any of this is unavailable the change simply happens, which is exactly
+ * the behaviour it replaces.
+ */
+export function swapAppearance(change: () => void, origin?: Origin): void {
+  const doc = document as unknown as {
+    startViewTransition?: (update: () => void) => ViewTransition;
+  };
+
+  if (prefersReducedMotion() || typeof doc.startViewTransition !== "function") {
+    change();
+    return;
+  }
+
+  const root = document.documentElement;
+  // Nothing on screen asked for it, so it comes from the screen itself.
+  const from = origin ?? {
+    x: window.innerWidth / 2,
+    y: window.innerHeight / 2
+  };
+  const rippling = canRipple();
+
+  if (rippling) {
+    root.style.setProperty("--ripple-x", `${from.x}px`);
+    root.style.setProperty("--ripple-y", `${from.y}px`);
+    root.classList.add(REVEALING);
+  }
+
+  /*
+   * `change` runs inside the callback, and the callback runs *after* the old
+   * picture has been taken — which is a frame or two from now, not on this
+   * line. Anything that has to see the result of the change belongs in here
+   * with it; read it out afterwards and you get the state before the swap.
+   */
+  const transition = doc.startViewTransition(change);
+
+  void transition.finished
+    .catch(() => undefined)
+    .then(() => root.classList.remove(REVEALING));
+
+  if (!rippling) return;
+
+  void transition.ready
+    .then(() => {
+      const reach = reachFrom(from, {
+        x: window.innerWidth,
+        y: window.innerHeight
+      });
+
+      root.animate(
+        /*
+         * Overshoots by the width of the soft band, because the band is the
+         * *front* of the ripple: at exactly `reach` the screen is covered by
+         * the fade rather than by the new desktop, and the far corner would
+         * still be part old when it stopped.
+         */
+        {
+          "--ripple": ["0px", `${reach + FEATHER_PX}px`]
+        } as unknown as PropertyIndexedKeyframes,
+        {
+          duration: token.sweep,
+          easing: token.standard,
+          /*
+           * Held at the end, and this is not optional.
+           *
+           * `--ripple` is registered with an initial value of zero, so the
+           * moment the animation stops applying, the mask collapses to nothing
+           * and the new desktop vanishes — for the frame or two before the
+           * pseudo-elements are torn down, the old theme shows through. That
+           * is the blink: the swap appears to complete and then flash back.
+           */
+          fill: "forwards",
+          pseudoElement: "::view-transition-new(root)"
+        }
+      );
+    })
+    .catch(() => {
+      // A transition that never started is not worth reporting: the change has
+      // already been applied and only the animation is missing.
+      root.classList.remove(REVEALING);
+    });
+}
 
 /**
  * Play keyframes and resolve when they finish.

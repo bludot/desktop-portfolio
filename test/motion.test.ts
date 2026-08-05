@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { play, motion, prefersReducedMotion } from '../src/utils/motion'
-import { motion as token } from '../src/theme'
+import {
+  play,
+  motion,
+  prefersReducedMotion,
+  swapAppearance,
+  centreOf,
+  reachFrom,
+} from '../src/utils/motion'
+import { motion as token, FEATHER_PX } from '../src/theme'
 
 let el: HTMLElement
 
@@ -222,5 +229,227 @@ describe('motion', () => {
       expect(last(calls[0].keyframes).opacity).toBe(1)
       expect(last(calls[1].keyframes).opacity).toBe(0)
     })
+  })
+})
+
+/**
+ * The appearance swap is the one animation here that does not go through
+ * `play`: it hands the change to the browser's view transition machinery, so
+ * what these check is the contract with that API — and, above all, that a
+ * browser without it still applies the change.
+ */
+describe('swapAppearance', () => {
+  let started: Array<() => void>
+  let resolveReady: () => void
+  let rootFrames: any[]
+  let rootOptions: KeyframeAnimationOptions[]
+
+  const stubViewTransitions = () => {
+    started = []
+    rootFrames = []
+    rootOptions = []
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve
+    })
+    ;(document as any).startViewTransition = (update: () => void) => {
+      started.push(update)
+      update()
+      return { ready, finished: Promise.resolve() }
+    }
+    ;(document.documentElement as any).animate = (
+      keyframes: any,
+      options: KeyframeAnimationOptions,
+    ) => {
+      rootFrames.push(keyframes)
+      rootOptions.push(options)
+      return { finished: Promise.resolve() }
+    }
+  }
+
+  /*
+   * jsdom has neither of the two APIs this rests on, which is the same pair of
+   * gaps an older browser has — so stubbing them is the contract, and leaving
+   * them out is the fallback path.
+   */
+  const stubRegisterProperty = () => {
+    ;(globalThis as any).CSS = { registerProperty: () => undefined }
+  }
+
+  /** Wait for the ready/finished promise chains to settle. */
+  const settle = async () => {
+    for (let i = 0; i < 4; i += 1) await Promise.resolve()
+  }
+
+  beforeEach(() => {
+    stubMatchMedia(false)
+    Object.defineProperty(window, 'innerWidth', { value: 1000, configurable: true })
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true })
+  })
+
+  afterEach(() => {
+    delete (document as any).startViewTransition
+    delete (document.documentElement as any).animate
+    delete (globalThis as any).CSS
+    document.documentElement.classList.remove('is-revealing')
+    document.documentElement.style.removeProperty('--ripple-x')
+    document.documentElement.style.removeProperty('--ripple-y')
+    delete (window as any).matchMedia
+  })
+
+  /*
+   * The whole point of the fallback: an old browser must still end up with the
+   * new theme, just without the animation.
+   */
+  it('applies the change when view transitions are unavailable', () => {
+    const change = vi.fn()
+    swapAppearance(change)
+    expect(change).toHaveBeenCalledOnce()
+  })
+
+  it('applies the change when motion is reduced, without a transition', () => {
+    stubViewTransitions()
+    stubRegisterProperty()
+    stubMatchMedia(true)
+
+    const change = vi.fn()
+    swapAppearance(change, { x: 10, y: 10 })
+
+    expect(change).toHaveBeenCalledOnce()
+    expect(started).toHaveLength(0)
+    expect(document.documentElement.classList.contains('is-revealing')).toBe(false)
+  })
+
+  it('runs the change inside the transition, not before it', () => {
+    stubViewTransitions()
+    stubRegisterProperty()
+    const change = vi.fn()
+    swapAppearance(change)
+
+    expect(started).toHaveLength(1)
+    // The stub calls the callback itself; the real API calls it after taking
+    // the old picture. Either way it is the transition that runs it.
+    expect(change).toHaveBeenCalledOnce()
+  })
+
+  /*
+   * Without a registered property the mask cannot move, so the ripple is not
+   * dressed up at all — the browser's own cross-fade is left to do the work.
+   */
+  it('falls back to a cross-fade where the property cannot be registered', async () => {
+    stubViewTransitions()
+
+    swapAppearance(vi.fn(), { x: 40, y: 60 })
+    resolveReady()
+    await settle()
+
+    expect(started).toHaveLength(1)
+    expect(document.documentElement.classList.contains('is-revealing')).toBe(false)
+    expect(rootFrames).toHaveLength(0)
+  })
+
+  it('ripples out of the origin it was given', async () => {
+    stubViewTransitions()
+    stubRegisterProperty()
+
+    swapAppearance(vi.fn(), { x: 40, y: 60 })
+
+    expect(document.documentElement.classList.contains('is-revealing')).toBe(true)
+    const root = document.documentElement
+    expect(root.style.getPropertyValue('--ripple-x')).toBe('40px')
+    expect(root.style.getPropertyValue('--ripple-y')).toBe('60px')
+
+    resolveReady()
+    await settle()
+
+    expect(rootOptions[0].pseudoElement).toBe('::view-transition-new(root)')
+    expect(rootOptions[0].duration).toBe(token.sweep)
+    expect(rootFrames[0]['--ripple'][0]).toBe('0px')
+  })
+
+  /*
+   * `--ripple` is registered with an initial value of zero, so an animation
+   * that stops applying collapses the mask and shows the old theme through for
+   * the frame before the pseudo-elements are torn down. That is a visible
+   * blink at the end of every swap.
+   */
+  it('holds the ripple open at the end', async () => {
+    stubViewTransitions()
+    stubRegisterProperty()
+
+    swapAppearance(vi.fn(), { x: 40, y: 60 })
+    resolveReady()
+    await settle()
+
+    expect(rootOptions[0].fill).toBe('forwards')
+  })
+
+  /*
+   * One ripple, always. A change nothing on screen asked for — the operating
+   * system swapping theme underneath us — comes from the screen itself rather
+   * than being a different animation.
+   */
+  it('ripples from the middle when there is nowhere to start from', async () => {
+    stubViewTransitions()
+    stubRegisterProperty()
+
+    swapAppearance(vi.fn())
+
+    expect(document.documentElement.classList.contains('is-revealing')).toBe(true)
+    expect(document.documentElement.style.getPropertyValue('--ripple-x')).toBe('500px')
+    expect(document.documentElement.style.getPropertyValue('--ripple-y')).toBe('400px')
+
+    resolveReady()
+    await settle()
+    expect(rootFrames).toHaveLength(1)
+  })
+
+  /*
+   * The soft band is the front of the ripple, so stopping at the far corner
+   * would leave that corner half-way through the change.
+   */
+  it('overshoots by the width of the soft edge', async () => {
+    stubViewTransitions()
+    stubRegisterProperty()
+
+    // Bottom-right corner: the furthest point is the opposite one.
+    swapAppearance(vi.fn(), { x: 1000, y: 800 })
+    resolveReady()
+    await settle()
+
+    const end = rootFrames[0]['--ripple'][1] as string
+    expect(end).toBe(`${Math.hypot(1000, 800) + FEATHER_PX}px`)
+  })
+
+  it('stops rippling once the transition has finished', async () => {
+    stubViewTransitions()
+    stubRegisterProperty()
+    swapAppearance(vi.fn(), { x: 10, y: 10 })
+    resolveReady()
+    await settle()
+
+    expect(document.documentElement.classList.contains('is-revealing')).toBe(false)
+  })
+})
+
+describe('reachFrom', () => {
+  const viewport = { x: 1000, y: 800 }
+
+  it('measures to the furthest corner, not the nearest', () => {
+    expect(reachFrom({ x: 0, y: 0 }, viewport)).toBeCloseTo(Math.hypot(1000, 800))
+    expect(reachFrom({ x: 1000, y: 800 }, viewport)).toBeCloseTo(Math.hypot(1000, 800))
+  })
+
+  it('is shortest from the middle', () => {
+    expect(reachFrom({ x: 500, y: 400 }, viewport)).toBeCloseTo(Math.hypot(500, 400))
+  })
+})
+
+describe('centreOf', () => {
+  it('finds the middle of a control', () => {
+    const el = document.createElement('button')
+    el.getBoundingClientRect = () =>
+      ({ left: 100, top: 200, width: 40, height: 20 }) as DOMRect
+
+    expect(centreOf(el)).toEqual({ x: 120, y: 210 })
   })
 })

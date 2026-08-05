@@ -378,7 +378,7 @@ describe('a window through its own menu', () => {
     await win.load(host)
     await other.load(host)
 
-    await win.menuItems()[3].onPress!()
+    await win.menuItems()[3].onPress!(new MouseEvent('click'))
     // The exit animation resolves on its own frame.
     await new Promise((resolve) => setTimeout(resolve, 0))
 

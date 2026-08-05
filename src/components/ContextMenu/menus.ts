@@ -69,7 +69,8 @@ export interface DesktopMenuState {
 }
 
 export interface DesktopMenuActions {
-  toggleTheme: () => void;
+  /** Handed the press, so the new theme can open out of the item itself. */
+  toggleTheme: (event: MouseEvent) => void;
   showAll: () => void;
   minimizeAll: () => void;
   settings: () => void;

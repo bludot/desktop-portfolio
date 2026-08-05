@@ -2,6 +2,7 @@ import App from "../App";
 import OSElement from "../../utils/OSElement";
 import windowManager from "../../utils/windowManager";
 import Desktop from "../../components/Desktop";
+import { centreOf, swapAppearance } from "../../utils/motion";
 import appearance, {
   DEFAULT_APPEARANCE,
   type Appearance
@@ -252,11 +253,23 @@ class SettingsContent extends OSElement {
     this.subscription = appearance.subscribe(() => this.render());
   }
 
-  /** Persist in the background; the desktop has already repainted. */
-  private change(patch: Partial<Appearance>) {
+  /**
+   * Apply, animate and persist — the one path every control here goes through.
+   *
+   * `from` is the control that was pressed, when there is one: the change then
+   * opens out of it rather than dissolving, which is worth having for a theme
+   * or a wallpaper because those repaint the entire desktop at once.
+   *
+   * Both the change and the write happen inside the callback. It runs after the
+   * old picture has been taken, so anything reading `appearance.get()` outside
+   * it would be reading the state this is replacing.
+   */
+  private change(patch: Partial<Appearance>, from?: Element) {
     this.notice = "";
-    appearance.set(patch);
-    void saveSettings(appearance.get());
+    swapAppearance(() => {
+      appearance.set(patch);
+      void saveSettings(appearance.get());
+    }, from ? centreOf(from) : undefined);
   }
 
   /** The drawn skies, plus whatever has been uploaded, plus the upload. */
@@ -277,7 +290,9 @@ class SettingsContent extends OSElement {
       });
     }
 
-    const element = swatches(options, (id) => this.change({ wallpaper: id }));
+    const element = swatches(options, (id, from) =>
+      this.change({ wallpaper: id }, from)
+    );
     element.appendChild(this.uploadButton());
 
     if (this.notice) {
@@ -379,7 +394,8 @@ class SettingsContent extends OSElement {
               label: choice.label,
               selected: current.theme === choice.value
             })),
-            (value) => this.change({ theme: value as Appearance["theme"] })
+            (value, from) =>
+              this.change({ theme: value as Appearance["theme"] }, from)
           )
         ),
         row(
@@ -398,7 +414,7 @@ class SettingsContent extends OSElement {
               background: accent[appearance.scheme()],
               round: true
             })),
-            (id) => this.change({ accent: id })
+            (id, from) => this.change({ accent: id }, from)
           )
         ),
         row(
@@ -410,7 +426,7 @@ class SettingsContent extends OSElement {
               label: style.name,
               selected: current.corners === id
             })),
-            (value) => this.change({ corners: value })
+            (value, from) => this.change({ corners: value }, from)
           )
         )
       ])
@@ -500,7 +516,9 @@ function row(label: string, hint: string, control: HTMLElement): HTMLElement {
 
 function segmented(
   options: { value: string; label: string; selected: boolean }[],
-  onPick: (value: string) => void
+  // Handed the button as well as the value, so a change can be animated out of
+  // the control that made it.
+  onPick: (value: string, from: HTMLElement) => void
 ): HTMLElement {
   const element = document.createElement("div");
   element.className = "settings-segmented";
@@ -511,7 +529,7 @@ function segmented(
     button.type = "button";
     button.setAttribute("aria-pressed", String(option.selected));
     button.appendChild(document.createTextNode(option.label));
-    button.addEventListener("click", () => onPick(option.value));
+    button.addEventListener("click", () => onPick(option.value, button));
     element.appendChild(button);
   });
 
@@ -526,7 +544,7 @@ function swatches(
     background: string;
     round?: boolean;
   }[],
-  onPick: (id: string) => void
+  onPick: (id: string, from: HTMLElement) => void
 ): HTMLElement {
   const element = document.createElement("div");
   element.className = "settings-swatches";
@@ -540,7 +558,7 @@ function swatches(
     button.setAttribute("aria-label", option.label);
     button.title = option.label;
     button.setAttribute("aria-pressed", String(option.selected));
-    button.addEventListener("click", () => onPick(option.id));
+    button.addEventListener("click", () => onPick(option.id, button));
     element.appendChild(button);
   });
 

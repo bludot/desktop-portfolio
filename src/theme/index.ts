@@ -21,7 +21,7 @@ export {
   DEFAULT_ACCENT
 } from "./accents";
 export { cornerStyles, cornersLayer, DEFAULT_CORNERS } from "./corners";
-export { attachGlobalStyles } from "./global";
+export { attachGlobalStyles, FEATHER_PX } from "./global";
 export {
   wallpapers,
   wallpaperLayer,

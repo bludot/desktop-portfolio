@@ -43,7 +43,7 @@ const makeMainWindows = (desktop: Desktop) => ({
   "experience": ({top, left}: { top?: number, left?: number }) => {
     windowManager.new({
       title: `Experience`,
-      meta: `7 roles \u00b7 2012-now`,
+      meta: `8 roles \u00b7 2012-2026`,
       content: new ExperienceContent(),
       desktop: desktop,
       dimensions: {

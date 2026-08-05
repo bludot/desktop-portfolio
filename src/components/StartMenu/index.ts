@@ -15,6 +15,7 @@ import LoggerWindow from "../../contents/logger";
 import { isNarrow } from "../../utils/utils";
 import FeatureFlagsApp from "../../apps/FeatureFlags";
 import SettingsApp from "../../apps/Settings";
+import ProjectsContent from "../../contents/projects";
 
 class StartMenu extends OSElement {
   menuItems: MenuItem[];
@@ -110,14 +111,14 @@ class StartMenu extends OSElement {
       text: "Projects",
       action: () => {
         windowManager.new({
-          title: `Projects Unavailable`,
-          content: new AlertContent({title: "Projects Unavailable", text: "This window isnt built yet, come back later"}),
+          title: `Projects`,
+          meta: `github`,
+          content: new ProjectsContent(),
           dimensions: {
-            width: 250,
-            height: 180
+            width: 620,
+            height: 540
           },
-          desktop: this.desktop,
-          isDialog: true
+          desktop: this.desktop
         });
       }
     });

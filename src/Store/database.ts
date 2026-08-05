@@ -2,10 +2,12 @@ import Dexie from "dexie";
 // Type-only, so this does not create a runtime cycle with FeatureFlags.ts.
 import type { FeatureFlag } from "./FeatureFlags";
 import type { Setting } from "./Settings";
+import type { CacheEntry } from "./Cache";
 
 export class AppDatabase extends Dexie {
   public featureFlags!: Dexie.Table<FeatureFlag, number>;
   public settings!: Dexie.Table<Setting, string>;
+  public cache!: Dexie.Table<CacheEntry, string>;
 
   constructor() {
     super("AppDatabase");
@@ -19,6 +21,14 @@ export class AppDatabase extends Dexie {
     this.version(2).stores({
       featureFlags: '++id, code, name, enabled',
       settings: 'code',
+    });
+
+    // Kept apart from settings: this is fetched data with an age, not a
+    // preference, and resetting preferences should not clear it.
+    this.version(3).stores({
+      featureFlags: '++id, code, name, enabled',
+      settings: 'code',
+      cache: 'code',
     });
   }
 }

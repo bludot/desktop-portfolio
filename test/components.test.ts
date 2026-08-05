@@ -222,7 +222,6 @@ describe('Taskbar', () => {
     // load() is async and the click handler does not await it.
     await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeTruthy())
 
-    // Opening registers a capture-phase window click that tears the menu down.
     window.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeFalsy())
   })

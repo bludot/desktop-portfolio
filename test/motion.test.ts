@@ -80,7 +80,26 @@ describe('motion', () => {
       expect(calls[0].keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }])
       expect(calls[0].options.duration).toBe(token.base)
       expect(calls[0].options.easing).toBe(token.standard)
-      expect(calls[0].options.fill).toBe('both')
+      expect(calls[0].options.fill).toBe('backwards')
+    })
+
+    // Regression: a filled-forwards animation keeps applying its final
+    // keyframe, and animation values beat inline styles — so an entrance that
+    // ended at `transform: none` pinned every window and dragging did nothing.
+    it('does not hold an entrance transform after it finishes', async () => {
+      const calls = stubAnimate()
+      await motion.windowIn(el)
+      expect(calls[0].options.fill).not.toBe('both')
+      expect(calls[0].options.fill).not.toBe('forwards')
+    })
+
+    // Exits are the exception: they end invisible and the element goes away.
+    it('holds the final frame of an exit', async () => {
+      const calls = stubAnimate()
+      await motion.windowOut(el)
+      await motion.popOut(el)
+      await motion.fadeOut(el)
+      calls.forEach((c) => expect(c.options.fill).toBe('forwards'))
     })
 
     it('lets callers override the defaults', async () => {

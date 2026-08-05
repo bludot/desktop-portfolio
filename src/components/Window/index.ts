@@ -5,7 +5,7 @@ import type {IWindow} from "./interfaces";
 import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
-import isMobile from 'is-mobile'
+import { isNarrow } from "../../utils/utils";
 // `blur` is aliased: the constructor already has a WindowBlur named blur.
 import { blur as blurFx, color, radius, shadow } from "../../theme";
 import ScrollBar from "../Scrollbar";
@@ -31,6 +31,7 @@ class OSWindow extends OSElement {
     width: 400,
     height: 400,
   };
+  /** True when there is not enough width to float a window on a desktop. */
   isMobile: boolean;
   // Bound once at construction: .bind() returns a new function on every call,
   // so binding inline would give removeEventListener a reference that never
@@ -59,7 +60,9 @@ class OSWindow extends OSElement {
                 meta
               }: IWindow) {
     super("window", "window");
-    this.isMobile = isMobile()
+    // Width, not user agent: a narrow browser window has the same problem a
+    // phone does, and a wide tablet does not.
+    this.isMobile = isNarrow()
     const blur = new WindowBlur(60, 8);
     this.scrollbar = new ScrollBar();
     blur.load(this.element);

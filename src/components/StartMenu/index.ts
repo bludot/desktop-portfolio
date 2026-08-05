@@ -11,7 +11,7 @@ import ExperienceContent from "../../contents/experience";
 import AlertContent from "../../contents/alert";
 import Settings from "../../utils/settings";
 import LoggerWindow from "../../contents/logger";
-import isMobile from 'is-mobile'
+import { isNarrow } from "../../utils/utils";
 import FeatureFlagsApp from "../../apps/FeatureFlags";
 
 class StartMenu extends OSElement {
@@ -19,7 +19,7 @@ class StartMenu extends OSElement {
   isMobile: boolean;
   constructor(private readonly desktop: Desktop) {
     super("startmenu", "start-menu");
-    this.isMobile = isMobile()
+    this.isMobile = isNarrow()
     this.style = () => ({
       [this.id]: {
         left: "15px",

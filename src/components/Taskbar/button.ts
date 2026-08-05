@@ -2,6 +2,7 @@ import OSElement from "../../utils/OSElement";
 import type { TaskbarButtonContruct } from "./interfaces";
 import StartMenu from "./../StartMenu";
 import windowManager from "../../utils/windowManager";
+import Switcher from "../Switcher";
 import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
@@ -72,10 +73,62 @@ class TaskbarButtons extends OSElement {
   private subscription?: { unsubscribe: () => void };
   private clock?: HTMLElement;
   private divider!: HTMLElement;
+  private switcher!: HTMLButtonElement;
+  private overview!: Switcher;
   private tick?: ReturnType<typeof setInterval>;
   constructor(desktop: Desktop) {
     super("taskbar-buttons", "taskbar-buttons");
     const startMenu = new StartMenu(desktop);
+
+    /*
+     * The launcher is a toggle, so its state lives here rather than being
+     * inferred. Previously each open registered a fresh pair of window click
+     * listeners and there was no record of whether the menu was already up, so
+     * pressing the button twice raced an open against a close.
+     */
+    let menuOpen = false;
+    let startButton: HTMLElement | null = null;
+
+    const onDocumentClick = (e: MouseEvent) => {
+      // The button toggles itself; anything else dismisses. A click aimed
+      // straight at window has window as its target, and Node.contains throws
+      // on anything that is not a Node.
+      const target = e.target instanceof Node ? e.target : null;
+      if (target && startButton && startButton.contains(target)) return;
+      void closeMenu();
+    };
+
+    const openMenu = async () => {
+      if (menuOpen) return;
+      menuOpen = true;
+
+      const el = startMenu.getElement();
+      // Hidden before it mounts: load() appends at full opacity, so without
+      // this the menu paints at full strength for a frame and only then gets
+      // animated from zero — which reads as a flicker.
+      el.style.opacity = "0";
+
+      /*
+       * Attached now rather than after the await. Capture on window runs before
+       * the event reaches the button, so this click is already past that phase
+       * and cannot re-enter here — whereas deferring registration left a gap in
+       * which a click landed with the menu open and nothing listening.
+       */
+      window.addEventListener("click", onDocumentClick, true);
+
+      await startMenu.load(document.querySelector("#app") as HTMLElement);
+      await motion.popIn(el);
+      el.style.opacity = "";
+    };
+
+    const closeMenu = async () => {
+      if (!menuOpen) return;
+      menuOpen = false;
+      window.removeEventListener("click", onDocumentClick, true);
+      await motion.popOut(startMenu.getElement());
+      await startMenu.unload();
+    };
+
     this.buttons = [
       new TaskbarButton({
         icon: (() => {
@@ -101,6 +154,7 @@ class TaskbarButtons extends OSElement {
           `;
           container.appendChild(icon);
           const span = document.createElement("span");
+          span.className = "taskbar-name";
           span.appendChild(document.createTextNode("James"));
           span.style.cssText = `
             flex: 1 1 auto;
@@ -112,24 +166,21 @@ class TaskbarButtons extends OSElement {
           return container;
         })(),
         action: (element: HTMLElement) => {
-          startMenu
-            .load(document.querySelector("#app") as HTMLElement)
-            .then(() => motion.popIn(startMenu.getElement()));
-          const unload = async () => {
-            await motion.popOut(startMenu.getElement());
-            await startMenu.unload();
-          };
-          window.addEventListener("click", unload, true);
-          window.addEventListener(
-            "click",
-            () => {
-              window.removeEventListener("click", unload, true);
-            },
-            true
-          );
+          startButton = element;
+          void (menuOpen ? closeMenu() : openMenu());
         }
       })
     ];
+    // Read lazily: the taskbar is still being constructed around us.
+    this.overview = new Switcher({
+      taskbarHeight: () => desktop.getTaskbar().getElement().clientHeight,
+      scrimHost: () => desktop.getElement()
+    });
+
+    this.switcher = document.createElement("button");
+    this.switcher.className = "taskbar-switcher";
+    this.switcher.type = "button";
+
     this.divider = document.createElement("span");
     this.divider.className = "taskbar-divider";
     this.divider.setAttribute("aria-hidden", "true");
@@ -220,6 +271,43 @@ class TaskbarButtons extends OSElement {
           color: color.inkSoft,
           fontVariantNumeric: "tabular-nums"
         },
+        "& > .taskbar-switcher": {
+          // Present at every width: it is a shortcut on the desktop and the
+          // only way to change windows once the chips are gone.
+          display: "flex",
+          alignItems: "center",
+          gap: "7px",
+          height: "34px",
+          padding: "0 12px",
+          border: "0",
+          borderRadius: radius.pill,
+          background: color.chromeRaised,
+          color: color.ink,
+          font: "inherit",
+          fontSize: size.small,
+          fontWeight: weight.emphasise,
+          fontVariantNumeric: "tabular-nums",
+          cursor: "pointer"
+        },
+        "& > .taskbar-switcher svg": {
+          width: "15px",
+          height: "15px"
+        },
+        "& > .taskbar-switcher:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "1px"
+        },
+        /*
+         * Width, not user agent. The old layout branched on is-mobile, so a
+         * narrow desktop window kept the full bar and the name, chips and
+         * status all squeezed against each other.
+         */
+        "@media (max-width: 760px)": {
+          "& > .taskbar-open": { display: "none" },
+          "& > .taskbar-divider": { display: "none" },
+          "& .taskbar-name": { display: "none" },
+          "& > .taskbar-status > span:not(:last-child)": { display: "none" }
+        },
         "& .taskbar-pip": {
           width: "6px",
           height: "6px",
@@ -273,6 +361,31 @@ class TaskbarButtons extends OSElement {
     }).format(new Date());
   }
 
+  /**
+   * Below the breakpoint the chip list is replaced by a single button that
+   * opens the same windows as a list. Chips do not shrink gracefully — two of
+   * them already crowd a phone — so they collapse rather than squeeze.
+   */
+  private renderSwitcher() {
+    const open = windowManager.list();
+    this.switcher.textContent = "";
+
+    const icon = new DOMParser().parseFromString(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="8" height="7" rx="1.4"/><rect x="13" y="4" width="8" height="7" rx="1.4"/><rect x="3" y="13" width="8" height="7" rx="1.4"/><rect x="13" y="13" width="8" height="7" rx="1.4"/></svg>`,
+      "image/svg+xml"
+    ).documentElement;
+    this.switcher.appendChild(icon);
+
+    const count = document.createElement("span");
+    count.appendChild(document.createTextNode(String(open.length)));
+    this.switcher.appendChild(count);
+
+    this.switcher.setAttribute(
+      "aria-label",
+      `Show all windows, ${open.length} open`
+    );
+  }
+
   private renderStatus() {
     const available = document.createElement("span");
     const pip = document.createElement("span");
@@ -301,11 +414,20 @@ class TaskbarButtons extends OSElement {
     }
     this.element.appendChild(this.divider);
     this.element.appendChild(this.openList);
+    this.element.appendChild(this.switcher);
     this.element.appendChild(this.status);
 
     this.renderOpen();
+    this.renderSwitcher();
     this.renderStatus();
-    this.subscription = windowManager.subscribe(() => this.renderOpen());
+    this.subscription = windowManager.subscribe(() => {
+      this.renderOpen();
+      this.renderSwitcher();
+    });
+
+    this.switcher.addEventListener("click", () => {
+      void this.overview.toggle(document.querySelector("#app") as HTMLElement);
+    });
   }
 
   async beforeUnload() {

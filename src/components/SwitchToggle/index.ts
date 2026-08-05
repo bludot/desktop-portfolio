@@ -85,7 +85,7 @@ class SwitchToggle extends OSElement {
     });
   }
   async load(element: HTMLElement) {
-    super.load(element);
+    await super.load(element);
   }
   setOnClick(func: Function) {
     this.element.onclick = func.bind(this)

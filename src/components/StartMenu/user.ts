@@ -46,7 +46,7 @@ class User extends OSElement {
     });
 
     const header = document.createElement("h1");
-    header.appendChild(document.createTextNode("James Trotter"));
+    header.appendChild(document.createTextNode("James"));
 
     const subtitle = document.createElement("sub");
     subtitle.appendChild(document.createTextNode("Software Engineer"));

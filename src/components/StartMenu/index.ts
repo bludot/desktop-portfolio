@@ -227,10 +227,19 @@ class StartMenu extends OSElement {
     this.menuItems = [];
   }
 
+  /*
+   * Awaited, which it was not.
+   *
+   * Without the await this resolved before the base class had finished, so a
+   * load that failed — no #app to mount into, an element still carrying a
+   * parent — rejected into nothing and the caller was told it had succeeded.
+   * The launcher then believed a menu was open that had never appeared, which
+   * is why it took two presses to get one: the next press closed the menu that
+   * was not there.
+   */
   async load(element: HTMLElement) {
     if (!this.parent) {
-      super.load(element);
-      // window.addEventListener("click", this.unload.bind(this));
+      await super.load(element);
     }
   }
   /*unload() {

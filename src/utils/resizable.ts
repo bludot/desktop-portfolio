@@ -133,7 +133,7 @@ class ResizableBorder extends OSElement {
     }
   }
   async load(element: HTMLElement) {
-    super.load(element);
+    await super.load(element);
     setTimeout(() => {
       this.element.addEventListener("mousedown", this.mouseDown.bind(this));
     }, 0);

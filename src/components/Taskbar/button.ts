@@ -63,7 +63,7 @@ class TaskbarButton extends OSElement {
   }
 
   async load(element: HTMLElement) {
-    super.load(element);
+    await super.load(element);
     this.element.addEventListener("click", () => {
       this.action(this.element);
     });
@@ -180,7 +180,20 @@ class TaskbarButtons extends OSElement {
         await startMenu.load(document.querySelector("#app") as HTMLElement);
         await motion.popIn(el);
       } catch (error) {
+        /*
+         * An open that failed is not an open. Leaving the state saying it was
+         * is what made the launcher need two presses afterwards: the next one
+         * closed a menu that had never appeared, and only the one after it
+         * opened anything.
+         */
         logger.debug(`open failed: ${error}`);
+        menuOpen = false;
+        window.removeEventListener("click", onDocumentClick, true);
+        try {
+          await startMenu.unload();
+        } catch {
+          // Never loaded, so there is nothing to take down.
+        }
       } finally {
         el.style.opacity = "";
       }

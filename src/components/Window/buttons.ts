@@ -53,7 +53,7 @@ class TopbarButton extends OSElement {
   }
 
   async load(element: HTMLElement) {
-    super.load(element);
+    await super.load(element);
     this.element.addEventListener("click", this.action);
   }
 }
@@ -140,7 +140,7 @@ class WindowButtons extends OSElement {
     });
   }
   async load(element: HTMLElement) {
-    super.load(element);
+    await super.load(element);
     this.buttons.forEach((button) => {
       button.load(this.element);
     });

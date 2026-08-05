@@ -41,7 +41,7 @@ const skills = [
 
 const content = `
 <div>
-  <h2 class="about-name">James Trotter</h2>
+  <h2 class="about-name">James</h2>
   <p class="about-role">Senior Software Engineer</p>
   <p class="about-lead">I am a software engineer passionate about technology. You can see my
   experience by going to the start menu and selecting experience.</p>

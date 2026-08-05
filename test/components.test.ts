@@ -264,6 +264,41 @@ describe('Taskbar', () => {
     await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeTruthy())
   })
 
+  /*
+   * Regression: an open that failed still marked the launcher open, so the
+   * next press closed a menu that had never appeared and only the one after
+   * it opened anything — the "takes two presses" fault. The menu mounts into
+   * #app, so a document without one makes the open throw.
+   */
+  it('is not wedged by an open that fails', async () => {
+    // Earlier tests leave their own #app behind, which would give the menu
+    // somewhere to mount and the open would not fail at all.
+    const existing = [...document.querySelectorAll('#app')] as HTMLElement[]
+    existing.forEach((el) => el.removeAttribute('id'))
+
+    const orphan = document.createElement('div')
+    document.body.appendChild(orphan)
+
+    const buttons = new TaskbarButtons({
+      getElement: () => orphan,
+      getTaskbar: () => ({ getElement: () => document.createElement('div') }),
+    } as any)
+    await buttons.load(orphan)
+    const button = buttons.buttons[0].getElement()
+
+    // No #app anywhere, so opening throws.
+    button.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(orphan.querySelector('#start-menu')).toBeFalsy()
+
+    // With somewhere to mount, the very next press opens it — not the one after.
+    orphan.id = 'app'
+    button.click()
+    await vi.waitFor(() => expect(orphan.querySelector('#start-menu')).toBeTruthy())
+    orphan.remove()
+    existing.forEach((el) => (el.id = 'app'))
+  })
+
   it('ends open on an odd number of clicks', async () => {
     const buttons = new TaskbarButtons(makeDesktop())
     await buttons.load(host)
@@ -350,7 +385,7 @@ describe('StartMenu pieces', () => {
   it('User renders the name and role', async () => {
     const user = new User()
     await user.load(host)
-    expect(user.getElement().textContent).toContain('James Trotter')
+    expect(user.getElement().textContent).toContain('James')
     expect(user.getElement().textContent).toContain('Software Engineer')
   })
 
@@ -373,7 +408,7 @@ describe('StartMenu', () => {
     const menu = new StartMenu(makeDesktop())
     await menu.load(host)
     expect(host.contains(menu.getElement())).toBe(true)
-    expect(menu.getElement().textContent).toContain('James Trotter')
+    expect(menu.getElement().textContent).toContain('James')
   })
 })
 
@@ -381,7 +416,7 @@ describe('contents', () => {
   it('AboutContent renders the about copy', async () => {
     const about = new AboutContent()
     await about.load(host)
-    expect(about.getElement().textContent).toContain('James Trotter')
+    expect(about.getElement().textContent).toContain('James')
     expect(about.getElement().querySelector('a')).toBeTruthy()
   })
 

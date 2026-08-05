@@ -114,7 +114,7 @@ class Desktop extends OSElement {
   }
 
   async load(element: HTMLElement) {
-    super.load(element);
+    await super.load(element);
   }
 
   async startup(bootscreen: {

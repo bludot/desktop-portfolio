@@ -34,7 +34,7 @@ class MenuItem extends OSElement {
     this.element.appendChild(document.createTextNode(this.text));
   }
   async load(element: HTMLElement) {
-    super.load(element);
+    await super.load(element);
     this.element.addEventListener("click", this.action);
   }
 }

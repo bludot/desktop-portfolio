@@ -358,7 +358,7 @@ class OSWindow extends OSElement {
       await this.scrollbar.load(this.element);
     }
 
-    super.load(this.desktop.getElement());
+    await super.load(this.desktop.getElement());
     if (this.windowPosition.top) {
       this.element.style.top = this.windowPosition.top
     }

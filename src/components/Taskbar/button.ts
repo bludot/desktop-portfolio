@@ -166,9 +166,30 @@ class TaskbarButtons extends OSElement {
        */
       window.addEventListener("click", onDocumentClick, true);
 
-      await startMenu.load(document.querySelector("#app") as HTMLElement);
-      await motion.popIn(el);
-      el.style.opacity = "";
+      /*
+       * Whatever happens in between, the menu must not be left hidden.
+       *
+       * It is hidden here and shown again three lines down, and anything that
+       * threw between the two — a load that found the element still mounted,
+       * an animation that rejected — left it in the page at zero opacity with
+       * the state insisting it was open. Nothing appeared, and the next press
+       * closed the invisible menu rather than opening a visible one, so it took
+       * two presses to see anything.
+       */
+      try {
+        await startMenu.load(document.querySelector("#app") as HTMLElement);
+        await motion.popIn(el);
+      } catch (error) {
+        logger.debug(`open failed: ${error}`);
+      } finally {
+        el.style.opacity = "";
+      }
+
+      logger.debug(
+        `open done: mounted=${!!el.parentElement} opacity=${
+          el.isConnected ? getComputedStyle(el).opacity : "n/a"
+        } held=${el.getAnimations?.().length ?? 0}`
+      );
     };
 
     const closeMenu = async () => {
@@ -176,8 +197,21 @@ class TaskbarButtons extends OSElement {
       if (!menuOpen) return;
       menuOpen = false;
       window.removeEventListener("click", onDocumentClick, true);
-      await motion.popOut(startMenu.getElement());
-      await startMenu.unload();
+      /*
+       * The same, in reverse: a failure here must still unload, or the element
+       * stays mounted and the next load() throws because it already has a
+       * parent.
+       */
+      try {
+        await motion.popOut(startMenu.getElement());
+      } catch (error) {
+        logger.debug(`close animation failed: ${error}`);
+      }
+      try {
+        await startMenu.unload();
+      } catch (error) {
+        logger.debug(`close failed: ${error}`);
+      }
     };
 
     this.buttons = [

@@ -58,6 +58,8 @@ interface Cell {
 interface Tile {
   window: OSWindow;
   element: HTMLElement;
+  /** The hit target and label drawn over the window. */
+  tile: HTMLElement;
   /** Inline styles to be handed back untouched on close. */
   previousTransform: string;
   previousTransformOrigin: string;
@@ -67,7 +69,7 @@ interface Tile {
   dx: number;
   dy: number;
   scale: number;
-  /** Where the tile sits in the scrolling content, for culling. */
+  /** Where the tile sits in the scrolling content. */
   top: number;
   height: number;
 }
@@ -225,8 +227,19 @@ class Switcher extends OSElement {
           width: "1px",
           pointerEvents: "none"
         },
+        /*
+         * Fixed, and positioned from script — not scrolled by the container.
+         *
+         * The windows behind these are fixed-position and cannot scroll with
+         * the container at all, so their offset has to be written by hand. Had
+         * the tiles scrolled natively they would have moved on the compositor
+         * while the windows waited for a scroll event, and the labels would
+         * visibly run ahead of the windows they name. Driving both from the
+         * same place costs a frame of lag on the whole overview and keeps them
+         * locked to each other, which is the part anyone can see.
+         */
         "& .switcher-tile": {
-          position: "absolute",
+          position: "fixed",
           margin: "0",
           padding: "0",
           border: "0",
@@ -301,14 +314,21 @@ class Switcher extends OSElement {
     const scrollTop = this.grid.scrollTop;
     const viewportHeight = this.grid.clientHeight;
 
-    this.tiles.forEach((tile) => {
-      tile.element.style.transform = this.transformFor(tile, scrollTop);
-      const offscreen =
-        tile.top + tile.height - scrollTop < 0 ||
-        tile.top - scrollTop > viewportHeight;
-      tile.element.style.visibility = offscreen ? "hidden" : "";
-    });
+    this.tiles.forEach((tile) => this.place(tile, scrollTop, viewportHeight));
   };
+
+  /** Put a window and its tile at the same place, in the same frame. */
+  private place(tile: Tile, scrollTop: number, viewportHeight: number) {
+    tile.element.style.transform = this.transformFor(tile, scrollTop);
+    tile.tile.style.top = `${tile.top - scrollTop}px`;
+
+    const offscreen =
+      tile.top + tile.height - scrollTop < 0 ||
+      tile.top - scrollTop > viewportHeight;
+    const visibility = offscreen ? "hidden" : "";
+    tile.element.style.visibility = visibility;
+    tile.tile.style.visibility = visibility;
+  }
 
   private clearTiles() {
     [...this.grid.querySelectorAll(".switcher-tile")].forEach((t) => t.remove());
@@ -359,9 +379,15 @@ class Switcher extends OSElement {
         1
       );
 
+      const hitTarget = this.buildTile(title, cell, boxHeight, () =>
+        void this.pick(win)
+      );
+      this.grid.appendChild(hitTarget);
+
       const tile: Tile = {
         window: win,
         element: el,
+        tile: hitTarget,
         previousTransform,
         previousTransformOrigin: el.style.transformOrigin,
         previousPointerEvents: el.style.pointerEvents,
@@ -376,10 +402,6 @@ class Switcher extends OSElement {
       el.style.transformOrigin = "0 0";
       // Clicks belong to the tile in front, not to the window's own controls.
       el.style.pointerEvents = "none";
-
-      this.grid.appendChild(
-        this.buildTile(title, cell, boxHeight, () => void this.pick(win))
-      );
 
       return tile;
     });

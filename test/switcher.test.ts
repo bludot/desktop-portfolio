@@ -216,6 +216,58 @@ describe('Switcher', () => {
     expect(scrim.style.zIndex).toBe('0')
   })
 
+  /*
+   * Regression: the tiles used to scroll natively while the windows behind
+   * them — which are fixed-position and cannot scroll with a container — were
+   * moved by a scroll handler. The handler runs after the compositor has
+   * already moved the tiles, so every label ran ahead of the window it named
+   * and ended up printed across the middle of it. Both are positioned from the
+   * same place now, so they can only ever move together.
+   */
+  it('keeps each label locked to its window while scrolling', async () => {
+    vi.spyOn(windowManager, 'list').mockReturnValue([
+      makeWindow('About'),
+      makeWindow('Experience'),
+    ])
+
+    const switcher = build()
+    await switcher.show(host)
+
+    const grid = host.querySelector('.switcher-grid') as HTMLElement
+    const tiles = [...host.querySelectorAll('.switcher-tile')] as HTMLElement[]
+    const offsetY = (t: string) => Number(/translate\([^,]+,\s*(-?[\d.]+)px/.exec(t)?.[1])
+
+    const before = tiles.map((tile, i) => ({
+      tile: parseFloat(tile.style.top),
+      window: offsetY(windows[i].style.transform),
+    }))
+
+    Object.defineProperty(grid, 'scrollTop', { value: 250, configurable: true })
+    grid.dispatchEvent(new Event('scroll'))
+
+    tiles.forEach((tile, i) => {
+      const tileMoved = parseFloat(tile.style.top) - before[i].tile
+      const windowMoved = offsetY(windows[i].style.transform) - before[i].window
+      expect(tileMoved).toBe(-250)
+      expect(windowMoved).toBe(tileMoved)
+    })
+  })
+
+  it('hides a window and its tile together once scrolled past', async () => {
+    vi.spyOn(windowManager, 'list').mockReturnValue([makeWindow('About')])
+
+    const switcher = build()
+    await switcher.show(host)
+    const grid = host.querySelector('.switcher-grid') as HTMLElement
+    const tile = host.querySelector('.switcher-tile') as HTMLElement
+
+    Object.defineProperty(grid, 'scrollTop', { value: 9000, configurable: true })
+    grid.dispatchEvent(new Event('scroll'))
+
+    expect(tile.style.visibility).toBe('hidden')
+    expect(windows[0].style.visibility).toBe('hidden')
+  })
+
   it('picks a window and closes behind it', async () => {
     const about = makeWindow('About')
     vi.spyOn(windowManager, 'list').mockReturnValue([about])

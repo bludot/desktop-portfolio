@@ -1,6 +1,7 @@
 import Logger from "../../Logger";
 import OSElement from "../../utils/OSElement";
 import Taskbar from "./../Taskbar";
+import SelectionLayer from "../Selection";
 
 const logger = new Logger("Desktop");
 
@@ -36,6 +37,7 @@ class Desktop extends OSElement {
   id!: string;
   backgroundColor: string;
   taskbar: Taskbar;
+  selection: SelectionLayer;
   instanceName: string = "Desktop";
 
   constructor({
@@ -49,6 +51,7 @@ class Desktop extends OSElement {
     this.mainElement = mainElement;
     this.backgroundColor = backgroundColor;
     this.taskbar = new Taskbar(this);
+    this.selection = new SelectionLayer();
 
     // Sun first, then ridges back to front, so they layer correctly.
     const sun = document.createElement("div");
@@ -121,6 +124,10 @@ class Desktop extends OSElement {
     logger.debug("Starting desktop");
     this.mainElement.appendChild(this.element);
     this.taskbar.load(this.element);
+    // Mounted beside the desktop rather than inside it: selection rectangles
+    // are viewport coordinates, and a parent that clips or transforms would
+    // move every shape away from the text it belongs to.
+    await this.selection.load(this.mainElement);
     await this.applyStyle();
     // Let the boot sequence finish before it fades; the desktop is already
     // built behind it, so this costs nothing but the animation.

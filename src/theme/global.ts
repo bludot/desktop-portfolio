@@ -21,7 +21,15 @@ export function attachGlobalStyles() {
       "::-moz-selection": {
         background: "var(--selection)",
         color: color.ink
-      }
+      },
+      /*
+       * The selection layer draws its own rounded shapes and turns this off by
+       * putting the class on the root. Gated on the class rather than switched
+       * off outright, so a desktop where that layer never mounts still shows a
+       * selection — square, but visible.
+       */
+      ".has-selection-layer ::selection": { background: "transparent" },
+      ".has-selection-layer ::-moz-selection": { background: "transparent" }
     }
   });
   sheet.attach();

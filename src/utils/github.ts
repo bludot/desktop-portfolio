@@ -192,3 +192,72 @@ export function summarise(repos: Repo[]): AccountSummary {
     lastYear: ends.length ? ends.reduce((a, b) => (a > b ? a : b)) : ""
   };
 }
+
+// --------------------------------------------------------------- readme
+
+const README_TTL_MS = 24 * 60 * 60 * 1000;
+
+export interface RepoDetail {
+  /** Rendered by GitHub, sanitised by us. Empty when there is no README. */
+  readme: string;
+  /** Bytes of source per language, largest first. */
+  languages: [string, number][];
+}
+
+/**
+ * The detail behind one repository.
+ *
+ * GitHub renders the README to HTML for us, which is the whole reason this
+ * window can show a repository rather than link to one: github.com sends
+ * `X-Frame-Options: deny` and `frame-ancestors 'none'`, so an iframe of a repo
+ * page is a blank box, and no amount of trying changes that.
+ *
+ * Both calls are optional — a repository with no README is normal, and the
+ * language breakdown is a nicety — so a failure of either returns empty rather
+ * than sinking the view.
+ */
+export async function fetchRepoDetail(
+  owner: string,
+  name: string
+): Promise<RepoDetail> {
+  const [readme, languages] = await Promise.all([
+    fetch(`https://api.github.com/repos/${owner}/${name}/readme`, {
+      headers: { Accept: "application/vnd.github.html" }
+    })
+      .then((r) => (r.ok ? r.text() : ""))
+      .catch(() => ""),
+    fetch(`https://api.github.com/repos/${owner}/${name}/languages`, {
+      headers: { Accept: "application/vnd.github+json" }
+    })
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch(() => ({}))
+  ]);
+
+  return {
+    readme: typeof readme === "string" ? readme : "",
+    languages: Object.entries(languages as Record<string, number>).sort(
+      (a, b) => b[1] - a[1]
+    )
+  };
+}
+
+export async function loadRepoDetail(
+  owner: string,
+  name: string,
+  options: { now?: number } = {}
+): Promise<RepoDetail> {
+  const now = options.now ?? Date.now();
+  const key = `github:detail:${owner}/${name}`;
+
+  const cached = await readCache<RepoDetail>(key, now);
+  if (cached && now - cached.fetchedAt < README_TTL_MS) return cached.value;
+
+  try {
+    const detail = await fetchRepoDetail(owner, name);
+    await writeCache(key, detail, now);
+    return detail;
+  } catch (error) {
+    if (cached) return cached.value;
+    throw error;
+  }
+}

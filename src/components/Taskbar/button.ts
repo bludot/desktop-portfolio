@@ -6,6 +6,16 @@ import Switcher from "../Switcher";
 import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
+import Logger from "../../Logger";
+
+/*
+ * The launcher has a history of subtle ordering faults — a close landing inside
+ * an open's await, a dismissal misjudging what it hit — and they are the kind
+ * that only show up on someone else's machine. It says what it is doing, so
+ * the next one can be read off the Debugger window (open with ?debug=1) rather
+ * than guessed at.
+ */
+const logger = new Logger("Launcher");
 import { currentRole } from "../../contents/experience/data";
 import appearance from "../../utils/appearance";
 
@@ -116,7 +126,13 @@ class TaskbarButtons extends OSElement {
       // straight at window has window as its target, and Node.contains throws
       // on anything that is not a Node.
       const target = e.target instanceof Node ? e.target : null;
-      if (target && startButton && startButton.contains(target)) return;
+      const inside = !!(target && startButton && startButton.contains(target));
+      logger.debug(
+        `dismiss: inside=${inside} open=${menuOpen} target=${
+          target instanceof Element ? target.tagName.toLowerCase() : "window"
+        }`
+      );
+      if (inside) return;
       void queue(closeMenu);
     };
 
@@ -132,6 +148,7 @@ class TaskbarButtons extends OSElement {
       });
 
     const openMenu = async () => {
+      logger.debug(`open: alreadyOpen=${menuOpen}`);
       if (menuOpen) return;
       menuOpen = true;
 
@@ -155,6 +172,7 @@ class TaskbarButtons extends OSElement {
     };
 
     const closeMenu = async () => {
+      logger.debug(`close: wasOpen=${menuOpen}`);
       if (!menuOpen) return;
       menuOpen = false;
       window.removeEventListener("click", onDocumentClick, true);
@@ -199,6 +217,7 @@ class TaskbarButtons extends OSElement {
           return container;
         })(),
         action: (element: HTMLElement) => {
+          logger.debug(`pressed: open=${menuOpen}`);
           startButton = element;
           void toggleMenu();
         }

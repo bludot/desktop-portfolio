@@ -30,8 +30,19 @@ const repo = (over: Record<string, unknown> = {}) => ({
 })
 
 /** Answers each account in the order ACCOUNTS lists them. */
-const serve = (byAccount: Record<string, unknown[] | Error | undefined>) => {
+const serve = (
+  byAccount: Record<string, unknown[] | Error | undefined>,
+  detail: { readme?: string; languages?: Record<string, number> } = {},
+) => {
   const fetchMock = vi.fn(async (url: string) => {
+    if (url.includes('/readme')) {
+      return detail.readme === undefined
+        ? { ok: false, status: 404, text: async () => '' }
+        : { ok: true, status: 200, text: async () => detail.readme! }
+    }
+    if (url.includes('/languages')) {
+      return { ok: true, status: 200, json: async () => detail.languages ?? {} }
+    }
     const account = ACCOUNTS.find((a) => url.includes(`/users/${a}/`))!
     const answer = byAccount[account]
     if (answer instanceof Error) throw answer
@@ -401,14 +412,88 @@ describe('Projects window', () => {
     expect(host.querySelector('.project-archived')?.textContent).toBe('Archived')
   })
 
-  it('opens each repository on GitHub, safely', async () => {
-    serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] })
+  /*
+   * github.com cannot be framed — it sends `frame-ancestors 'none'` — so a
+   * repository is read through the API and rendered here instead of linked to.
+   */
+  it('opens a repository inside the window rather than leaving', async () => {
+    serve({ thatcatdev: [repo({ name: 'tanrenai' })], 'weeb-vip': [], bludot: [] }, {
+      readme: '<h1>Tanrenai</h1><p>Local models.</p>',
+      languages: { Go: 800, TypeScript: 200 },
+    })
     await open()
 
-    const link = host.querySelector<HTMLAnchorElement>('.project')!
+    // A button, not a link: nothing here navigates away.
+    const row = host.querySelector('.project')!
+    expect(row.tagName).toBe('BUTTON')
+    ;(row as HTMLElement).click()
+
+    await vi.waitFor(() =>
+      expect(host.querySelector('.detail-readme')?.textContent).toContain('Local models.'),
+    )
+    expect(host.querySelector('.detail-name')?.textContent).toContain('tanrenai')
+    // The list is gone while a repository is open.
+    expect(host.querySelectorAll('.project')).toHaveLength(0)
+  })
+
+  it('still offers the real thing, safely', async () => {
+    serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] }, { readme: '<p>hi</p>' })
+    await open()
+    ;(host.querySelector('.project') as HTMLElement).click()
+
+    await vi.waitFor(() => expect(host.querySelector('.detail-external')).toBeTruthy())
+    const link = host.querySelector<HTMLAnchorElement>('.detail-external')!
     expect(link.href).toBe('https://github.com/bludot/thing')
     expect(link.target).toBe('_blank')
     expect(link.rel).toBe('noopener noreferrer')
+  })
+
+  it('goes back to the list', async () => {
+    serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] }, { readme: '<p>hi</p>' })
+    await open()
+    ;(host.querySelector('.project') as HTMLElement).click()
+
+    await vi.waitFor(() => expect(host.querySelector('.detail-back')).toBeTruthy())
+    ;(host.querySelector('.detail-back') as HTMLElement).click()
+
+    expect(host.querySelectorAll('.project')).toHaveLength(1)
+    expect(host.querySelector('.detail-readme')).toBeNull()
+  })
+
+  it('says so when a repository has no README', async () => {
+    serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] })   // readme 404s
+    await open()
+    ;(host.querySelector('.project') as HTMLElement).click()
+
+    await vi.waitFor(() =>
+      expect(host.querySelector('.detail-readme')?.textContent).toContain('No README'),
+    )
+  })
+
+  it('shows the language split as proportions', async () => {
+    serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] }, {
+      readme: '<p>hi</p>',
+      languages: { Go: 750, TypeScript: 250 },
+    })
+    await open()
+    ;(host.querySelector('.project') as HTMLElement).click()
+
+    await vi.waitFor(() => expect(host.querySelector('.detail-legend')).toBeTruthy())
+    expect(host.querySelector('.detail-legend')?.textContent).toBe('Go 75%  ·  TypeScript 25%')
+  })
+
+  // A README is somebody else's markup arriving over the network.
+  it('resolves a README\'s relative images against the repository', async () => {
+    serve({ thatcatdev: [repo({ name: 'tanrenai', owner: { login: 'ThatCatDev' } })], 'weeb-vip': [], bludot: [] }, {
+      readme: '<p><img src="resources/logo.png" alt="logo"></p>',
+    })
+    await open()
+    ;(host.querySelector('.project') as HTMLElement).click()
+
+    await vi.waitFor(() => expect(host.querySelector('.detail-readme img')).toBeTruthy())
+    expect(host.querySelector<HTMLImageElement>('.detail-readme img')!.getAttribute('src')).toBe(
+      'https://raw.githubusercontent.com/ThatCatDev/tanrenai/HEAD/resources/logo.png',
+    )
   })
 
   it('introduces every account when nothing is filtered', async () => {

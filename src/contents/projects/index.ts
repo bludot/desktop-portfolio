@@ -9,10 +9,13 @@ import {
   weight
 } from "../../theme";
 import { observeWidth } from "../../utils/utils";
+import sanitiseHtml from "../../utils/sanitiseHtml";
 import {
   ACCOUNTS,
   loadRepos,
+  loadRepoDetail,
   summarise,
+  type RepoDetail,
   type AccountSummary,
   type Repo,
   type RepoResult
@@ -53,6 +56,10 @@ class ProjectsContent extends OSElement {
   private state: "loading" | "ready" | "failed" = "loading";
   private result?: RepoResult;
   private owner: string = ALL;
+  /** When set, the window shows this repository instead of the list. */
+  private open?: Repo;
+  private detail?: RepoDetail;
+  private detailState: "loading" | "ready" | "failed" = "loading";
 
   constructor() {
     super("projectscontent", "projects-content");
@@ -240,6 +247,138 @@ class ProjectsContent extends OSElement {
         },
         "& .projects-retry:hover": { background: color.hover },
 
+        // ------------------------------------------------------ detail view
+        "& .detail-head": {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "12px",
+          paddingBottom: "14px"
+        },
+        "& .detail-back, & .detail-external": {
+          border: "0",
+          padding: "0",
+          background: "none",
+          color: color.inkSoft,
+          font: "inherit",
+          fontSize: size.small,
+          fontWeight: weight.emphasise,
+          textDecoration: "none",
+          cursor: "pointer"
+        },
+        "& .detail-back:hover, & .detail-external:hover": { color: color.ink },
+        "& .detail-name": {
+          margin: "0",
+          fontSize: size.display,
+          fontWeight: weight.announce,
+          letterSpacing: tracking.display
+        },
+        "& .detail-description": {
+          margin: "7px 0 0",
+          fontSize: size.body,
+          lineHeight: 1.55,
+          color: color.inkSoft
+        },
+        "& .detail-languages": { margin: "14px 0 0" },
+        "& .detail-bar": {
+          display: "flex",
+          height: "6px",
+          borderRadius: radius.chip,
+          overflow: "hidden",
+          background: color.lineSoft
+        },
+        "& .detail-bar > span": { background: color.accent },
+        "& .detail-legend": {
+          margin: "7px 0 0",
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.mono,
+          color: color.inkFaint
+        },
+
+        /*
+         * The README, which is somebody else's markup. Everything here is
+         * deliberately reset rather than inherited: it arrives with GitHub's
+         * own classes and expects GitHub's stylesheet, which we do not have.
+         */
+        "& .detail-readme": {
+          marginTop: "18px",
+          paddingTop: "16px",
+          borderTop: `1px solid ${color.lineSoft}`,
+          fontSize: size.bodyTight,
+          lineHeight: 1.62,
+          color: color.inkSoft,
+          overflowWrap: "anywhere"
+        },
+        "& .detail-readme h1, & .detail-readme h2, & .detail-readme h3": {
+          margin: "20px 0 8px",
+          fontSize: size.heading,
+          fontWeight: weight.announce,
+          letterSpacing: tracking.heading,
+          color: color.ink,
+          lineHeight: 1.3
+        },
+        "& .detail-readme h1": { fontSize: "17px" },
+        "& .detail-readme p": { margin: "0 0 10px" },
+        "& .detail-readme ul, & .detail-readme ol": {
+          margin: "0 0 10px",
+          paddingLeft: "18px"
+        },
+        "& .detail-readme li": { margin: "0 0 4px" },
+        "& .detail-readme a": {
+          color: color.ink,
+          textDecoration: "underline",
+          textUnderlineOffset: "2px",
+          textDecorationColor: color.inkFaint
+        },
+        "& .detail-readme code": {
+          fontFamily: font.mono,
+          fontSize: size.caption,
+          padding: "1px 4px",
+          borderRadius: "3px",
+          background: color.chrome
+        },
+        // Wide code must scroll inside itself, never widen the window.
+        "& .detail-readme pre": {
+          margin: "0 0 12px",
+          padding: "11px 13px",
+          borderRadius: radius.control,
+          background: color.chrome,
+          overflowX: "auto"
+        },
+        "& .detail-readme pre code": {
+          padding: "0",
+          background: "none",
+          whiteSpace: "pre"
+        },
+        "& .detail-readme img": {
+          maxWidth: "100%",
+          height: "auto"
+        },
+        "& .detail-readme blockquote": {
+          margin: "0 0 12px",
+          padding: "2px 0 2px 12px",
+          borderLeft: `2px solid ${color.line}`,
+          color: color.inkFaint
+        },
+        "& .detail-readme table": {
+          display: "block",
+          width: "100%",
+          overflowX: "auto",
+          borderCollapse: "collapse",
+          margin: "0 0 12px"
+        },
+        "& .detail-readme th, & .detail-readme td": {
+          padding: "6px 10px",
+          border: `1px solid ${color.lineSoft}`,
+          textAlign: "left"
+        },
+        "& .detail-readme hr": {
+          border: "0",
+          borderTop: `1px solid ${color.lineSoft}`,
+          margin: "16px 0"
+        },
+
         "&.is-narrow": {
           padding: "15px 14px",
           // Three columns of prose at phone width is four words a line.
@@ -289,8 +428,41 @@ class ProjectsContent extends OSElement {
     return repos.filter((repo) => repo.owner.toLowerCase() === owner);
   }
 
+  /** Open one repository in place of the list. */
+  private show(repo: Repo) {
+    this.open = repo;
+    this.detail = undefined;
+    this.detailState = "loading";
+    this.render();
+
+    void loadRepoDetail(repo.owner, repo.name)
+      .then((detail) => {
+        // Ignore a reply for a repository the reader has already left.
+        if (this.open !== repo) return;
+        this.detail = detail;
+        this.detailState = "ready";
+      })
+      .catch(() => {
+        if (this.open === repo) this.detailState = "failed";
+      })
+      .finally(() => {
+        if (this.open === repo) this.render();
+      });
+  }
+
+  private back() {
+    this.open = undefined;
+    this.detail = undefined;
+    this.render();
+  }
+
   private render() {
     this.body.textContent = "";
+
+    if (this.open) {
+      this.renderDetail(this.open);
+      return;
+    }
 
     if (this.state === "loading" && !this.result) {
       this.body.appendChild(note("Reading GitHub…"));
@@ -352,6 +524,77 @@ class ProjectsContent extends OSElement {
     return wrapper;
   }
 
+  /** One repository, read through the API rather than framed. */
+  private renderDetail(repo: Repo) {
+    const header = document.createElement("div");
+    header.className = "detail-head";
+
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "detail-back";
+    back.appendChild(document.createTextNode("\u2190 All projects"));
+    back.addEventListener("click", () => this.back());
+    header.appendChild(back);
+
+    const external = document.createElement("a");
+    external.className = "detail-external";
+    external.href = repo.url;
+    external.target = "_blank";
+    external.rel = "noopener noreferrer";
+    external.appendChild(document.createTextNode("Open on GitHub \u2197"));
+    header.appendChild(external);
+    this.body.appendChild(header);
+
+    const title = document.createElement("h2");
+    title.className = "detail-name";
+    title.appendChild(document.createTextNode(repo.name));
+    const owner = document.createElement("span");
+    owner.className = "project-owner";
+    owner.appendChild(document.createTextNode(repo.owner));
+    title.appendChild(owner);
+    this.body.appendChild(title);
+
+    if (repo.description) {
+      const description = document.createElement("p");
+      description.className = "detail-description";
+      description.appendChild(document.createTextNode(repo.description));
+      this.body.appendChild(description);
+    }
+
+    const meta = document.createElement("p");
+    meta.className = "project-meta";
+    meta.appendChild(document.createTextNode(metaLine(repo)));
+    this.body.appendChild(meta);
+
+    if (this.detail?.languages.length) {
+      this.body.appendChild(languageBar(this.detail.languages));
+    }
+
+    const readme = document.createElement("div");
+    readme.className = "detail-readme";
+
+    if (this.detailState === "loading") {
+      readme.appendChild(note("Reading the repository\u2026"));
+    } else if (this.detailState === "failed") {
+      readme.appendChild(note("That repository could not be read."));
+    } else if (this.detail?.readme) {
+      /*
+       * GitHub renders the README and sanitises its own output; it is checked
+       * again here because this is still somebody else's markup arriving over
+       * the network. Relative URLs are resolved as GitHub would resolve them,
+       * or a README's images would point at this desktop.
+       */
+      readme.innerHTML = sanitiseHtml(this.detail.readme, {
+        imageBase: `https://raw.githubusercontent.com/${repo.owner}/${repo.name}/HEAD`,
+        linkBase: `https://github.com/${repo.owner}/${repo.name}/blob/HEAD`
+      });
+    } else {
+      readme.appendChild(note("No README in this one."));
+    }
+
+    this.body.appendChild(readme);
+  }
+
   private toolbar(): HTMLElement {
     const bar = document.createElement("div");
     bar.className = "projects-bar";
@@ -399,11 +642,13 @@ class ProjectsContent extends OSElement {
   private row(repo: Repo): HTMLElement {
     const item = document.createElement("li");
 
-    const link = document.createElement("a");
+    // A button, not a link: it opens the repository inside this window.
+    // github.com cannot be framed — it sends `frame-ancestors 'none'` — so the
+    // window reads the repository through the API and renders it here instead.
+    const link = document.createElement("button");
+    link.type = "button";
     link.className = "project";
-    link.href = repo.url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
+    link.addEventListener("click", () => this.show(repo));
 
     const name = document.createElement("p");
     name.className = "project-name";
@@ -437,6 +682,38 @@ class ProjectsContent extends OSElement {
     item.appendChild(link);
     return item;
   }
+}
+
+/** The language split, as one bar. Proportions say more than byte counts. */
+function languageBar(languages: [string, number][]): HTMLElement {
+  const total = languages.reduce((sum, [, bytes]) => sum + bytes, 0) || 1;
+  const shown = languages.slice(0, 5);
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "detail-languages";
+
+  const bar = document.createElement("div");
+  bar.className = "detail-bar";
+  shown.forEach(([, bytes], i) => {
+    const part = document.createElement("span");
+    part.style.width = `${(bytes / total) * 100}%`;
+    part.style.opacity = String(1 - i * 0.17);
+    bar.appendChild(part);
+  });
+  wrapper.appendChild(bar);
+
+  const legend = document.createElement("p");
+  legend.className = "detail-legend";
+  legend.appendChild(
+    document.createTextNode(
+      shown
+        .map(([name, bytes]) => `${name} ${Math.round((bytes / total) * 100)}%`)
+        .join("  ·  ")
+    )
+  );
+  wrapper.appendChild(legend);
+
+  return wrapper;
 }
 
 function card(account: string, summary: AccountSummary): HTMLElement {

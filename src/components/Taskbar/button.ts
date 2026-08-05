@@ -296,6 +296,11 @@ class TaskbarButtons extends OSElement {
           outline: `2px solid ${color.accent}`,
           outlineOffset: "1px"
         },
+        // Still open, just not on screen. Dimmed rather than hidden, or the
+        // taskbar would look like it had lost a window.
+        "& .taskbar-chip.is-minimized": {
+          opacity: 0.55
+        },
         "& .taskbar-chip.is-active": {
           background: color.chromeRaised,
           color: color.ink
@@ -381,7 +386,10 @@ class TaskbarButtons extends OSElement {
     this.openList.textContent = "";
     windowManager.list().forEach((open) => {
       const chip = document.createElement("button");
-      chip.className = "taskbar-chip" + (open.active ? " is-active" : "");
+      chip.className =
+        "taskbar-chip" +
+        (open.active ? " is-active" : "") +
+        (open.minimized ? " is-minimized" : "");
       chip.type = "button";
       const glyph = glyphFor(open.title);
       if (glyph) {
@@ -393,7 +401,20 @@ class TaskbarButtons extends OSElement {
       label.appendChild(document.createTextNode(open.title));
       chip.appendChild(label);
 
-      chip.addEventListener("click", () => open.window.onActive(open.window));
+      /*
+       * The behaviour every taskbar has: bring it back if it is hidden, put it
+       * away if it is already the one in front, and otherwise raise it. Without
+       * the first of those a minimised window would have no way back.
+       */
+      chip.addEventListener("click", () => {
+        if (open.minimized) {
+          void open.window.restore();
+        } else if (open.active) {
+          void open.window.minimize();
+        } else {
+          open.window.onActive(open.window);
+        }
+      });
       this.openList.appendChild(chip);
 
       if (!this.seen.has(open.title)) motion.chipIn(chip);

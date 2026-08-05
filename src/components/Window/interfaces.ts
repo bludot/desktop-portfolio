@@ -16,6 +16,8 @@ export interface IWindow {
   windowPosition: any,
   onActive: (window: OSWindow) => void;
   onClose: (window: OSWindow) => void;
+  /** Told when the window changes in a way the taskbar has to redraw. */
+  onChange?: () => void;
 }
 
 export interface TopbarButtonContruct {

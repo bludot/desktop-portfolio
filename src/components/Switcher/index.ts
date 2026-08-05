@@ -408,7 +408,9 @@ class Switcher extends OSElement {
 
   async show(host: HTMLElement) {
     if (this.open) return;
-    const windows = windowManager.list();
+    // A minimised window is display:none, so it measures zero and would take a
+    // tile showing nothing. The overview is what is on screen.
+    const windows = windowManager.list().filter((open) => !open.minimized);
     this.open = true;
 
     if (!this.parent) await this.load(host);

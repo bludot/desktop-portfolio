@@ -121,6 +121,7 @@ describe('Switcher', () => {
       window: { getElement: () => el, onActive: vi.fn(), title } as any,
       title,
       active: false,
+      minimized: false,
     }
   }
 

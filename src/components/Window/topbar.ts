@@ -9,17 +9,26 @@ class TopBar extends OSElement {
   constructor({
     title,
     close,
+    minimize,
+    maximize,
     isDialog,
     meta
-  }: { title: string; close: () => void; isDialog?: boolean; meta?: string }) {
+  }: {
+    title: string;
+    close: () => void;
+    minimize?: () => void;
+    maximize?: () => void;
+    isDialog?: boolean;
+    meta?: string;
+  }) {
     super("topbar", "topbar");
     this.titlebar = new TitleBar({ title, className: "title-bar", meta });
     this.element.className = "topbar-window";
     this.windowButtons = new WindowButtons({
       isDialog,
       close,
-      maximize: null,
-      minimize: () => {}
+      maximize: maximize ?? null,
+      minimize: minimize ?? (() => undefined)
     });
     // Order matters: the title leads, the controls sit at the trailing edge.
     this.titlebar.load(this.element);

@@ -19,6 +19,8 @@ export interface OpenWindow {
   window: OSWindow;
   title: string;
   active: boolean;
+  /** Hidden, but still open — the taskbar is the only way back to it. */
+  minimized: boolean;
 }
 
 type Listener = () => void;
@@ -59,19 +61,28 @@ class WindowManager {
         window: node.value.window,
         title: node.value.window.title,
         active: node.value.window.active,
+        minimized: node.value.window.minimized,
         seq: node.value.seq
       });
       node = node.next;
     }
     return out
       .sort((a, b) => a.seq - b.seq)
-      .map(({ window, title, active }) => ({ window, title, active }));
+      .map(({ window, title, active, minimized }) => ({
+        window,
+        title,
+        active,
+        minimized
+      }));
   }
   new(windowOptions: Partial<IWindow>) {
     const fullWindowOptions: IWindow = {
       ...windowOptions,
       onActive: this.onActive.bind(this),
-      onClose: this.remove.bind(this)
+      onClose: this.remove.bind(this),
+      // Minimising and maximising change nothing about which window is on top,
+      // but the taskbar still has to redraw.
+      onChange: this.notify.bind(this)
     } as IWindow;
     const oswindowInstance = new OSWindow(fullWindowOptions);
     const oswindow = {

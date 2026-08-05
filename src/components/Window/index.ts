@@ -33,6 +33,17 @@ class OSWindow extends OSElement {
   };
   /** True when there is not enough width to float a window on a desktop. */
   isMobile: boolean;
+  /** Hidden, but still open. The taskbar is the only way back to it. */
+  minimized: boolean = false;
+  maximized: boolean = false;
+  private onChange: () => void = () => undefined;
+  /** Where the window was before it filled the screen. */
+  private restoreBounds?: {
+    left: string;
+    top: string;
+    width: string;
+    height: string;
+  };
   // Bound once at construction: .bind() returns a new function on every call,
   // so binding inline would give removeEventListener a reference that never
   // matches what addEventListener registered.
@@ -51,6 +62,7 @@ class OSWindow extends OSElement {
                 desktop,
                 onActive,
                 onClose,
+                onChange,
                 center = true,
                 dimensions = {
                   width: 400,
@@ -71,6 +83,7 @@ class OSWindow extends OSElement {
     this.desktop = desktop;
 
     this.onActive = onActive;
+    if (onChange) this.onChange = onChange;
     this.onClose = onClose;
     this.center = center;
     this.dimensions = dimensions;
@@ -80,6 +93,8 @@ class OSWindow extends OSElement {
         await motion.windowOut(this.element);
         this.onClose(this);
       },
+      minimize: () => void this.minimize(),
+      maximize: () => this.toggleMaximize(),
       isDialog,
       meta
     });
@@ -116,6 +131,75 @@ class OSWindow extends OSElement {
     this.applyStyle();
   }
 
+  /**
+   * Out of the way, without closing.
+   *
+   * The element is hidden rather than unloaded: its content keeps its state —
+   * a scrolled README, an open file — and comes back exactly as it was.
+   */
+  async minimize(): Promise<void> {
+    if (this.minimized) return;
+    this.minimized = true;
+    this.active = false;
+
+    await motion.windowOut(this.element);
+    this.element.style.display = "none";
+    this.applyStyle();
+    this.onChange();
+  }
+
+  async restore(): Promise<void> {
+    if (!this.minimized) return;
+    this.minimized = false;
+    this.element.style.display = "";
+
+    this.onActive(this);
+    this.onChange();
+    await motion.windowIn(this.element);
+  }
+
+  /**
+   * Fill the desktop, or go back to where it was.
+   *
+   * The taskbar's own top edge is the floor, so a maximised window never hides
+   * the one control that gets you back to the others.
+   */
+  toggleMaximize(): void {
+    if (this.maximized) {
+      this.unmaximize();
+      return;
+    }
+
+    const style = this.element.style;
+    this.restoreBounds = {
+      left: style.left,
+      top: style.top,
+      width: style.width,
+      height: style.height
+    };
+
+    const taskbar = this.desktop.getTaskbar().getElement();
+    style.left = "0px";
+    style.top = "0px";
+    style.width = `${getWindowWidth()}px`;
+    style.height = `${taskbar.offsetTop}px`;
+    // A drag would otherwise carry the old transform into the new geometry.
+    style.transform = "";
+
+    this.maximized = true;
+    this.onActive(this);
+    this.onChange();
+  }
+
+  private unmaximize(): void {
+    if (!this.restoreBounds) return;
+    const { left, top, width, height } = this.restoreBounds;
+    Object.assign(this.element.style, { left, top, width, height });
+    this.restoreBounds = undefined;
+    this.maximized = false;
+    this.onChange();
+  }
+
   setIndex(index: number): void {
 
     this.element.style.zIndex = index.toString();
@@ -138,6 +222,41 @@ class OSWindow extends OSElement {
 
   mousemove(e: MouseEvent): void {
     e.preventDefault();
+
+    /*
+     * Dragging a maximised window puts it back first, keeping the cursor at the
+     * same point along the titlebar it grabbed.
+     *
+     * On the first movement, never on the press. A double-click is two presses,
+     * so doing this on mousedown meant the second press of a double-click
+     * un-maximised the window and the dblclick that followed maximised it
+     * straight back — the window could never be restored, and its saved
+     * position was overwritten in the process.
+     */
+    if (this.maximized) {
+      // Measured from the press, not from this move: the grab point is where
+      // the titlebar was taken hold of, and the window has not shifted since.
+      const before = this.element.getBoundingClientRect();
+      const grip =
+        before.width > 0
+          ? (this.dragStart.pointerX - before.left) / before.width
+          : 0.5;
+      const grabY = this.dragStart.pointerY - before.top;
+
+      this.unmaximize();
+
+      const width = this.element.getBoundingClientRect().width;
+      const left = e.pageX - width * grip;
+      const top = e.pageY - grabY;
+      this.element.style.left = `${left}px`;
+      this.element.style.top = `${top}px`;
+      this.element.style.transform = "";
+
+      // Start the drag again from where the window has just landed.
+      this.dragStart = { pointerX: e.pageX, pointerY: e.pageY, left, top };
+      this.dragDelta = { x: 0, y: 0 };
+      return;
+    }
 
     this.dragDelta = {
       x: e.pageX - this.dragStart.pointerX,
@@ -190,9 +309,17 @@ class OSWindow extends OSElement {
   }
 
   public makeMovable(): void {
-    this.element
-      .querySelector(".topbar-window")!
-      .addEventListener("mousedown", this.onTitlebarMouseDown as EventListener);
+    const titlebar = this.element.querySelector(".topbar-window")!;
+    titlebar.addEventListener(
+      "mousedown",
+      this.onTitlebarMouseDown as EventListener
+    );
+    // The gesture every desktop has. The buttons sit inside the titlebar, so
+    // a double-click on one of them must not also toggle the window.
+    titlebar.addEventListener("dblclick", ((e: MouseEvent) => {
+      if ((e.target as Element)?.closest("topbar-button")) return;
+      this.toggleMaximize();
+    }) as EventListener);
     this.element.addEventListener("mousedown", this.onWindowMouseDown);
   }
 

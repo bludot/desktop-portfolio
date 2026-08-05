@@ -9,6 +9,7 @@ import isMobile from 'is-mobile'
 // `blur` is aliased: the constructor already has a WindowBlur named blur.
 import { blur as blurFx, color, radius, shadow } from "../../theme";
 import ScrollBar from "../Scrollbar";
+import { motion } from "../../utils/motion";
 
 class OSWindow extends OSElement {
   private scrollbar: ScrollBar;
@@ -70,7 +71,15 @@ class OSWindow extends OSElement {
     this.onClose = onClose;
     this.center = center;
     this.dimensions = dimensions;
-    this.topbar = new TopBar({title, close: () => this.onClose(this), isDialog, meta});
+    this.topbar = new TopBar({
+      title,
+      close: async () => {
+        await motion.windowOut(this.element);
+        this.onClose(this);
+      },
+      isDialog,
+      meta
+    });
     this.windowPosition = windowPosition || {}
     this.style = () => ({
       [this.id]: {
@@ -251,6 +260,8 @@ class OSWindow extends OSElement {
         this.makeResizable();
       }, 0)
     }
+
+    motion.windowIn(this.element);
   }
 
   makeResizable() {

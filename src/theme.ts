@@ -92,6 +92,18 @@ export const blur = {
   chrome: "blur(28px) saturate(1.4)",
 } as const;
 
+/**
+ * Motion tokens. Exits are quicker than entrances and use a sharper curve —
+ * arriving should feel considered, leaving should get out of the way.
+ */
+export const motion = {
+  fast: 140,
+  base: 220,
+  slow: 320,
+  standard: "cubic-bezier(.2, .8, .3, 1)",
+  exit: "cubic-bezier(.4, 0, 1, 1)",
+} as const;
+
 export const space = {
   windowPadX: "21px",
   windowPadY: "19px",

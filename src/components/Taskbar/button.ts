@@ -2,6 +2,7 @@ import OSElement from "../../utils/OSElement";
 import type { TaskbarButtonContruct } from "./interfaces";
 import StartMenu from "./../StartMenu";
 import windowManager from "../../utils/windowManager";
+import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
 
@@ -111,8 +112,13 @@ class TaskbarButtons extends OSElement {
           return container;
         })(),
         action: (element: HTMLElement) => {
-          startMenu.load(document.querySelector("#app") as HTMLElement);
-          const unload = startMenu.unload.bind(startMenu);
+          startMenu
+            .load(document.querySelector("#app") as HTMLElement)
+            .then(() => motion.popIn(startMenu.getElement()));
+          const unload = async () => {
+            await motion.popOut(startMenu.getElement());
+            await startMenu.unload();
+          };
           window.addEventListener("click", unload, true);
           window.addEventListener(
             "click",
@@ -228,7 +234,10 @@ class TaskbarButtons extends OSElement {
   }
 
   /** Redraw the chips from whatever the window manager currently holds. */
+  private seen = new Set<string>();
+
   private renderOpen() {
+    const current = new Set(windowManager.list().map((o) => o.title));
     this.openList.textContent = "";
     windowManager.list().forEach((open) => {
       const chip = document.createElement("button");
@@ -246,7 +255,11 @@ class TaskbarButtons extends OSElement {
 
       chip.addEventListener("click", () => open.window.onActive(open.window));
       this.openList.appendChild(chip);
+
+      if (!this.seen.has(open.title)) motion.chipIn(chip);
     });
+
+    this.seen = current;
   }
 
   private renderClock() {

@@ -1,6 +1,5 @@
 import OSElement from "./../../utils/OSElement";
 import { color, font, size, tracking, weight } from "../../theme";
-import { NARROW_PX } from "../../utils/utils";
 import {format } from 'date-fns'
 
 interface ExperienceI {
@@ -129,28 +128,29 @@ class ExperiencesContent extends OSElement {
         },
         /*
          * A 148px column for the company plus prose beside it leaves about
-         * twenty characters a line on a phone. Below the breakpoint the entry
-         * stacks, and the role, dates and badge run together under the company
-         * so stacking costs one line rather than three.
+         * twenty characters a line once the window is narrow. Below the
+         * threshold the entry stacks, and the role, dates and badge run
+         * together under the company so stacking costs one line, not three.
+         *
+         * Keyed to the window's own width, so dragging a window narrow on a
+         * big monitor reflows it just as a phone would.
          */
-        [`@media (max-width: ${NARROW_PX}px)`]: {
-          "& > .entry": {
-            gridTemplateColumns: "1fr",
-            gap: "9px",
-            padding: "13px 0"
-          },
-          "& .entry-meta": {
-            flexDirection: "row",
-            flexWrap: "wrap",
-            alignItems: "baseline",
-            gap: "3px 9px"
-          },
-          "& .entry-company": { flex: "0 0 100%" },
-          "& .entry-dates": { margin: "0" },
-          "& .entry-now": { margin: "0" },
-          "& .entry-detail ul": { paddingLeft: "15px", gap: "7px" },
-          "& .entry-where": { margin: "8px 0 0" }
-        }
+        ".is-narrow & > .entry": {
+          gridTemplateColumns: "1fr",
+          gap: "9px",
+          padding: "13px 0"
+        },
+        ".is-narrow & .entry-meta": {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "baseline",
+          gap: "3px 9px"
+        },
+        ".is-narrow & .entry-company": { flex: "0 0 100%" },
+        ".is-narrow & .entry-dates": { margin: "0" },
+        ".is-narrow & .entry-now": { margin: "0" },
+        ".is-narrow & .entry-detail ul": { paddingLeft: "15px", gap: "7px" },
+        ".is-narrow & .entry-where": { margin: "8px 0 0" }
       }
     });
   }

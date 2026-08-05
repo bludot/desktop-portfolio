@@ -1,6 +1,9 @@
 import OSElement from "./../../utils/OSElement";
 import { color, font, size, space, tracking, weight } from "../../theme";
-import { NARROW_PX } from "../../utils/utils";
+import { observeWidth } from "../../utils/utils";
+
+/** Below this the skill label cannot sit beside its chips. */
+const NARROW_CONTENT_PX = 300;
 
 /**
  * Structure follows the mockup — name, role, lead, rule, skills — but the words
@@ -72,6 +75,8 @@ const content = `
 `;
 
 class AboutContent extends OSElement {
+  private stopObserving?: () => void;
+
   constructor() {
     super("aboutcontent", "about-content");
     const element: HTMLElement = new DOMParser().parseFromString(
@@ -167,7 +172,8 @@ class AboutContent extends OSElement {
           textDecorationColor: color.inkFaint
         },
         "& a:hover": { textDecorationColor: color.ink },
-        [`@media (max-width: ${NARROW_PX}px)`]: {
+        // Set by observeWidth against this window's own width.
+        "&.is-narrow": {
           padding: "15px 14px",
           "& .about-name": { fontSize: "19px" },
           // The measure is already short on a phone; capping it again would
@@ -182,6 +188,17 @@ class AboutContent extends OSElement {
         }
       }
     });
+  }
+
+  async load(element: HTMLElement) {
+    await super.load(element);
+    this.stopObserving = observeWidth(this.element, NARROW_CONTENT_PX);
+  }
+
+  async unload() {
+    this.stopObserving?.();
+    this.stopObserving = undefined;
+    await super.unload();
   }
 }
 

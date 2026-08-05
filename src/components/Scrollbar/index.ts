@@ -74,7 +74,10 @@ class ScrollBar extends OSElement {
           borderRadius: `${TRACK_WIDTH_PX / 2}px`,
           backgroundColor: "rgba(90,90,90,.45)",
           cursor: "pointer",
-          pointerEvents: "auto",
+          // Starts unclickable to match the resting opacity of 0; show() turns
+          // it on. Otherwise a thumb nobody can see still swallows clicks along
+          // the right edge — including the window's resize handle.
+          pointerEvents: "none",
           transition: "background-color 150ms",
           "&:hover": {
             backgroundColor: "rgba(60,60,60,.7)"

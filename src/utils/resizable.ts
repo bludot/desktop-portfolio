@@ -16,7 +16,15 @@ class ResizableBorder extends OSElement {
     super("border", "border");
     this.element.className = "border";
     this.type = type;
-    this.borderWidth = width || 3
+    /*
+     * Inside the window, not hanging off it.
+     *
+     * These used to sit at negative offsets, just outside the border box —
+     * which the window then clipped away with `overflow: hidden`, so no cursor
+     * could ever reach one. Grabbing an edge hit the desktop behind it and
+     * resizing did nothing at all.
+     */
+    this.borderWidth = width || 6
     this.parentDimensions = {
       width: 0,
       height: 0,
@@ -38,7 +46,7 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          top: -this.borderWidth,
+          top: 0,
           left: 0,
           right: 0,
           height: this.borderWidth,
@@ -51,7 +59,7 @@ class ResizableBorder extends OSElement {
           ...style,
           top: 0,
           bottom: 0,
-          right: -this.borderWidth,
+          right: 0,
           width: this.borderWidth,
           cursor: "ew-resize"
         }
@@ -60,7 +68,7 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          bottom: -this.borderWidth,
+          bottom: 0,
           right: 0,
           left: 0,
           height: this.borderWidth,
@@ -73,7 +81,7 @@ class ResizableBorder extends OSElement {
           ...style,
           bottom: 0,
           top: 0,
-          left: -this.borderWidth,
+          left: 0,
           width: this.borderWidth,
           cursor: "ew-resize"
         }
@@ -82,8 +90,8 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          bottom: -this.borderWidth,
-          right: -this.borderWidth,
+          bottom: 0,
+          right: 0,
           width: this.borderWidth,
           height: this.borderWidth,
           cursor: "nwse-resize"
@@ -93,8 +101,8 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          bottom: -this.borderWidth,
-          left: -this.borderWidth,
+          bottom: 0,
+          left: 0,
           width: this.borderWidth,
           height: this.borderWidth,
           cursor: "nesw-resize"
@@ -104,8 +112,8 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          top: -this.borderWidth,
-          left: -this.borderWidth,
+          top: 0,
+          left: 0,
           width: this.borderWidth,
           height: this.borderWidth,
           cursor: "nwse-resize"
@@ -115,8 +123,8 @@ class ResizableBorder extends OSElement {
       this.style = () => ({
         [this.id]: {
           ...style,
-          top: -this.borderWidth,
-          right: -this.borderWidth,
+          top: 0,
+          right: 0,
           width: this.borderWidth,
           height: this.borderWidth,
           cursor: "nesw-resize"

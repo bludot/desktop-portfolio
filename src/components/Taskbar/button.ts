@@ -6,6 +6,7 @@ import Switcher from "../Switcher";
 import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
+import { currentRole } from "../../contents/experience/data";
 
 class TaskbarButton extends OSElement {
   icon: HTMLElement;
@@ -352,12 +353,17 @@ class TaskbarButtons extends OSElement {
 
   private renderClock() {
     if (!this.clock) return;
-    // Bangkok, since that is what the line beside it claims.
+    /*
+     * The viewer's own time, in the viewer's own zone — no `timeZone` here on
+     * purpose. A taskbar clock is read as "what time is it", so pinning it to
+     * where James happens to live told everyone else the wrong time. His
+     * location still sits beside it, but attached to his availability rather
+     * than to the clock.
+     */
     this.clock.textContent = new Intl.DateTimeFormat("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
-      timeZone: "Asia/Bangkok"
+      hour12: false
     }).format(new Date());
   }
 
@@ -387,14 +393,26 @@ class TaskbarButtons extends OSElement {
   }
 
   private renderStatus() {
+    /*
+     * Read off the roles in Experience rather than written down twice. The bar
+     * used to claim availability unconditionally, which would have gone stale
+     * the moment a current role was added and contradicted the window next to
+     * it.
+     */
+    const role = currentRole();
+
     const available = document.createElement("span");
     const pip = document.createElement("span");
     pip.className = "taskbar-pip";
     available.appendChild(pip);
-    available.appendChild(document.createTextNode("Available for work"));
+    available.appendChild(
+      document.createTextNode(
+        role ? `Working at ${role.company}` : "Available for work"
+      )
+    );
 
     const where = document.createElement("span");
-    where.appendChild(document.createTextNode("Bangkok \u00b7 UTC+7"));
+    where.appendChild(document.createTextNode("Fort Lauderdale, FL"));
 
     this.clock = document.createElement("span");
 

@@ -271,6 +271,20 @@ describe('SelectionLayer', () => {
     })
   }
 
+  const selectRectsIn = (
+    container: Node,
+    rects: ReturnType<typeof rect>[],
+    text = 'some words',
+  ) => {
+    const range = { getClientRects: () => rects, commonAncestorContainer: container }
+    ;(document as any).getSelection = () => ({
+      isCollapsed: rects.length === 0,
+      rangeCount: rects.length ? 1 : 0,
+      toString: () => (rects.length ? text : ''),
+      getRangeAt: () => range,
+    })
+  }
+
   const selectRects = (rects: ReturnType<typeof rect>[], text = 'some words') => {
     const range = {
       getClientRects: () => rects,
@@ -349,6 +363,34 @@ describe('SelectionLayer', () => {
 
     selectRects([])
     expect(layer.paint()).toBe(false)
+  })
+
+  /*
+   * Regression: a selection scrolled entirely out of its window has nothing to
+   * draw, and the loop read that as nothing selected and stopped watching — so
+   * scrolling it back into view never brought it back. Only ever the whole
+   * selection, because one line still on screen kept the loop alive.
+   */
+  it('keeps following a selection that has scrolled out of sight', () => {
+    const win = document.createElement('window')
+    document.body.appendChild(win)
+    win.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 400, left: 0, right: 800 }) as DOMRect
+
+    // On screen, then scrolled far above the window, then back again.
+    selectRectsIn(win, [rect(200, 40, 300)])
+    expect(layer.paint()).toBe(true)
+    expect(layer.getElement().querySelectorAll('.selection-bubble')).toHaveLength(1)
+
+    selectRectsIn(win, [rect(-2143, 40, 300)])
+    expect(layer.paint()).toBe(true)
+    expect(layer.getElement().querySelectorAll('.selection-bubble')).toHaveLength(0)
+
+    selectRectsIn(win, [rect(200, 40, 300)])
+    layer.paint()
+    expect(layer.getElement().querySelectorAll('.selection-bubble')).toHaveLength(1)
+
+    win.remove()
   })
 
   it('clears everything when the selection goes', () => {

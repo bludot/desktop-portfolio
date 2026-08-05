@@ -220,15 +220,28 @@ class SelectionLayer extends OSElement {
     this.tracking = 0;
   }
 
-  /** The selection, if there is one worth drawing. */
-  private current(): { lines: Line[]; text: string; node: Node | null } {
+  /**
+   * The selection, and separately how much of it is on screen.
+   *
+   * The two are not the same thing, and treating them as one is what made a
+   * selection scrolled out of view never come back: with nothing to draw, the
+   * loop concluded there was no selection and stopped watching.
+   */
+  private current(): {
+    lines: Line[];
+    text: string;
+    node: Node | null;
+    exists: boolean;
+  } {
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) {
-      return { lines: [], text: "", node: null };
+      return { lines: [], text: "", node: null, exists: false };
     }
 
     const text = selection.toString();
-    if (!text.trim()) return { lines: [], text: "", node: null };
+    if (!text.trim()) {
+      return { lines: [], text: "", node: null, exists: false };
+    }
 
     const range = selection.getRangeAt(0);
     const node = range.commonAncestorContainer;
@@ -238,20 +251,26 @@ class SelectionLayer extends OSElement {
         clipBoundsOf(node)
       ),
       text,
-      node
+      node,
+      exists: true
     };
   }
 
   /** Redraw if anything moved. True while there is still a selection. */
   paint = (): boolean => {
-    const { lines, text, node } = this.current();
+    const { lines, text, node, exists } = this.current();
     this.text = text;
 
     if (!lines.length) {
-      this.shape = "";
-      this.element.textContent = "";
+      if (this.shape) {
+        this.shape = "";
+        this.element.textContent = "";
+      }
       this.popover.hide();
-      return false;
+      // Nothing on screen is not the same as nothing selected. A selection
+      // scrolled out of view is still there, and must still be followed, or it
+      // will not be redrawn when it scrolls back.
+      return exists;
     }
 
     // Sixty times a second, so the cheap check comes first: nothing is written

@@ -2,8 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
-import ProjectsContent, { metaLine } from '../src/contents/projects'
-import { fetchRepos, loadRepos, CACHE_TTL_MS, ACCOUNTS } from '../src/utils/github'
+import ProjectsContent, { metaLine, statsLine } from '../src/contents/projects'
+import {
+  fetchRepos,
+  loadRepos,
+  summarise,
+  CACHE_TTL_MS,
+  ACCOUNTS,
+} from '../src/utils/github'
 import db, { readCache, writeCache } from '../src/Store'
 
 jss.setup(preset())
@@ -77,7 +83,13 @@ describe('fetchRepos', () => {
   it('keeps only the fields the window shows', async () => {
     serve({
       thatcatdev: [
-        repo({ name: 'tanrenai', language: 'Go', stargazers_count: 3, archived: true }),
+        repo({
+          name: 'tanrenai',
+          language: 'Go',
+          stargazers_count: 3,
+          archived: true,
+          created_at: '2026-01-01T00:00:00Z',
+        }),
       ],
       'weeb-vip': [],
       bludot: [],
@@ -93,6 +105,7 @@ describe('fetchRepos', () => {
       stars: 3,
       url: 'https://github.com/bludot/thing',
       pushedAt: '2026-01-01T00:00:00Z',
+      createdAt: '2026-01-01T00:00:00Z',
       archived: true,
     })
   })
@@ -211,6 +224,7 @@ describe('metaLine', () => {
     owner: 'bludot',
     description: '',
     url: '',
+    createdAt: '',
     archived: false,
   }
 
@@ -219,6 +233,99 @@ describe('metaLine', () => {
       .toBe('Go · 4★ · 2026/08')
     expect(metaLine({ ...base, language: '', stars: 0, pushedAt: '' })).toBe('')
     expect(metaLine({ ...base, language: 'Rust', stars: 0, pushedAt: '' })).toBe('Rust')
+  })
+})
+
+describe('summarise', () => {
+  const made = (over: Record<string, unknown> = {}) => ({
+    id: 1,
+    name: 'r',
+    owner: 'bludot',
+    description: '',
+    language: 'Go',
+    stars: 0,
+    url: '',
+    pushedAt: '2026-01-01T00:00:00Z',
+    createdAt: '2024-01-01T00:00:00Z',
+    archived: false,
+    ...over,
+  })
+
+  it('adds up the count and the stars', () => {
+    const summary = summarise([made({ stars: 3 }), made({ stars: 4 })])
+    expect(summary.count).toBe(2)
+    expect(summary.stars).toBe(7)
+  })
+
+  it('ranks the three languages it reaches for most', () => {
+    const summary = summarise([
+      made({ language: 'Go' }),
+      made({ language: 'Go' }),
+      made({ language: 'TypeScript' }),
+      made({ language: 'TypeScript' }),
+      made({ language: 'HCL' }),
+      made({ language: 'Rust' }),
+    ])
+    // Go and TypeScript are level, so they fall back to alphabetical rather
+    // than to whatever order the map happened to be built in.
+    expect(summary.languages).toEqual(['Go', 'TypeScript', 'HCL'])
+  })
+
+  it('ignores repositories GitHub has no language for', () => {
+    expect(summarise([made({ language: '' }), made({ language: 'Go' })]).languages)
+      .toEqual(['Go'])
+  })
+
+  it('spans from the earliest creation to the latest push', () => {
+    const summary = summarise([
+      made({ createdAt: '2012-08-20T00:00:00Z', pushedAt: '2015-01-01T00:00:00Z' }),
+      made({ createdAt: '2021-01-01T00:00:00Z', pushedAt: '2026-08-01T00:00:00Z' }),
+    ])
+    expect(summary.firstYear).toBe('2012')
+    expect(summary.lastYear).toBe('2026')
+  })
+
+  // Entries cached before createdAt existed have only a push date to go on.
+  it('falls back to the push date when there is no creation date', () => {
+    expect(summarise([made({ createdAt: '', pushedAt: '2019-05-05T00:00:00Z' })]).firstYear)
+      .toBe('2019')
+  })
+
+  it('says nothing rather than something wrong about an empty account', () => {
+    expect(summarise([])).toEqual({
+      count: 0,
+      stars: 0,
+      languages: [],
+      firstYear: '',
+      lastYear: '',
+    })
+  })
+})
+
+describe('statsLine', () => {
+  const summary = {
+    count: 20,
+    stars: 1,
+    languages: ['Go', 'TypeScript'],
+    firstYear: '2021',
+    lastYear: '2026',
+  }
+
+  it('reads as one line', () => {
+    expect(statsLine(summary)).toBe('20 repos · 1★ · Go, TypeScript · 2021–2026')
+  })
+
+  it('leaves out what is not there', () => {
+    expect(
+      statsLine({ count: 1, stars: 0, languages: [], firstYear: '', lastYear: '' }),
+    ).toBe('1 repo')
+  })
+
+  it('does not print a span of one year twice', () => {
+    expect(
+      statsLine({ ...summary, firstYear: '2026', lastYear: '2026' }),
+    ).toContain('· 2026')
+    expect(statsLine({ ...summary, firstYear: '2026', lastYear: '2026' })).not.toContain('2026–2026')
   })
 })
 
@@ -302,6 +409,60 @@ describe('Projects window', () => {
     expect(link.href).toBe('https://github.com/bludot/thing')
     expect(link.target).toBe('_blank')
     expect(link.rel).toBe('noopener noreferrer')
+  })
+
+  it('introduces every account when nothing is filtered', async () => {
+    serve({
+      thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
+      'weeb-vip': [repo({ owner: { login: 'weeb-vip' } })],
+      bludot: [repo()],
+    })
+    await open()
+
+    const cards = [...host.querySelectorAll('.projects-card')]
+    expect(cards.map((c) => c.querySelector('.projects-card-name')?.textContent)).toEqual(
+      ['thatcatdev', 'weeb-vip', 'bludot'],
+    )
+    // Each says what it is, which no amount of repository data would tell you.
+    cards.forEach((c) =>
+      expect(c.querySelector('.projects-card-note')?.textContent?.length).toBeGreaterThan(20),
+    )
+  })
+
+  it('narrows to one account when one is picked', async () => {
+    serve({
+      thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
+      'weeb-vip': [repo({ owner: { login: 'weeb-vip' } })],
+      bludot: [],
+    })
+    await open()
+
+    ;([...host.querySelectorAll('.projects-filters button')].find(
+      (b) => b.textContent === 'weeb-vip',
+    ) as HTMLElement).click()
+
+    const cards = [...host.querySelectorAll('.projects-card')]
+    expect(cards).toHaveLength(1)
+    expect(cards[0].querySelector('.projects-card-name')?.textContent).toBe('weeb-vip')
+  })
+
+  it('counts each card against its own account only', async () => {
+    serve({
+      thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
+      'weeb-vip': [
+        repo({ owner: { login: 'weeb-vip' } }),
+        repo({ owner: { login: 'weeb-vip' } }),
+      ],
+      bludot: [],
+    })
+    await open()
+
+    const stats = [...host.querySelectorAll('.projects-card-stats')].map(
+      (s) => s.textContent,
+    )
+    expect(stats[0]).toContain('1 repo')
+    expect(stats[1]).toContain('2 repos')
+    expect(stats[2]).toContain('0 repos')
   })
 
   it('says when GitHub could not be reached, and offers to try again', async () => {

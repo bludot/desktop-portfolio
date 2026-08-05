@@ -24,7 +24,26 @@ export interface Repo {
   stars: number;
   url: string;
   pushedAt: string;
+  createdAt: string;
   archived: boolean;
+}
+
+/**
+ * What a pile of repositories adds up to.
+ *
+ * Derived from the list already in hand rather than asked for separately: the
+ * accounts are two organisations and a personal account, and GitHub gives an
+ * organisation no bio, no description, nothing — so the only thing worth
+ * saying about them has to be worked out from the work itself.
+ */
+export interface AccountSummary {
+  count: number;
+  stars: number;
+  /** The three languages it reaches for most, by repository count. */
+  languages: string[];
+  /** The years it has been active between, or empty if that is unknowable. */
+  firstYear: string;
+  lastYear: string;
 }
 
 export interface RepoIndex {
@@ -59,6 +78,7 @@ function toRepo(raw: Record<string, unknown>): Repo {
     stars: Number(raw.stargazers_count ?? 0),
     url: String(raw.html_url ?? ""),
     pushedAt: String(raw.pushed_at ?? ""),
+    createdAt: String(raw.created_at ?? ""),
     archived: Boolean(raw.archived)
   };
 }
@@ -138,4 +158,37 @@ export async function loadRepos(
     }
     throw error;
   }
+}
+
+const year = (iso: string) => (iso ? iso.slice(0, 4) : "");
+
+/** The shape of a set of repositories, for the note above the list. */
+export function summarise(repos: Repo[]): AccountSummary {
+  const byLanguage = new Map<string, number>();
+  repos.forEach((repo) => {
+    if (!repo.language) return;
+    byLanguage.set(repo.language, (byLanguage.get(repo.language) ?? 0) + 1);
+  });
+
+  const languages = [...byLanguage.entries()]
+    // Count first, then alphabetically, so the order never wobbles between
+    // renders when two languages are level.
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([language]) => language);
+
+  // Cached entries written before createdAt existed fall back to the push date,
+  // which is late but never wrong in the other direction.
+  const starts = repos
+    .map((repo) => year(repo.createdAt) || year(repo.pushedAt))
+    .filter(Boolean);
+  const ends = repos.map((repo) => year(repo.pushedAt)).filter(Boolean);
+
+  return {
+    count: repos.length,
+    stars: repos.reduce((total, repo) => total + repo.stars, 0),
+    languages,
+    firstYear: starts.length ? starts.reduce((a, b) => (a < b ? a : b)) : "",
+    lastYear: ends.length ? ends.reduce((a, b) => (a > b ? a : b)) : ""
+  };
 }

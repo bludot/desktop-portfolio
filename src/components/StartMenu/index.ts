@@ -115,8 +115,8 @@ class StartMenu extends OSElement {
           meta: `github`,
           content: new ProjectsContent(),
           dimensions: {
-            width: 620,
-            height: 540
+            width: 680,
+            height: 560
           },
           desktop: this.desktop
         });

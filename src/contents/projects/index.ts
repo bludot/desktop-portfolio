@@ -9,12 +9,36 @@ import {
   weight
 } from "../../theme";
 import { observeWidth } from "../../utils/utils";
-import { ACCOUNTS, loadRepos, type Repo, type RepoResult } from "../../utils/github";
+import {
+  ACCOUNTS,
+  loadRepos,
+  summarise,
+  type AccountSummary,
+  type Repo,
+  type RepoResult
+} from "../../utils/github";
 
 /** Below this the meta line cannot sit beside the name. */
 const NARROW_CONTENT_PX = 420;
 
 const ALL = "all";
+
+/**
+ * What each account actually is.
+ *
+ * GitHub gives an organisation no bio and no description, and a repository list
+ * on its own does not tell you that one of these is a product and another is
+ * fifteen years of everything. Only James can say that, so he did; the numbers
+ * underneath are worked out from the repositories.
+ */
+const ACCOUNT_NOTES: Record<string, string> = {
+  "weeb-vip":
+    "An anime site, built as a system rather than a repository: the front end, the APIs behind it, the ingest and scheduling that keep it fed, and the infrastructure under all of it.",
+  thatcatdev:
+    "Where the more considered work goes. Fewer repositories, held to a standard — self-hosted AI tooling, inference servers, developer plumbing.",
+  bludot:
+    "The personal account, and the oldest by a decade. Everything is in here: experiments, throwaways, and the ones that turned into something."
+};
 
 /**
  * Everything on GitHub, across the two organisations and the personal account.
@@ -85,6 +109,45 @@ class ProjectsContent extends OSElement {
         "& .projects-filters button:focus-visible": {
           outline: `2px solid ${color.accent}`,
           outlineOffset: "1px"
+        },
+
+        // Side by side when all three are shown, so they read as a set.
+        "& .projects-cards": {
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: "10px",
+          paddingBottom: "16px"
+        },
+        "& .projects-cards.is-single": {
+          gridTemplateColumns: "1fr"
+        },
+        "& .projects-card": {
+          padding: "11px 13px",
+          borderRadius: radius.control,
+          background: color.chrome,
+          boxShadow: `inset 0 0 0 1px ${color.lineSoft}`
+        },
+        "& .projects-card-name": {
+          margin: "0",
+          fontFamily: font.mono,
+          fontSize: size.caption,
+          letterSpacing: tracking.mono,
+          fontWeight: weight.emphasise,
+          color: color.accent
+        },
+        "& .projects-card-note": {
+          margin: "6px 0 0",
+          fontSize: size.caption,
+          lineHeight: 1.5,
+          color: color.inkSoft
+        },
+        "& .projects-card-stats": {
+          margin: "8px 0 0",
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.mono,
+          color: color.inkFaint,
+          fontVariantNumeric: "tabular-nums"
         },
 
         "& .projects-list": {
@@ -179,6 +242,8 @@ class ProjectsContent extends OSElement {
 
         "&.is-narrow": {
           padding: "15px 14px",
+          // Three columns of prose at phone width is four words a line.
+          "& .projects-cards": { gridTemplateColumns: "1fr" },
           "& .project": {
             gridTemplateColumns: "1fr",
             gap: "4px"
@@ -248,6 +313,7 @@ class ProjectsContent extends OSElement {
     }
 
     this.body.appendChild(this.toolbar());
+    this.body.appendChild(this.cards());
 
     const repos = this.visible();
     if (!repos.length) {
@@ -259,6 +325,31 @@ class ProjectsContent extends OSElement {
     list.className = "projects-list";
     repos.forEach((repo) => list.appendChild(this.row(repo)));
     this.body.appendChild(list);
+  }
+
+  /**
+   * A note per account, above the list.
+   *
+   * All three when nothing is filtered, so the shape of the whole thing reads
+   * at a glance; just the one when an account is picked, where there is room
+   * for it to sit full width.
+   */
+  private cards(): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className =
+      this.owner === ALL ? "projects-cards" : "projects-cards is-single";
+
+    const shown = this.owner === ALL ? [...ACCOUNTS] : [this.owner];
+    const all = this.result?.repos ?? [];
+
+    shown.forEach((account) => {
+      const owned = all.filter(
+        (repo) => repo.owner.toLowerCase() === account.toLowerCase()
+      );
+      wrapper.appendChild(card(account, summarise(owned)));
+    });
+
+    return wrapper;
   }
 
   private toolbar(): HTMLElement {
@@ -346,6 +437,47 @@ class ProjectsContent extends OSElement {
     item.appendChild(link);
     return item;
   }
+}
+
+function card(account: string, summary: AccountSummary): HTMLElement {
+  const element = document.createElement("section");
+  element.className = "projects-card";
+
+  const name = document.createElement("h2");
+  name.className = "projects-card-name";
+  name.appendChild(document.createTextNode(account));
+  element.appendChild(name);
+
+  const note = ACCOUNT_NOTES[account];
+  if (note) {
+    const blurb = document.createElement("p");
+    blurb.className = "projects-card-note";
+    blurb.appendChild(document.createTextNode(note));
+    element.appendChild(blurb);
+  }
+
+  const stats = document.createElement("p");
+  stats.className = "projects-card-stats";
+  stats.appendChild(document.createTextNode(statsLine(summary)));
+  element.appendChild(stats);
+
+  return element;
+}
+
+/** Everything worth saying about a set of repositories, in one line. */
+export function statsLine(summary: AccountSummary): string {
+  const parts = [`${summary.count} ${summary.count === 1 ? "repo" : "repos"}`];
+  if (summary.stars > 0) parts.push(`${summary.stars}★`);
+  if (summary.languages.length) parts.push(summary.languages.join(", "));
+
+  if (summary.firstYear && summary.lastYear) {
+    parts.push(
+      summary.firstYear === summary.lastYear
+        ? summary.firstYear
+        : `${summary.firstYear}–${summary.lastYear}`
+    );
+  }
+  return parts.join(" · ");
 }
 
 /** Language, stars and when it was last touched — only what is there. */

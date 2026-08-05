@@ -42,6 +42,14 @@ export const light: Theme = {
     "--desktop": "#f2ddda",
 
     "--hover": "rgba(255, 255, 255, .5)",
+
+    "--code-comment": "#7d7689",
+    "--code-string": "#4f7355",
+    "--code-keyword": "#9c4f6a",
+    "--code-number": "#8a5a2b",
+    "--code-name": "#3f6f7d",
+    "--code-type": "#6b4f8f",
+    "--code-meta": "#6a6272",
     "--scrollbar": "rgba(90, 90, 90, .45)",
     "--scrollbar-hover": "rgba(60, 60, 60, .7)",
 
@@ -82,6 +90,16 @@ export const dark: Theme = {
 
     // A light wash on a dark ground, not the white one, which would glare.
     "--hover": "rgba(255, 255, 255, .09)",
+
+    // Lifted the same way the accent is: the paper hues turn to mud on a dark
+    // ground and code is mostly small text.
+    "--code-comment": "#8a8399",
+    "--code-string": "#8fc79c",
+    "--code-keyword": "#e294ac",
+    "--code-number": "#dda76a",
+    "--code-name": "#7cc0d1",
+    "--code-type": "#b9a0e0",
+    "--code-meta": "#a9a2b8",
     "--scrollbar": "rgba(222, 216, 234, .32)",
     "--scrollbar-hover": "rgba(236, 231, 242, .58)",
 

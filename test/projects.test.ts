@@ -117,6 +117,7 @@ describe('fetchRepos', () => {
       url: 'https://github.com/bludot/thing',
       pushedAt: '2026-01-01T00:00:00Z',
       createdAt: '2026-01-01T00:00:00Z',
+      size: 0,
       archived: true,
     })
   })
@@ -236,6 +237,7 @@ describe('metaLine', () => {
     description: '',
     url: '',
     createdAt: '',
+    size: 0,
     archived: false,
   }
 
@@ -258,6 +260,7 @@ describe('summarise', () => {
     url: '',
     pushedAt: '2026-01-01T00:00:00Z',
     createdAt: '2024-01-01T00:00:00Z',
+    size: 0,
     archived: false,
     ...over,
   })
@@ -466,7 +469,9 @@ describe('Projects window', () => {
     ;(host.querySelector('.project') as HTMLElement).click()
 
     await vi.waitFor(() =>
-      expect(host.querySelector('.detail-readme')?.textContent).toContain('No README'),
+      expect(host.querySelector('.detail-readme')?.textContent).toContain(
+        'Nothing written down',
+      ),
     )
   })
 
@@ -496,7 +501,12 @@ describe('Projects window', () => {
     )
   })
 
-  it('introduces every account when nothing is filtered', async () => {
+  /*
+   * The accounts sit in a rail rather than in cards stacked above the list.
+   * The window is wide and short; the cards were spending a quarter of its
+   * height and leaving the width unused.
+   */
+  it('lists every account in the rail, with All first', async () => {
     serve({
       thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
       'weeb-vip': [repo({ owner: { login: 'weeb-vip' } })],
@@ -504,34 +514,11 @@ describe('Projects window', () => {
     })
     await open()
 
-    const cards = [...host.querySelectorAll('.projects-card')]
-    expect(cards.map((c) => c.querySelector('.projects-card-name')?.textContent)).toEqual(
-      ['thatcatdev', 'weeb-vip', 'bludot'],
-    )
-    // Each says what it is, which no amount of repository data would tell you.
-    cards.forEach((c) =>
-      expect(c.querySelector('.projects-card-note')?.textContent?.length).toBeGreaterThan(20),
-    )
+    const names = [...host.querySelectorAll('.rail-name')].map((n) => n.textContent)
+    expect(names).toEqual(['All', 'thatcatdev', 'weeb-vip', 'bludot'])
   })
 
-  it('narrows to one account when one is picked', async () => {
-    serve({
-      thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
-      'weeb-vip': [repo({ owner: { login: 'weeb-vip' } })],
-      bludot: [],
-    })
-    await open()
-
-    ;([...host.querySelectorAll('.projects-filters button')].find(
-      (b) => b.textContent === 'weeb-vip',
-    ) as HTMLElement).click()
-
-    const cards = [...host.querySelectorAll('.projects-card')]
-    expect(cards).toHaveLength(1)
-    expect(cards[0].querySelector('.projects-card-name')?.textContent).toBe('weeb-vip')
-  })
-
-  it('counts each card against its own account only', async () => {
+  it('counts each account against its own repositories', async () => {
     serve({
       thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
       'weeb-vip': [
@@ -542,12 +529,69 @@ describe('Projects window', () => {
     })
     await open()
 
-    const stats = [...host.querySelectorAll('.projects-card-stats')].map(
-      (s) => s.textContent,
-    )
-    expect(stats[0]).toContain('1 repo')
-    expect(stats[1]).toContain('2 repos')
-    expect(stats[2]).toContain('0 repos')
+    const counts = [...host.querySelectorAll('.rail-count')].map((c) => c.textContent)
+    expect(counts[0]).toBe('3 repos')
+    expect(counts[1]).toContain('1')
+    expect(counts[2]).toContain('2')
+    expect(counts[3]).toContain('0')
+  })
+
+  // Read where it applies, rather than three of them at once.
+  it('shows the note only under the account that is selected', async () => {
+    serve({
+      thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
+      'weeb-vip': [repo({ owner: { login: 'weeb-vip' } })],
+      bludot: [],
+    })
+    await open()
+
+    expect(host.querySelectorAll('.rail-note')).toHaveLength(0)
+
+    const railFor = (label: string) =>
+      [...host.querySelectorAll('.rail-item')].find(
+        (item) => item.querySelector('.rail-name')?.textContent === label,
+      ) as HTMLElement
+
+    railFor('weeb-vip').click()
+
+    const notes = [...host.querySelectorAll('.rail-note')]
+    expect(notes).toHaveLength(1)
+    expect(railFor('weeb-vip').contains(notes[0])).toBe(true)
+    expect(notes[0].textContent).toContain('anime site')
+  })
+
+  it('filters the list from the rail', async () => {
+    serve({
+      thatcatdev: [repo({ name: 'tanrenai', owner: { login: 'ThatCatDev' } })],
+      'weeb-vip': [repo({ name: 'anime-api', owner: { login: 'weeb-vip' } })],
+      bludot: [],
+    })
+    await open()
+    expect(host.querySelectorAll('.project')).toHaveLength(2)
+
+    ;([...host.querySelectorAll('.rail-item')].find(
+      (i) => i.querySelector('.rail-name')?.textContent === 'thatcatdev',
+    ) as HTMLElement).click()
+
+    expect(host.querySelectorAll('.project')).toHaveLength(1)
+    expect(host.querySelector('.project-name')?.textContent).toContain('tanrenai')
+  })
+
+  // Once the rail has narrowed to one account, repeating it on every row is noise.
+  it('drops the owner from each row when an account is selected', async () => {
+    serve({
+      thatcatdev: [repo({ owner: { login: 'ThatCatDev' } })],
+      'weeb-vip': [],
+      bludot: [],
+    })
+    await open()
+    expect(host.querySelector('.project-owner')).toBeTruthy()
+
+    ;([...host.querySelectorAll('.rail-item')].find(
+      (i) => i.querySelector('.rail-name')?.textContent === 'thatcatdev',
+    ) as HTMLElement).click()
+
+    expect(host.querySelector('.project-owner')).toBeNull()
   })
 
   it('says when GitHub could not be reached, and offers to try again', async () => {
@@ -560,7 +604,7 @@ describe('Projects window', () => {
     content = new ProjectsContent()
     await content.load(host)
     await vi.waitFor(() =>
-      expect(host.querySelector('.projects-retry')).toBeTruthy(),
+      expect(host.querySelector('.projects-action')).toBeTruthy(),
     )
     expect(host.querySelector('.projects-note')?.textContent).toContain(
       'could not be reached',
@@ -568,7 +612,7 @@ describe('Projects window', () => {
 
     // Retry, this time with GitHub answering.
     serve({ thatcatdev: [repo({ name: 'back' })], 'weeb-vip': [], bludot: [] })
-    host.querySelector<HTMLElement>('.projects-retry')!.click()
+    host.querySelector<HTMLElement>('.projects-action')!.click()
 
     await vi.waitFor(() => expect(host.querySelectorAll('.project')).toHaveLength(1))
   })

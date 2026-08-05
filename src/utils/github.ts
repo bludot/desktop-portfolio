@@ -25,6 +25,8 @@ export interface Repo {
   url: string;
   pushedAt: string;
   createdAt: string;
+  /** Kilobytes, as GitHub reports it. */
+  size: number;
   archived: boolean;
 }
 
@@ -79,6 +81,7 @@ function toRepo(raw: Record<string, unknown>): Repo {
     url: String(raw.html_url ?? ""),
     pushedAt: String(raw.pushed_at ?? ""),
     createdAt: String(raw.created_at ?? ""),
+    size: Number(raw.size ?? 0),
     archived: Boolean(raw.archived)
   };
 }
@@ -260,4 +263,143 @@ export async function loadRepoDetail(
     if (cached) return cached.value;
     throw error;
   }
+}
+
+// ----------------------------------------------------------------- files
+
+/** One entry in a repository's tree. */
+export interface TreeEntry {
+  /** Full path from the repository root. */
+  path: string;
+  /** Just the last segment. */
+  name: string;
+  type: "blob" | "tree";
+  size: number;
+}
+
+const TREE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Every path in a repository, in one request.
+ *
+ * The recursive tree endpoint returns the whole thing — paths, types and sizes
+ * — so browsing costs one call and then nothing. Reading a file costs nothing
+ * either: raw.githubusercontent.com is a different host and does not count
+ * against the API's sixty an hour.
+ *
+ * GitHub truncates the response for enormous repositories. None of these come
+ * close, but the flag is passed through rather than ignored so the window can
+ * say so if it ever happens.
+ */
+export async function fetchTree(
+  owner: string,
+  name: string
+): Promise<{ entries: TreeEntry[]; truncated: boolean }> {
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${name}/git/trees/HEAD?recursive=1`,
+    { headers: { Accept: "application/vnd.github+json" } }
+  );
+  if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+
+  const body = await response.json();
+  const raw: Record<string, unknown>[] = Array.isArray(body?.tree) ? body.tree : [];
+
+  const entries = raw
+    .filter((e) => e.type === "blob" || e.type === "tree")
+    .map((e) => {
+      const path = String(e.path ?? "");
+      return {
+        path,
+        name: path.slice(path.lastIndexOf("/") + 1),
+        type: e.type as "blob" | "tree",
+        size: Number(e.size ?? 0)
+      };
+    });
+
+  return { entries, truncated: Boolean(body?.truncated) };
+}
+
+export async function loadTree(
+  owner: string,
+  name: string,
+  options: { now?: number } = {}
+): Promise<{ entries: TreeEntry[]; truncated: boolean }> {
+  const now = options.now ?? Date.now();
+  const key = `github:tree:${owner}/${name}`;
+
+  const cached = await readCache<{ entries: TreeEntry[]; truncated: boolean }>(key, now);
+  if (cached && now - cached.fetchedAt < TREE_TTL_MS) return cached.value;
+
+  try {
+    const tree = await fetchTree(owner, name);
+    await writeCache(key, tree, now);
+    return tree;
+  } catch (error) {
+    if (cached) return cached.value;
+    throw error;
+  }
+}
+
+/**
+ * What sits directly inside a directory — not the whole subtree.
+ *
+ * The tree arrives flat, so a level is everything prefixed by the directory
+ * with no further slash after it. Directories first, then files, each
+ * alphabetically, which is the order every file browser uses.
+ */
+export function listDirectory(entries: TreeEntry[], dir: string): TreeEntry[] {
+  const prefix = dir ? `${dir}/` : "";
+
+  return entries
+    .filter((entry) => {
+      if (!entry.path.startsWith(prefix)) return false;
+      const rest = entry.path.slice(prefix.length);
+      return rest.length > 0 && !rest.includes("/");
+    })
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === "tree" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+/** How many entries a directory holds, for the count beside a folder. */
+export function countInside(entries: TreeEntry[], dir: string): number {
+  const prefix = `${dir}/`;
+  return entries.filter(
+    (entry) => entry.path.startsWith(prefix) && entry.type === "blob"
+  ).length;
+}
+
+export const rawUrl = (owner: string, name: string, path: string) =>
+  `https://raw.githubusercontent.com/${owner}/${name}/HEAD/${path}`;
+
+/** Beyond this a file tells you nothing and costs a second of frozen window. */
+export const MAX_TEXT_BYTES = 200_000;
+
+const IMAGE = /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp)$/i;
+const BINARY =
+  /\.(zip|gz|tgz|tar|7z|rar|pdf|woff2?|ttf|otf|eot|mp4|webm|mov|mp3|wav|ogg|wasm|exe|dll|so|dylib|jar|class|bin|db|sqlite|ico|psd|ai|sketch)$/i;
+/** Machine-written and enormous; nobody reads these in a portfolio. */
+const GENERATED = /^(bun\.lock|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|go\.sum|Cargo\.lock|composer\.lock)$/i;
+
+export type FileKind = "text" | "image" | "binary" | "too-large" | "generated";
+
+/** What a file is, decided before anything is fetched. */
+export function classify(entry: TreeEntry): FileKind {
+  if (IMAGE.test(entry.name)) return "image";
+  if (GENERATED.test(entry.name)) return "generated";
+  if (BINARY.test(entry.name)) return "binary";
+  if (entry.size > MAX_TEXT_BYTES) return "too-large";
+  return "text";
+}
+
+/** A file's text, straight from raw. Never cached — it is not rate limited. */
+export async function fetchFile(
+  owner: string,
+  name: string,
+  path: string
+): Promise<string> {
+  const response = await fetch(rawUrl(owner, name, path));
+  if (!response.ok) throw new Error(`Could not read ${path}`);
+  return response.text();
 }

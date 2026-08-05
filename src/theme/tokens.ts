@@ -40,6 +40,24 @@ export const color = {
   scrollbarHover: "var(--scrollbar-hover)",
 } as const;
 
+/**
+ * Source code colours.
+ *
+ * Deliberately drawn from the accent family's hues rather than a stock
+ * highlighter palette, so a file reads as part of this desktop. The one-accent
+ * rule does not apply here: syntax colour is data about the text, the way a
+ * chart's series colours are, not decoration.
+ */
+export const code = {
+  comment: "var(--code-comment)",
+  string: "var(--code-string)",
+  keyword: "var(--code-keyword)",
+  number: "var(--code-number)",
+  name: "var(--code-name)",
+  type: "var(--code-type)",
+  meta: "var(--code-meta)",
+} as const;
+
 /** 1.25 scale, capped at the sizes the product actually needs. */
 export const size = {
   display: "22px",

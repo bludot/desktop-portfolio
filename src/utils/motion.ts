@@ -209,6 +209,27 @@ export const motion = {
     );
   },
 
+  /**
+   * Moving between views inside a window — a list to a repository, a folder to
+   * a file, one tab to another.
+   *
+   * Direction carries the sense of it: going deeper arrives from the right,
+   * coming back from the left, which is the same grammar every phone uses. It
+   * is deliberately shorter than a window entrance; this is a step, not an
+   * arrival.
+   */
+  viewIn(el: HTMLElement, from: "right" | "left" = "right") {
+    const offset = from === "right" ? 10 : -10;
+    return play(
+      el,
+      [
+        { opacity: 0, transform: `translateX(${offset}px)` },
+        { opacity: 1, transform: "translateX(0)" }
+      ],
+      { duration: token.fast, easing: token.standard }
+    );
+  },
+
   /** A taskbar chip appearing as its window opens. */
   chipIn(el: HTMLElement) {
     return play(

@@ -23,7 +23,7 @@ import AboutContent from '../src/contents/about'
 import AlertContent from '../src/contents/alert'
 import LoggerWindow from '../src/contents/logger'
 import ExperienceContent from '../src/contents/experience'
-import ExperiencesContent from '../src/contents/experience/experiences'
+import ExperiencesContent, { duration } from '../src/contents/experience/experiences'
 import { GlobalLogger } from '../src/Logger'
 import { Log } from '../src/Logger/Log'
 import { LOG_TYPE } from '../src/Logger/interfaces'
@@ -274,6 +274,45 @@ describe('Taskbar', () => {
     button.click()
 
     await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeTruthy())
+  })
+})
+
+describe('duration', () => {
+  const jan = (year: number, month: number) => new Date(year, month - 1, 1)
+
+  /*
+   * Counted inclusively, the way a CV counts it: Oct 2023 to Jul 2026 is
+   * thirty-four months, not thirty-three. A duration a month shorter than the
+   * one on his CV would read as a mistake.
+   */
+  it('includes both end months', () => {
+    expect(duration(jan(2023, 10), jan(2026, 7))).toBe('2 yrs 10 mos')
+    expect(duration(jan(2021, 9), jan(2023, 5))).toBe('1 yr 9 mos')
+  })
+
+  it('says only the part that applies', () => {
+    expect(duration(jan(2020, 1), jan(2020, 8))).toBe('8 mos')
+    expect(duration(jan(2020, 1), jan(2020, 11))).toBe('11 mos')
+    expect(duration(jan(2020, 1), jan(2020, 1))).toBe('1 mo')
+    expect(duration(jan(2020, 1), jan(2020, 2))).toBe('2 mos')
+  })
+
+  it('gets the singulars right', () => {
+    expect(duration(jan(2020, 1), jan(2021, 1))).toBe('1 yr 1 mo')
+    expect(duration(jan(2020, 1), jan(2020, 12))).toBe('1 yr')
+  })
+
+  it('drops a zero remainder rather than printing "0 mos"', () => {
+    expect(duration(jan(2020, 1), jan(2020, 11))).not.toContain('yr')
+    expect(duration(jan(2019, 2), jan(2021, 1))).toBe('2 yrs')
+  })
+
+  it('measures an open-ended role up to today', () => {
+    expect(duration(jan(2024, 1), 'present', jan(2026, 6))).toBe('2 yrs 6 mos')
+  })
+
+  it('says nothing rather than something absurd about a backwards range', () => {
+    expect(duration(jan(2026, 1), jan(2020, 1))).toBe('')
   })
 })
 

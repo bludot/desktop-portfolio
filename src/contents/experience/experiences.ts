@@ -11,6 +11,37 @@ interface ExperienceI {
   end: Date | string
 }
 
+/**
+ * How long a role lasted, counted the way a CV counts it.
+ *
+ * Both end months are included — Oct 2023 to Jul 2026 is thirty-four months,
+ * not thirty-three — because that is what everyone else means by it, and a
+ * duration a month shorter than the one on his CV would look like a mistake.
+ *
+ * An open-ended role is measured to today.
+ */
+export function duration(
+  start: Date,
+  end: Date | string,
+  now: Date = new Date()
+): string {
+  const finish = typeof end === "string" ? now : end;
+  const months =
+    (finish.getFullYear() - start.getFullYear()) * 12 +
+    (finish.getMonth() - start.getMonth()) +
+    1;
+
+  if (months < 1) return "";
+
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  const parts: string[] = [];
+
+  if (years) parts.push(`${years} ${years === 1 ? "yr" : "yrs"}`);
+  if (rest) parts.push(`${rest} ${rest === 1 ? "mo" : "mos"}`);
+  return parts.join(" ");
+}
+
 const content = ({
                    position,
                    company,
@@ -24,6 +55,7 @@ const content = ({
       <h2 class="entry-company">${company}</h2>
       <p class="entry-role">${position}</p>
       <p class="entry-dates">${format(start, "MM/yyyy")} &rarr; ${typeof end == "string" ? end : format(end, "MM/yyyy")}</p>
+      <p class="entry-length">${duration(start, end)}</p>
       ${typeof end == "string" ? `<p class="entry-now">Current</p>` : ``}
     </div>
     <div class="entry-detail">
@@ -82,6 +114,17 @@ class ExperiencesContent extends OSElement {
         },
         "& .entry-dates": {
           margin: "3px 0 0",
+          padding: "0",
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.mono,
+          color: color.inkFaint,
+          fontVariantNumeric: "tabular-nums"
+        },
+        // Sits under the dates rather than beside them: together they run past
+        // the width of the column the meta gets.
+        "& .entry-length": {
+          margin: "1px 0 0",
           padding: "0",
           fontFamily: font.mono,
           fontSize: size.micro,
@@ -148,6 +191,7 @@ class ExperiencesContent extends OSElement {
         },
         ".is-narrow & .entry-company": { flex: "0 0 100%" },
         ".is-narrow & .entry-dates": { margin: "0" },
+        ".is-narrow & .entry-length": { margin: "0" },
         ".is-narrow & .entry-now": { margin: "0" },
         ".is-narrow & .entry-detail ul": { paddingLeft: "15px", gap: "7px" },
         ".is-narrow & .entry-where": { margin: "8px 0 0" }

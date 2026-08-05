@@ -167,6 +167,16 @@ class ProjectsContent extends OSElement {
         // The whole row is the link: a repository name is a small target, and
         // there is nothing else in the row to click.
         "& .project": {
+          // A button, unlike the anchor this used to be, shrinks to its content
+          // and centres its text. Without these three every row came out a
+          // different width with its description centred under the name.
+          width: "100%",
+          textAlign: "left",
+          font: "inherit",
+          // A button also brings its own grey face and border. Cleared before
+          // the rule's own border-top, or the other three edges keep the UA one.
+          border: "0",
+          background: "none",
           display: "grid",
           gridTemplateColumns: "1fr auto",
           gap: "6px 16px",

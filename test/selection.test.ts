@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
-import SelectionLayer, { asQuote, mergeLines, windowTitleOf } from '../src/components/Selection'
+import SelectionLayer, {
+  asQuote,
+  clipBoundsOf,
+  clipLines,
+  mergeLines,
+  windowTitleOf,
+} from '../src/components/Selection'
 import Popover, { place } from '../src/components/Popover'
 
 jss.setup(preset())
@@ -42,6 +48,63 @@ describe('mergeLines', () => {
 
   it('says nothing about nothing', () => {
     expect(mergeLines([])).toEqual([])
+  })
+})
+
+describe('clipping', () => {
+  const bounds = { top: 100, bottom: 400, left: 50, right: 500 }
+
+  /*
+   * Text scrolled out of a window keeps its laid-out position, so its
+   * rectangles carry on past the window's top edge — one screenful puts them
+   * two thousand pixels above it. Unclipped, they would be painted there, over
+   * whatever else is on the desktop.
+   */
+  it('drops a line that has scrolled out of its window', () => {
+    expect(clipLines([rect(-2143, 60, 300)], bounds)).toEqual([])
+    expect(clipLines([rect(900, 60, 300)], bounds)).toEqual([])
+  })
+
+  it('trims a line that is only half out', () => {
+    const [line] = clipLines([rect(90, 60, 300, 30)], bounds)
+    expect(line.top).toBe(100)
+    expect(line.bottom).toBe(120)
+  })
+
+  it('trims sideways too, for a window narrower than the text', () => {
+    const [line] = clipLines([rect(200, 20, 900)], bounds)
+    expect(line.left).toBe(50)
+    expect(line.right).toBe(500)
+  })
+
+  it('leaves a line that is entirely inside alone', () => {
+    const line = rect(200, 60, 300)
+    expect(clipLines([line], bounds)).toEqual([line])
+  })
+
+  it('clips to nothing when there is nothing to clip to', () => {
+    const line = rect(-500, 60, 300)
+    expect(clipLines([line], null)).toEqual([line])
+  })
+})
+
+describe('clipBoundsOf', () => {
+  it('finds the window a selection is inside', () => {
+    const win = document.createElement('window')
+    const p = document.createElement('p')
+    win.appendChild(p)
+    document.body.appendChild(win)
+    win.getBoundingClientRect = () =>
+      ({ top: 10, bottom: 200, left: 20, right: 300 }) as DOMRect
+
+    expect(clipBoundsOf(p)).toEqual({ top: 10, bottom: 200, left: 20, right: 300 })
+    win.remove()
+  })
+
+  // The taskbar and the launcher are not windows and clip to nothing.
+  it('says there is nothing to clip to outside a window', () => {
+    expect(clipBoundsOf(document.createElement('p'))).toBeNull()
+    expect(clipBoundsOf(null)).toBeNull()
   })
 })
 

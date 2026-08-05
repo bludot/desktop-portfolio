@@ -64,6 +64,47 @@ export function mergeLines(rects: Line[]): Line[] {
   return lines;
 }
 
+/**
+ * The window a selection lives in, as a rectangle to stay inside.
+ *
+ * Text scrolled out of a window keeps its laid-out position, so its rectangles
+ * carry on up past the window's top edge — one screenful of scrolling puts them
+ * two thousand pixels above it. Painted on a viewport-level layer they would be
+ * drawn there, over whatever else is on the desktop.
+ */
+export function clipBoundsOf(node: Node | null): Line | null {
+  let element = node instanceof Element ? node : (node?.parentElement ?? null);
+
+  while (element) {
+    if (element.tagName === "WINDOW") {
+      const rect = element.getBoundingClientRect();
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right
+      };
+    }
+    element = element.parentElement;
+  }
+  // Not inside a window — the taskbar, the launcher — so nothing to clip to.
+  return null;
+}
+
+/** Trim each line to the bounds, dropping the ones left with no area. */
+export function clipLines(lines: Line[], bounds: Line | null): Line[] {
+  if (!bounds) return lines;
+
+  return lines
+    .map((line) => ({
+      top: Math.max(line.top, bounds.top),
+      bottom: Math.min(line.bottom, bounds.bottom),
+      left: Math.max(line.left, bounds.left),
+      right: Math.min(line.right, bounds.right)
+    }))
+    .filter((line) => line.bottom - line.top > 0.5 && line.right - line.left > 0.5);
+}
+
 /** The window a selection sits in, for attributing a quote. */
 export function windowTitleOf(node: Node | null): string {
   let element = node instanceof Element ? node : (node?.parentElement ?? null);
@@ -190,10 +231,14 @@ class SelectionLayer extends OSElement {
     if (!text.trim()) return { lines: [], text: "", node: null };
 
     const range = selection.getRangeAt(0);
+    const node = range.commonAncestorContainer;
     return {
-      lines: mergeLines([...range.getClientRects()]),
+      lines: clipLines(
+        mergeLines([...range.getClientRects()]),
+        clipBoundsOf(node)
+      ),
       text,
-      node: range.commonAncestorContainer
+      node
     };
   }
 

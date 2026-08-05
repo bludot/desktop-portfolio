@@ -120,6 +120,7 @@ describe('motion', () => {
       ;(el as any).animate = () => ({
         // A frozen timeline: never resolves, as in a hidden tab.
         finished: new Promise(() => {}),
+        playState: 'running',
         finish: () => { finished = true },
       })
 
@@ -136,6 +137,35 @@ describe('motion', () => {
       expect(done).toBe(true)
       // Jumped to the end rather than cancelled, so an entrance stays visible.
       expect(finished).toBe(true)
+      vi.useRealTimers()
+    })
+
+    /*
+     * Regression: `finish()` does not no-op on a cancelled animation, it
+     * revives it — back to "finished" and, filling forwards, overriding inline
+     * styles again. A cancelled window entrance came back 80ms later and
+     * pinned every window in the overview.
+     */
+    it('never revives an animation cancelled while the wait was still running', async () => {
+      vi.useFakeTimers()
+      let state = 'running'
+      let finishes = 0
+      const animation = {
+        finished: new Promise(() => {}),
+        get playState() { return state },
+        finish() { finishes++; state = 'finished' },
+        cancel() { state = 'idle' },
+      }
+      ;(el as any).animate = () => animation
+
+      const running = play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 140 })
+      animation.cancel()
+
+      await vi.advanceTimersByTimeAsync(500)
+      await running
+
+      expect(finishes).toBe(0)
+      expect(state).toBe('idle')
       vi.useRealTimers()
     })
 

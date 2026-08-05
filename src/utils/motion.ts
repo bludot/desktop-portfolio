@@ -120,18 +120,34 @@ export function play(
    * the animation is jumped to its end rather than cancelled, since cancelling
    * would revert an entrance to invisible.
    */
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const capped = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      try {
-        animation.finish();
-      } catch {
-        // Nothing to finish; the caller only cares that the wait is over.
+    timer = setTimeout(() => {
+      /*
+       * Only ever nudge an animation that is still pending.
+       *
+       * `finish()` does not no-op on a cancelled animation — it revives it.
+       * The animation goes back to "finished" and, filling forwards, resumes
+       * overriding inline styles for good. That is how a cancelled window
+       * entrance came back 80ms later and pinned every window in the overview,
+       * so panning wrote transforms that never took effect.
+       */
+      const state = animation.playState;
+      if (state === "running" || state === "paused") {
+        try {
+          animation.finish();
+        } catch {
+          // Nothing to finish; the caller only cares that the wait is over.
+        }
       }
       resolve();
     }, duration + delay + SETTLE_MARGIN_MS);
   });
 
-  return Promise.race([finished, capped]);
+  // Whichever wins, the timer must not outlive the wait.
+  return Promise.race([finished, capped]).then(() => {
+    clearTimeout(timer);
+  });
 }
 
 /**

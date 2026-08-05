@@ -217,54 +217,134 @@ describe('Switcher', () => {
   })
 
   /*
-   * Regression: the tiles used to scroll natively while the windows behind
-   * them — which are fixed-position and cannot scroll with a container — were
-   * moved by a scroll handler. The handler runs after the compositor has
-   * already moved the tiles, so every label ran ahead of the window it named
-   * and ended up printed across the middle of it. Both are positioned from the
-   * same place now, so they can only ever move together.
+   * Regression, twice over. The tiles first scrolled natively while the
+   * windows behind them — fixed-position, so no container can scroll them —
+   * were moved by a scroll handler a frame later, and every label ran ahead of
+   * the window it named. Making the tiles fixed too locked them together but
+   * killed scrolling, because a gesture over a fixed element scrolls the
+   * viewport rather than the container it sits in. One offset drives both now.
    */
-  it('keeps each label locked to its window while scrolling', async () => {
-    vi.spyOn(windowManager, 'list').mockReturnValue([
-      makeWindow('About'),
-      makeWindow('Experience'),
-    ])
+  const asPhone = () => {
+    Object.defineProperty(window, 'innerWidth', { value: PHONE.width, configurable: true })
+    Object.defineProperty(window, 'innerHeight', { value: PHONE.height, configurable: true })
+  }
 
+  const wheel = (deltaY: number) => {
+    const event = new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true })
+    ;(host.querySelector('#switcher') as HTMLElement).dispatchEvent(event)
+    return event
+  }
+
+  const offsetY = (transform: string) =>
+    // Matches both `translateY(-8px)` and `translate(4px, -8px)`.
+    Number(/translateY?\((?:[^,]+,\s*)?(-?[\d.]+)px/.exec(transform)?.[1])
+
+  const layer = () => host.querySelector('.switcher-grid') as HTMLElement
+
+  /** Ten cards on a phone is five rows for a two-row viewport. */
+  const crowdedPhone = async () => {
+    asPhone()
+    vi.spyOn(windowManager, 'list').mockReturnValue(
+      Array.from({ length: 10 }, (_, i) => makeWindow(`Window ${i + 1}`)),
+    )
     const switcher = build()
     await switcher.show(host)
+    return switcher
+  }
 
-    const grid = host.querySelector('.switcher-grid') as HTMLElement
-    const tiles = [...host.querySelectorAll('.switcher-tile')] as HTMLElement[]
-    const offsetY = (t: string) => Number(/translate\([^,]+,\s*(-?[\d.]+)px/.exec(t)?.[1])
+  it('pans the tiles and their windows by the very same offset', async () => {
+    await crowdedPhone()
+    const before = windows.map((w) => offsetY(w.style.transform))
 
-    const before = tiles.map((tile, i) => ({
-      tile: parseFloat(tile.style.top),
-      window: offsetY(windows[i].style.transform),
-    }))
+    wheel(200)
 
-    Object.defineProperty(grid, 'scrollTop', { value: 250, configurable: true })
-    grid.dispatchEvent(new Event('scroll'))
-
-    tiles.forEach((tile, i) => {
-      const tileMoved = parseFloat(tile.style.top) - before[i].tile
-      const windowMoved = offsetY(windows[i].style.transform) - before[i].window
-      expect(tileMoved).toBe(-250)
-      expect(windowMoved).toBe(tileMoved)
-    })
+    // The tile layer moves once, for all of them; every window matches it.
+    expect(offsetY(layer().style.transform)).toBe(-200)
+    windows.forEach((w, i) =>
+      expect(offsetY(w.style.transform) - before[i]).toBe(-200),
+    )
   })
 
-  it('hides a window and its tile together once scrolled past', async () => {
-    vi.spyOn(windowManager, 'list').mockReturnValue([makeWindow('About')])
+  it('never pans past either end', async () => {
+    await crowdedPhone()
 
+    wheel(99999)
+    const bottom = offsetY(layer().style.transform)
+    expect(bottom).toBeLessThan(0)
+
+    wheel(99999)
+    expect(offsetY(layer().style.transform)).toBe(bottom)
+
+    wheel(-99999)
+    expect(Math.abs(offsetY(layer().style.transform))).toBe(0)
+  })
+
+  // The overview is modal; the desktop behind it must not scroll as well.
+  it('claims the wheel while it can pan, and not otherwise', async () => {
+    await crowdedPhone()
+    expect(wheel(100).defaultPrevented).toBe(true)
+  })
+
+  it('leaves the wheel alone when everything already fits', async () => {
+    vi.spyOn(windowManager, 'list').mockReturnValue([makeWindow('About')])
     const switcher = build()
     await switcher.show(host)
-    const grid = host.querySelector('.switcher-grid') as HTMLElement
+
+    expect(wheel(100).defaultPrevented).toBe(false)
+  })
+
+  // jsdom has no PointerEvent; the handler only reads button and clientY.
+  const pointer = (type: string, clientY: number, target: EventTarget) =>
+    target.dispatchEvent(
+      new MouseEvent(type, { bubbles: true, cancelable: true, clientY, button: 0 }),
+    )
+
+  it('pans by dragging, for a finger rather than a wheel', async () => {
+    await crowdedPhone()
+    const overlay = host.querySelector('#switcher') as HTMLElement
+
+    pointer('pointerdown', 500, overlay)
+    pointer('pointermove', 380, window)
+
+    expect(offsetY(layer().style.transform)).toBe(-120)
+    pointer('pointerup', 380, window)
+  })
+
+  /*
+   * A drag is not a tap. Releasing over a card used to open it, and releasing
+   * over empty space used to dismiss the whole overview.
+   */
+  it('does not open a card the drag happened to end on', async () => {
+    const switcher = await crowdedPhone()
+    const overlay = host.querySelector('#switcher') as HTMLElement
     const tile = host.querySelector('.switcher-tile') as HTMLElement
 
-    Object.defineProperty(grid, 'scrollTop', { value: 9000, configurable: true })
-    grid.dispatchEvent(new Event('scroll'))
+    pointer('pointerdown', 500, overlay)
+    pointer('pointermove', 380, window)
+    pointer('pointerup', 380, window)
 
-    expect(tile.style.visibility).toBe('hidden')
+    tile.click()
+    expect(switcher.isOpen()).toBe(true)
+  })
+
+  it('still opens a card on a tap that barely moved', async () => {
+    const switcher = await crowdedPhone()
+    const overlay = host.querySelector('#switcher') as HTMLElement
+    const tile = host.querySelector('.switcher-tile') as HTMLElement
+
+    pointer('pointerdown', 500, overlay)
+    pointer('pointermove', 498, window)
+    pointer('pointerup', 498, window)
+
+    tile.click()
+    await vi.waitFor(() => expect(switcher.isOpen()).toBe(false))
+  })
+
+  it('hides a window once panned off the top', async () => {
+    await crowdedPhone()
+    expect(windows[0].style.visibility).toBe('')
+
+    wheel(99999)
     expect(windows[0].style.visibility).toBe('hidden')
   })
 

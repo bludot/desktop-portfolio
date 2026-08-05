@@ -38,6 +38,10 @@ const LABEL_H = 26;
  * with two columns that is four windows before scrolling starts.
  */
 const NARROW_VISIBLE_ROWS = 2;
+/** Movement past which a gesture is a pan, not a tap on a card. */
+const TAP_SLOP = 8;
+const GLIDE_DECAY = 0.94;
+const MIN_GLIDE = 0.4;
 /**
  * Ceiling on a tile, so the overview reads as one.
  *
@@ -58,8 +62,6 @@ interface Cell {
 interface Tile {
   window: OSWindow;
   element: HTMLElement;
-  /** The hit target and label drawn over the window. */
-  tile: HTMLElement;
   /** Inline styles to be handed back untouched on close. */
   previousTransform: string;
   previousTransformOrigin: string;
@@ -133,10 +135,15 @@ export function layoutCells(
 
 class Switcher extends OSElement {
   private grid!: HTMLElement;
-  private spacer!: HTMLElement;
   private empty!: HTMLElement;
   private tiles: Tile[] = [];
   private open = false;
+  /** How far the overview is panned, and how far it may pan. */
+  private offset = 0;
+  private maxOffset = 0;
+  /** The band a tile has to fall inside to be worth showing. */
+  private viewportHeight = 0;
+  private momentum?: ReturnType<typeof requestAnimationFrame>;
   private taskbarHeight: () => number;
   private scrimHost: () => HTMLElement;
   private scrim: HTMLElement;
@@ -179,13 +186,6 @@ class Switcher extends OSElement {
     this.grid.className = "switcher-grid";
     this.element.appendChild(this.grid);
 
-    // Gives the scroll container something to scroll; the tiles themselves are
-    // positioned absolutely and contribute no height of their own.
-    this.spacer = document.createElement("div");
-    this.spacer.className = "switcher-spacer";
-    this.spacer.setAttribute("aria-hidden", "true");
-    this.grid.appendChild(this.spacer);
-
     this.empty = document.createElement("p");
     this.empty.className = "switcher-empty";
     this.empty.appendChild(document.createTextNode("No open windows"));
@@ -196,8 +196,9 @@ class Switcher extends OSElement {
     const onBackdrop = (e: Event) => {
       if (e.target === this.element || e.target === this.grid) void this.close();
     };
-    this.element.addEventListener("click", onBackdrop);
-    this.grid.addEventListener("scroll", this.onScroll, { passive: true });
+    this.element.addEventListener("click", onBackdrop, true);
+    this.element.addEventListener("wheel", this.onWheel, { passive: false });
+    this.element.addEventListener("pointerdown", this.onPointerDown);
 
     this.style = () => ({
       [this.id]: {
@@ -212,34 +213,16 @@ class Switcher extends OSElement {
          * glass over the very things you are trying to pick out.
          */
         font: `${size.body}/1.4 ${font.ui}`,
+        // Panned as a whole. Nothing here scrolls natively — see onWheel.
         "& > .switcher-grid": {
           position: "absolute",
           inset: "0",
-          overflowX: "hidden",
-          overflowY: "auto",
-          WebkitOverflowScrolling: "touch",
-          // No visible bar: the cards are the affordance, and a scrollbar drawn
-          // over the tiles would read as belonging to one of the windows.
-          scrollbarWidth: "none",
-          "&::-webkit-scrollbar": { display: "none" }
+          overflow: "hidden",
+          willChange: "transform",
+          touchAction: "none"
         },
-        "& .switcher-spacer": {
-          width: "1px",
-          pointerEvents: "none"
-        },
-        /*
-         * Fixed, and positioned from script — not scrolled by the container.
-         *
-         * The windows behind these are fixed-position and cannot scroll with
-         * the container at all, so their offset has to be written by hand. Had
-         * the tiles scrolled natively they would have moved on the compositor
-         * while the windows waited for a scroll event, and the labels would
-         * visibly run ahead of the windows they name. Driving both from the
-         * same place costs a frame of lag on the whole overview and keeps them
-         * locked to each other, which is the part anyone can see.
-         */
         "& .switcher-tile": {
-          position: "fixed",
+          position: "absolute",
           margin: "0",
           padding: "0",
           border: "0",
@@ -300,34 +283,123 @@ class Switcher extends OSElement {
     return this.open;
   }
 
-  private transformFor(tile: Tile, scrollTop: number) {
-    return `translate(${tile.dx}px, ${tile.dy - scrollTop}px) scale(${tile.scale})`;
+  private transformFor(tile: Tile, offset: number) {
+    return `translate(${tile.dx}px, ${tile.dy - offset}px) scale(${tile.scale})`;
   }
 
-  /**
-   * Windows are fixed-position, so scrolling the container does not move them.
-   * Their offset is rewritten instead, and anything scrolled out of the band is
-   * hidden — otherwise it would still be sitting over the taskbar.
+  /*
+   * The overview is panned by hand rather than by a native scroller.
+   *
+   * The windows are fixed-position, so no container can scroll them — their
+   * offset always has to be written from script. Letting the tiles scroll
+   * natively alongside that put the two on different clocks: the tiles moved
+   * on the compositor while the windows waited for a scroll event, and each
+   * label ran ahead of the window it named. Making the tiles fixed too fixed
+   * the drift but broke scrolling outright, because a gesture over a
+   * fixed-position element scrolls the viewport, not the container it happens
+   * to sit inside — and on a phone the cards cover the screen, so almost every
+   * swipe landed on one.
+   *
+   * So there is one offset, applied to the tile layer and to every window in
+   * the same pass. They cannot drift, and the gesture is read from the overlay
+   * itself, which is above everything and therefore never missed.
    */
-  private onScroll = () => {
-    if (!this.open) return;
-    const scrollTop = this.grid.scrollTop;
-    const viewportHeight = this.grid.clientHeight;
 
-    this.tiles.forEach((tile) => this.place(tile, scrollTop, viewportHeight));
+  private setOffset(next: number) {
+    this.offset = Math.max(0, Math.min(next, this.maxOffset));
+    this.applyOffset();
+  }
+
+  private applyOffset() {
+    // One transform for every tile, rather than a write per element.
+    this.grid.style.transform = `translateY(${-this.offset}px)`;
+
+    this.tiles.forEach((tile) => {
+      tile.element.style.transform = this.transformFor(tile, this.offset);
+      // Nothing off the top or bottom should still be sitting over the taskbar.
+      const offscreen =
+        tile.top + tile.height - this.offset < 0 ||
+        tile.top - this.offset > this.viewportHeight;
+      tile.element.style.visibility = offscreen ? "hidden" : "";
+    });
+  }
+
+  private stopMomentum() {
+    if (this.momentum === undefined) return;
+    cancelAnimationFrame(this.momentum);
+    this.momentum = undefined;
+  }
+
+  private onWheel = (e: WheelEvent) => {
+    if (!this.open || this.maxOffset === 0) return;
+    // The overview is modal, so the page behind it must not scroll as well.
+    e.preventDefault();
+    this.stopMomentum();
+    this.setOffset(this.offset + e.deltaY);
   };
 
-  /** Put a window and its tile at the same place, in the same frame. */
-  private place(tile: Tile, scrollTop: number, viewportHeight: number) {
-    tile.element.style.transform = this.transformFor(tile, scrollTop);
-    tile.tile.style.top = `${tile.top - scrollTop}px`;
+  private onPointerDown = (e: PointerEvent) => {
+    if (!this.open || this.maxOffset === 0 || e.button !== 0) return;
+    this.stopMomentum();
 
-    const offscreen =
-      tile.top + tile.height - scrollTop < 0 ||
-      tile.top - scrollTop > viewportHeight;
-    const visibility = offscreen ? "hidden" : "";
-    tile.element.style.visibility = visibility;
-    tile.tile.style.visibility = visibility;
+    let last = e.clientY;
+    let velocity = 0;
+    let travelled = 0;
+
+    const onMove = (move: PointerEvent) => {
+      const delta = move.clientY - last;
+      last = move.clientY;
+      travelled += Math.abs(delta);
+      velocity = -delta;
+      this.setOffset(this.offset - delta);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+
+      /*
+       * A drag is not a tap. Without this, letting go over a card would open
+       * it, and letting go over empty space would dismiss the overview.
+       *
+       * Registered on window rather than on the overlay: window's capture
+       * phase runs first, so this beats the overlay's own dismiss handler
+       * instead of queueing up behind it.
+       */
+      if (travelled > TAP_SLOP) {
+        window.addEventListener("click", swallow, { capture: true, once: true });
+      }
+      this.glide(velocity);
+    };
+
+    const swallow = (click: Event) => {
+      click.stopPropagation();
+      click.preventDefault();
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
+  /** Carry on under its own weight after the finger leaves. */
+  private glide(velocity: number) {
+    if (Math.abs(velocity) < MIN_GLIDE) return;
+
+    let speed = velocity;
+    const step = () => {
+      speed *= GLIDE_DECAY;
+      const before = this.offset;
+      this.setOffset(this.offset + speed);
+      // Stop at the ends rather than grinding against them.
+      if (Math.abs(speed) < MIN_GLIDE || this.offset === before) {
+        this.momentum = undefined;
+        return;
+      }
+      this.momentum = requestAnimationFrame(step);
+    };
+    this.momentum = requestAnimationFrame(step);
   }
 
   private clearTiles() {
@@ -350,8 +422,13 @@ class Switcher extends OSElement {
     };
     const { cells, contentHeight } = layoutCells(windows.length, area);
 
-    this.grid.scrollTop = 0;
-    this.spacer.style.height = `${contentHeight}px`;
+    this.stopMomentum();
+    this.offset = 0;
+    this.grid.style.transform = "translateY(0px)";
+    this.maxOffset = Math.max(0, contentHeight - area.height);
+    // Measured, not read back off the element: culling should not depend on
+    // layout having been flushed.
+    this.viewportHeight = area.height;
     this.clearTiles();
 
     this.tiles = windows.map(({ window: win, title }, i) => {
@@ -379,15 +456,14 @@ class Switcher extends OSElement {
         1
       );
 
-      const hitTarget = this.buildTile(title, cell, boxHeight, () =>
-        void this.pick(win)
+      // Laid out unscrolled; panning moves the whole layer, not each tile.
+      this.grid.appendChild(
+        this.buildTile(title, cell, boxHeight, () => void this.pick(win))
       );
-      this.grid.appendChild(hitTarget);
 
       const tile: Tile = {
         window: win,
         element: el,
-        tile: hitTarget,
         previousTransform,
         previousTransformOrigin: el.style.transformOrigin,
         previousPointerEvents: el.style.pointerEvents,
@@ -434,10 +510,8 @@ class Switcher extends OSElement {
     if (!this.open) return;
     clearAnimations(this.scrim);
     this.scrim.style.opacity = "1";
-    this.tiles.forEach((tile) => {
-      clearAnimations(tile.element);
-      tile.element.style.transform = this.transformFor(tile, 0);
-    });
+    this.tiles.forEach((tile) => clearAnimations(tile.element));
+    this.applyOffset();
   }
 
   private buildTile(
@@ -485,11 +559,12 @@ class Switcher extends OSElement {
   async close() {
     if (!this.open) return;
     this.open = false;
+    this.stopMomentum();
     window.removeEventListener("keydown", this.onKeyDown, true);
 
     const tiles = this.tiles;
     this.tiles = [];
-    const scrollTop = this.grid.scrollTop;
+    const offset = this.offset;
 
     await Promise.all([
       play(this.scrim, [{ opacity: 1 }, { opacity: 0 }], {
@@ -501,7 +576,7 @@ class Switcher extends OSElement {
         play(
           tile.element,
           [
-            { transform: this.transformFor(tile, scrollTop) },
+            { transform: this.transformFor(tile, offset) },
             { transform: tile.previousTransform || "none" }
           ],
           { duration: motionToken.fast, easing: motionToken.exit }

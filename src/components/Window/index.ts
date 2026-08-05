@@ -10,6 +10,9 @@ import { isNarrow } from "../../utils/utils";
 import { blur as blurFx, color, radius, shadow } from "../../theme";
 import ScrollBar from "../Scrollbar";
 import { motion } from "../../utils/motion";
+import { bindContextMenu } from "../ContextMenu";
+import type { MenuItem } from "../ContextMenu";
+import { windowMenuItems } from "../ContextMenu/menus";
 
 class OSWindow extends OSElement {
   private scrollbar: ScrollBar;
@@ -37,6 +40,7 @@ class OSWindow extends OSElement {
   minimized: boolean = false;
   maximized: boolean = false;
   private onChange: () => void = () => undefined;
+  private peers: () => OSWindow[] = () => [];
   /** Where the window was before it filled the screen. */
   private restoreBounds?: {
     left: string;
@@ -69,6 +73,7 @@ class OSWindow extends OSElement {
                   height: 400,
                 },
                 windowPosition,
+                peers,
                 meta
               }: IWindow) {
     super("window", "window");
@@ -84,15 +89,13 @@ class OSWindow extends OSElement {
 
     this.onActive = onActive;
     if (onChange) this.onChange = onChange;
+    if (peers) this.peers = peers;
     this.onClose = onClose;
     this.center = center;
     this.dimensions = dimensions;
     this.topbar = new TopBar({
       title,
-      close: async () => {
-        await motion.windowOut(this.element);
-        this.onClose(this);
-      },
+      close: () => void this.requestClose(),
       minimize: () => void this.minimize(),
       maximize: () => this.toggleMaximize(),
       isDialog,
@@ -119,6 +122,44 @@ class OSWindow extends OSElement {
         flexFlow: "column nowrap",
       },
     });
+  }
+
+  /** Close, on its way out rather than all at once. */
+  async requestClose(): Promise<void> {
+    await motion.windowOut(this.element);
+    this.onClose(this);
+  }
+
+  /**
+   * What this window offers when it is right-clicked.
+   *
+   * Built here rather than at each surface so the titlebar and the taskbar chip
+   * cannot drift apart: they are two ways of pointing at the same window, and
+   * they should answer with the same menu.
+   */
+  menuItems(): MenuItem[] {
+    const others = this.peers().filter((peer) => peer !== this);
+
+    return windowMenuItems(
+      {
+        minimized: this.minimized,
+        maximized: this.maximized,
+        others: others.length
+      },
+      {
+        show: () => void this.restore(),
+        minimize: () => void this.minimize(),
+        toggleMaximize: () => {
+          // Filling the screen from a chip should also bring the window
+          // forward; leaving it behind another one would look like nothing
+          // had happened.
+          if (!this.maximized) this.onActive(this);
+          this.toggleMaximize();
+        },
+        close: () => void this.requestClose(),
+        closeOthers: () => others.forEach((peer) => void peer.requestClose())
+      }
+    );
   }
 
   unfocus() {
@@ -351,6 +392,20 @@ class OSWindow extends OSElement {
       this.onClose(this);
     };
     await this.topbar.load(this.element);
+
+    // The titlebar, not the whole window: right-clicking inside the content
+    // should still reach whatever is under the pointer — a link, a selection,
+    // the browser's own menu — rather than being taken over by window controls.
+    const titlebar = this.element.querySelector(".topbar-window");
+    if (titlebar) {
+      bindContextMenu(titlebar as HTMLElement, (e) => {
+        // Raise it first: a menu is about to describe this window, so it had
+        // better be the one in front.
+        if ((e.target as Element)?.closest("topbar-button")) return [];
+        this.onActive(this);
+        return this.menuItems();
+      });
+    }
 
     this.element.appendChild(main);
 

@@ -82,7 +82,10 @@ class WindowManager {
       onClose: this.remove.bind(this),
       // Minimising and maximising change nothing about which window is on top,
       // but the taskbar still has to redraw.
-      onChange: this.notify.bind(this)
+      onChange: this.notify.bind(this),
+      // A function, not a snapshot: a window built first would otherwise be
+      // told for the rest of its life that it is the only one open.
+      peers: () => this.list().map((open) => open.window)
     } as IWindow;
     const oswindowInstance = new OSWindow(fullWindowOptions);
     const oswindow = {

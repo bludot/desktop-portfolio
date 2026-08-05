@@ -2,6 +2,12 @@ import Logger from "../../Logger";
 import OSElement from "../../utils/OSElement";
 import Taskbar from "./../Taskbar";
 import SelectionLayer from "../Selection";
+import contextMenu, { bindContextMenu } from "../ContextMenu";
+import { desktopMenuItems } from "../ContextMenu/menus";
+import windowManager from "../../utils/windowManager";
+import appearance from "../../utils/appearance";
+import { saveSettings } from "../../Store";
+import SettingsApp from "../../apps/Settings";
 
 const logger = new Logger("Desktop");
 
@@ -113,6 +119,54 @@ class Desktop extends OSElement {
     return this.taskbar;
   }
 
+  /**
+   * The menu on the wallpaper.
+   *
+   * Bound to the desktop element and tested against it exactly, rather than
+   * filtered by what the press landed on: windows are children of the desktop,
+   * so a right-click anywhere in one bubbles to here. The sky and the ridges
+   * take no pointer events, which leaves this element as the only thing a press
+   * on the background can be aimed at.
+   */
+  private bindMenu() {
+    bindContextMenu(this.element, (e) => {
+      if (e.target !== this.element) return [];
+
+      const open = windowManager.list();
+      const onScreen = open.filter((w) => !w.minimized);
+
+      return desktopMenuItems(
+        {
+          dark: appearance.scheme() === "dark",
+          open: open.length,
+          onScreen: onScreen.length
+        },
+        {
+          /*
+           * Straight to the other scheme, not through "system": picking a side
+           * here is picking a side, and leaving it following the OS would let
+           * the choice undo itself the next time the OS changed its mind.
+           *
+           * Written down as well as applied. `appearance.set` only repaints —
+           * persisting is the caller's job, as it is in the Settings window —
+           * so without this the theme would go back on the next reload, which
+           * is not what flipping a switch means.
+           */
+          toggleTheme: () => {
+            appearance.set({
+              theme: appearance.scheme() === "dark" ? "light" : "dark"
+            });
+            void saveSettings(appearance.get());
+          },
+          showAll: () => void this.taskbar.showOverview(this.mainElement),
+          minimizeAll: () =>
+            onScreen.forEach((open) => void open.window.minimize()),
+          settings: () => void new SettingsApp(this).load()
+        }
+      );
+    });
+  }
+
   async load(element: HTMLElement) {
     await super.load(element);
   }
@@ -128,6 +182,14 @@ class Desktop extends OSElement {
     // are viewport coordinates, and a parent that clips or transforms would
     // move every shape away from the text it belongs to.
     await this.selection.load(this.mainElement);
+    /*
+     * Beside the desktop rather than inside it, for the same reason: the menu
+     * is placed in viewport coordinates, and the desktop clips its overflow and
+     * is the element the overview scales. A menu mounted inside it would be
+     * cut off at its edges and would drift the moment anything moved it.
+     */
+    await contextMenu.load(this.mainElement);
+    this.bindMenu();
     await this.applyStyle();
     // Let the boot sequence finish before it fades; the desktop is already
     // built behind it, so this costs nothing but the animation.

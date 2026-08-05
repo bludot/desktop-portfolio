@@ -6,6 +6,7 @@ import Switcher from "../Switcher";
 import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
+import { bindContextMenu } from "../ContextMenu";
 import Logger from "../../Logger";
 
 /*
@@ -425,6 +426,11 @@ class TaskbarButtons extends OSElement {
     });
   }
 
+  /** Open the overview, for callers that have no business owning it. */
+  showOverview(host: HTMLElement) {
+    return this.overview.toggle(host);
+  }
+
   /** Redraw the chips from whatever the window manager currently holds. */
   private seen = new Set<string>();
 
@@ -462,6 +468,10 @@ class TaskbarButtons extends OSElement {
           open.window.onActive(open.window);
         }
       });
+      // The same menu the window's own titlebar offers — a chip is another way
+      // of pointing at that window, not a different thing to act on.
+      bindContextMenu(chip, () => open.window.menuItems());
+
       this.openList.appendChild(chip);
 
       if (!this.seen.has(open.title)) motion.chipIn(chip);

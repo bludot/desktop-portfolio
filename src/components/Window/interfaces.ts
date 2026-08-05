@@ -18,6 +18,13 @@ export interface IWindow {
   onClose: (window: OSWindow) => void;
   /** Told when the window changes in a way the taskbar has to redraw. */
   onChange?: () => void;
+  /**
+   * The other windows currently open.
+   *
+   * Supplied rather than looked up so a window never has to import the manager
+   * that creates it. Called when a menu opens, so the answer is always current.
+   */
+  peers?: () => OSWindow[];
 }
 
 export interface TopbarButtonContruct {

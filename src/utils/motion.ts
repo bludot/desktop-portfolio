@@ -230,6 +230,25 @@ export const motion = {
     );
   },
 
+  /**
+   * A context menu opening from the pointer.
+   *
+   * Shorter and smaller-travelled than the launcher's entrance: this one is
+   * anchored to the cursor, so it should look like it grew from under it rather
+   * than flew in. The caller sets `transform-origin` to the corner the menu was
+   * placed from, which is what makes the scale read as growth from the point.
+   */
+  menuIn(el: HTMLElement) {
+    return play(
+      el,
+      [
+        { opacity: 0, transform: "scale(.94)" },
+        { opacity: 1, transform: "scale(1)" }
+      ],
+      { duration: token.fast, easing: token.standard }
+    );
+  },
+
   /** A taskbar chip appearing as its window opens. */
   chipIn(el: HTMLElement) {
     return play(

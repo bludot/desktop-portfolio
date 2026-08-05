@@ -40,6 +40,11 @@ class Taskbar extends OSElement {
     });
   }
 
+  /** The window overview, for anything that wants it without owning it. */
+  showOverview(host: HTMLElement) {
+    return this.taskbarButtons.showOverview(host);
+  }
+
   async load(element: HTMLElement) {
     await super.load(element);
   }

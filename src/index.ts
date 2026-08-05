@@ -8,7 +8,6 @@ import Desktop from "./components/Desktop";
 import jss from "jss";
 import preset from "jss-preset-default";
 import nested from "jss-plugin-nested";
-import settings from "./utils/settings";
 import Bootscreen from "./components/Bootscreen";
 import queryString from "query-string";
 import Logger, {GlobalLogger} from "./Logger";
@@ -34,9 +33,8 @@ const logger = new Logger("Bootsequence");
 logger.info("Starting up...");
 
 async function startup() {
-  logger.debug(`setting Dekstop Image: ${settings.desktopImage.original}`);
-  await settings.setDesktopImage("/assets/main_desktop_background.jpg");
-  logger.debug(`Dekstop Image Set:  ${settings.desktopImage.original}`);
+  // The desktop draws its own sky, so there is nothing to fetch or blur here.
+  logger.debug("Preparing desktop");
 }
 
 // Built once the desktop exists, so each opener can be handed it directly

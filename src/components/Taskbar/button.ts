@@ -70,6 +70,7 @@ class TaskbarButtons extends OSElement {
   private status!: HTMLElement;
   private subscription?: { unsubscribe: () => void };
   private clock?: HTMLElement;
+  private divider!: HTMLElement;
   private tick?: ReturnType<typeof setInterval>;
   constructor(desktop: Desktop) {
     super("taskbar-buttons", "taskbar-buttons");
@@ -123,6 +124,10 @@ class TaskbarButtons extends OSElement {
         }
       })
     ];
+    this.divider = document.createElement("span");
+    this.divider.className = "taskbar-divider";
+    this.divider.setAttribute("aria-hidden", "true");
+
     this.openList = document.createElement("div");
     this.openList.className = "taskbar-open";
     this.status = document.createElement("div");
@@ -137,6 +142,12 @@ class TaskbarButtons extends OSElement {
         alignItems: "center",
         gap: "12px",
         fontFamily: font.ui,
+        "& > .taskbar-divider": {
+          width: "1px",
+          height: "24px",
+          background: color.line,
+          flex: "0 0 auto"
+        },
         "& > .taskbar-open": {
           display: "flex",
           alignItems: "center",
@@ -275,6 +286,7 @@ class TaskbarButtons extends OSElement {
     for (const button of this.buttons) {
       await button.load(this.element);
     }
+    this.element.appendChild(this.divider);
     this.element.appendChild(this.openList);
     this.element.appendChild(this.status);
 

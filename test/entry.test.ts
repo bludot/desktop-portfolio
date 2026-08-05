@@ -12,14 +12,6 @@ vi.mock('../src/utils/windowManager', () => ({
   },
 }))
 
-vi.mock('../src/utils/settings', () => ({
-  default: {
-    desktopImage: { original: '/assets/bg.jpg', blurred30: null, blurred60: null },
-    setDesktopImage: vi.fn().mockResolvedValue(undefined),
-    getDesktopImage: () => ({ original: '/assets/bg.jpg', blurred30: null, blurred60: null }),
-  },
-}))
-
 vi.mock('../src/components/Desktop', () => ({
   default: class Desktop {
     startup = vi.fn().mockResolvedValue(undefined)

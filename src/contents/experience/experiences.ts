@@ -11,8 +11,6 @@ interface ExperienceI {
   end: Date | string
 }
 
-const locationSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="12" height="12"><!--! Font Awesome Pro 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2022 Fonticons, Inc. --><path d="M384 192c0 87.4-117 243-168.3 307.2c-12.3 15.3-35.1 15.3-47.4 0C117 435 0 279.4 0 192C0 86 86 0 192 0S384 86 384 192z"/></svg>`
-
 const content = ({
                    position,
                    company,
@@ -30,7 +28,7 @@ const content = ({
     </div>
     <div class="entry-detail">
       <ul>${description.map(item => `<li>${item}</li>`).join("")}</ul>
-      <p class="entry-where">${locationSVG} ${location}</p>
+      <p class="entry-where">${location}</p>
     </div>
   </div>
     

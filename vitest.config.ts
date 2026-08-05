@@ -20,10 +20,8 @@ export default defineConfig({
       reporter: ['text-summary', 'text', 'html'],
       include: ['src/**/*.ts'],
       exclude: [
-        // Vendored third-party code, not ours to test:
-        // a prototype-style stack-blur implementation and Facebook's
-        // normalize-wheel, both copied in wholesale.
-        'src/utils/blur.ts',
+        // Vendored third-party code, not ours to test: Facebook's
+        // normalize-wheel, copied in wholesale.
         'src/utils/UniversalScroll/**',
         // Type-only modules erase to nothing at runtime.
         '**/interfaces.ts',

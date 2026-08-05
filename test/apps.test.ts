@@ -128,27 +128,13 @@ describe('FeatureFlagsApp', () => {
 })
 
 describe('settings', () => {
-  it('exposes the default desktop image', () => {
-    expect(settings.getDesktopImage().original).toBeTruthy()
+  it('exposes a boot screen path', () => {
+    expect(settings.bootScreenImage).toBeTruthy()
   })
 
   it('setBootScreenImage stores the path', async () => {
     await settings.setBootScreenImage('/assets/boot.png')
     expect(settings.bootScreenImage).toBe('/assets/boot.png')
-  })
-
-  it('setDesktopImage records the original and both blurred variants', async () => {
-    const blurimage = await import('../src/utils/blurimage')
-    const spy = vi
-      .spyOn(blurimage, 'blurImage')
-      .mockResolvedValue('data:image/png;base64,stub')
-
-    await settings.setDesktopImage('/assets/desk.jpg')
-
-    expect(settings.getDesktopImage().original).toBe('/assets/desk.jpg')
-    expect(settings.getDesktopImage().blurred30).toBe('data:image/png;base64,stub')
-    expect(settings.getDesktopImage().blurred60).toBe('data:image/png;base64,stub')
-    spy.mockRestore()
   })
 
   it('getSetting is a stub that returns nothing', () => {

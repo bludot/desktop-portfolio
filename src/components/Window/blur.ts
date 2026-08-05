@@ -1,6 +1,5 @@
 import OSElement from "../../utils/OSElement";
 import { getSupport } from "./../../utils/support";
-import settings from "../../utils/settings";
 
 const support = getSupport();
 class WindowBlur extends OSElement {
@@ -13,64 +12,27 @@ class WindowBlur extends OSElement {
     this.radius = radius;
     this.style = () => ({
       [this.id]: {
-        ...(!support.css.backdropFilter && {
-          /*overflow: "hidden",
-          "&::before": {
-            content: "''",
-            position: "absolute",
-            top: "-100px",
-            left: "-500px",
-            right: "-100px",
-            bottom: "-100px",
-            
-            backgroundImage: `url(${settings.getDesktopImage().original})`,
-            backgroundRepeat: "no-repeat",
-            backgroundAttachment: "fixed",
-            backgroundSize: "cover",
-            
-            // background: "-moz-element(#desktop) no-repeat",
-            filter: "blur(60px)",
-            zIndex: "-1"
-          }*/
-          "&:before": {
-            content: "''",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundPosition: "center",
-            backgroundImage: `url('${
-              this.blur === 30
-                ? settings.getDesktopImage().blurred30
-                : settings.getDesktopImage().blurred60
-            }')`,
-            backgroundAttachment: "fixed",
-            backgroundSize: "cover",
-            borderRadius: `${this.radius}px`
-          },
-          "&:after": {
-            content: "''",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(200,200,200, .5)",
-            borderRadius: `${this.radius}px`
-          }
-        }),
         position: "absolute",
-        borderRadius: `${this.radius}px`,
         top: 0,
         bottom: 0,
         left: 0,
         right: 0,
-        backdropFilter: "blur(35px)"
+        borderRadius: `${this.radius}px`,
+        backdropFilter: "blur(30px) saturate(1.45)",
+        WebkitBackdropFilter: "blur(30px) saturate(1.45)",
+        // Where backdrop-filter is unsupported, a flat translucent fill is
+        // enough now that the desktop behind it is a soft gradient rather than
+        // a photograph. The old fallback painted a pre-blurred copy of the
+        // wallpaper, which is why the wallpaper had to be stack-blurred on a
+        // canvas twice during boot.
+        ...(support.css.backdropFilter
+          ? {}
+          : { background: "rgba(255,255,255,.62)" })
       }
     });
   }
 }
+
 /*
 class WindowBlur extends OSElement {
   constructor() {

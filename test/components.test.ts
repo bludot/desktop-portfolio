@@ -71,10 +71,13 @@ describe('SwitchToggle', () => {
     expect(toggle.getElement().querySelector('input')!.checked).toBe(true)
   })
 
-  it('falls back to default colours when passed null', () => {
+  // Defaults are theme tokens, not literals: a switch belongs to whichever
+  // theme is in force. They used to be a stray Material blue and a #ccc that
+  // disappeared entirely against a dark window.
+  it('falls back to theme tokens when passed no colours', () => {
     const toggle = new SwitchToggle(10, undefined, undefined, false)
-    expect(toggle.onColor).toBe('#2196F3')
-    expect(toggle.offColor).toBe('#ccc')
+    expect(toggle.onColor).toBe('var(--accent)')
+    expect(toggle.offColor).toBe('var(--line)')
   })
 
   it('honours explicit colours and size', () => {
@@ -224,6 +227,53 @@ describe('Taskbar', () => {
 
     window.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeFalsy())
+  })
+
+  /*
+   * Regression: opening and closing both await, and a close landing inside an
+   * open's await broke the launcher permanently. The close unloaded before the
+   * load had appended anything, so nothing was removed; the load then finished
+   * and appended the menu anyway, leaving it on screen with the state saying it
+   * was shut. The next click called load() again, which throws.
+   */
+  it('survives being hammered, ending in the state the last click asked for', async () => {
+    const buttons = new TaskbarButtons(makeDesktop())
+    await buttons.load(host)
+    const button = buttons.buttons[0].getElement()
+
+    // The signature of the bug is load() being called on a menu that is still
+    // mounted, which throws inside a promise nobody awaits.
+    const rejections: unknown[] = []
+    const onRejection = (reason: unknown) => rejections.push(reason)
+    process.on('unhandledRejection', onRejection)
+
+    // Four clicks with no waiting between them: open, close, open, close.
+    button.click()
+    button.click()
+    button.click()
+    button.click()
+
+    await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeFalsy())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    process.off('unhandledRejection', onRejection)
+
+    expect(rejections).toEqual([])
+
+    // And it still works afterwards, rather than being wedged.
+    button.click()
+    await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeTruthy())
+  })
+
+  it('ends open on an odd number of clicks', async () => {
+    const buttons = new TaskbarButtons(makeDesktop())
+    await buttons.load(host)
+    const button = buttons.buttons[0].getElement()
+
+    button.click()
+    button.click()
+    button.click()
+
+    await vi.waitFor(() => expect(host.querySelector('#start-menu')).toBeTruthy())
   })
 })
 

@@ -7,6 +7,7 @@ import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
 import { currentRole } from "../../contents/experience/data";
+import appearance from "../../utils/appearance";
 
 class TaskbarButton extends OSElement {
   icon: HTMLElement;
@@ -43,7 +44,7 @@ class TaskbarButton extends OSElement {
         },
         "&:hover": {
           "&:before": {
-            backgroundColor: "rgba(255,255,255,.5)"
+            backgroundColor: color.hover
           }
         }
         // zIndex: 9001,
@@ -72,6 +73,7 @@ class TaskbarButtons extends OSElement {
   private openList!: HTMLElement;
   private status!: HTMLElement;
   private subscription?: { unsubscribe: () => void };
+  private appearanceSubscription?: { unsubscribe: () => void };
   private clock?: HTMLElement;
   private divider!: HTMLElement;
   private switcher!: HTMLButtonElement;
@@ -90,14 +92,44 @@ class TaskbarButtons extends OSElement {
     let menuOpen = false;
     let startButton: HTMLElement | null = null;
 
+    /*
+     * Opens and closes run one at a time, never interleaved.
+     *
+     * Both of them await — loading the menu, then animating it — and a close
+     * landing inside an open's await was enough to break the launcher for good:
+     * the close would unload before the load had appended anything, so nothing
+     * was removed, and then the load finished and appended the menu anyway. The
+     * menu was on screen with the state saying it was shut, and the next click
+     * called load() a second time, which throws.
+     *
+     * The rejection handler is the same task, so one failure retries rather
+     * than wedging the queue for the rest of the session.
+     */
+    let pending: Promise<void> = Promise.resolve();
+    const queue = (task: () => Promise<void>): Promise<void> => {
+      pending = pending.then(task, task);
+      return pending;
+    };
+
     const onDocumentClick = (e: MouseEvent) => {
       // The button toggles itself; anything else dismisses. A click aimed
       // straight at window has window as its target, and Node.contains throws
       // on anything that is not a Node.
       const target = e.target instanceof Node ? e.target : null;
       if (target && startButton && startButton.contains(target)) return;
-      void closeMenu();
+      void queue(closeMenu);
     };
+
+    // Read inside the queued task, not when it is queued: by the time this
+    // runs, an earlier click may already have changed the answer.
+    const toggleMenu = () =>
+      queue(async () => {
+        if (menuOpen) {
+          await closeMenu();
+        } else {
+          await openMenu();
+        }
+      });
 
     const openMenu = async () => {
       if (menuOpen) return;
@@ -168,7 +200,7 @@ class TaskbarButtons extends OSElement {
         })(),
         action: (element: HTMLElement) => {
           startButton = element;
-          void (menuOpen ? closeMenu() : openMenu());
+          void toggleMenu();
         }
       })
     ];
@@ -360,11 +392,15 @@ class TaskbarButtons extends OSElement {
      * location still sits beside it, but attached to his availability rather
      * than to the clock.
      */
-    this.clock.textContent = new Intl.DateTimeFormat("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false
-    }).format(new Date());
+    const clock24 = appearance.get().clock24;
+    this.clock.textContent = new Intl.DateTimeFormat(
+      clock24 ? "en-GB" : undefined,
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: !clock24
+      }
+    ).format(new Date());
   }
 
   /**
@@ -442,6 +478,12 @@ class TaskbarButtons extends OSElement {
       this.renderOpen();
       this.renderSwitcher();
     });
+    // The clock's format is a setting, so it has to redraw when that changes
+    // rather than waiting up to thirty seconds for the next tick.
+    this.appearanceSubscription = appearance.subscribe(() => {
+      this.renderClock();
+      this.renderStatus();
+    });
 
     this.switcher.addEventListener("click", () => {
       void this.overview.toggle(document.querySelector("#app") as HTMLElement);
@@ -450,6 +492,7 @@ class TaskbarButtons extends OSElement {
 
   async beforeUnload() {
     this.subscription?.unsubscribe();
+    this.appearanceSubscription?.unsubscribe();
     if (this.tick) clearInterval(this.tick);
   }
 }

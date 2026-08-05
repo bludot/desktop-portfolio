@@ -1,5 +1,6 @@
 import OSElement from "../../utils/OSElement";
 import { getSupport } from "./../../utils/support";
+import { color } from "../../theme";
 
 const support = getSupport();
 class WindowBlur extends OSElement {
@@ -27,7 +28,7 @@ class WindowBlur extends OSElement {
         // canvas twice during boot.
         ...(support.css.backdropFilter
           ? {}
-          : { background: "rgba(255,255,255,.62)" })
+          : { background: color.glass })
       }
     });
   }

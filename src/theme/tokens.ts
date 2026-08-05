@@ -1,38 +1,43 @@
 /**
- * The design tokens for the desktop.
+ * The token *names* every component styles against.
  *
- * Everything visual should come from here rather than from literals in each
- * component. Before this existed the palette was seven separate `#ccc`s plus a
- * stray `#738dff` and a `#2196F3`, which is why nothing quite matched.
+ * These are CSS custom property references, never literals. Components build
+ * their stylesheets once, in their constructors, so a palette of literals could
+ * only change by tearing down and rebuilding every sheet on the desktop.
+ * Pointing each token at a variable means switching theme is a handful of
+ * writes to the root element and nothing restyles at all.
  *
- * Neutrals are biased warm-violet so they belong to the wallpaper instead of
- * reading as dead grey. There is exactly one accent, and it is meant to appear
- * at most twice on any given screen; `current` is semantic and sits outside
- * that budget.
+ * What the variables resolve to lives in `themes.ts`, `accents.ts` and
+ * `wallpapers.ts`; `engine.ts` composes them and writes them out.
  */
 
 export const color = {
-  ink: "#2b2530",
-  inkSoft: "#6a6272",
-  inkFaint: "#948da0",
+  ink: "var(--ink)",
+  inkSoft: "var(--ink-soft)",
+  inkFaint: "var(--ink-faint)",
 
-  line: "rgba(43, 37, 48, .12)",
-  lineSoft: "rgba(43, 37, 48, .07)",
+  line: "var(--line)",
+  lineSoft: "var(--line-soft)",
 
   /** Window glass, focused and resting. */
-  glass: "rgba(255, 255, 255, .58)",
-  glassRest: "rgba(255, 255, 255, .40)",
-  glassEdge: "rgba(255, 255, 255, .75)",
+  glass: "var(--glass)",
+  glassRest: "var(--glass-rest)",
+  glassEdge: "var(--glass-edge)",
   /** Taskbar and launcher sit slightly further back than a window. */
-  chrome: "rgba(255, 255, 255, .5)",
-  chromeRaised: "rgba(255, 255, 255, .72)",
+  chrome: "var(--chrome)",
+  chromeRaised: "var(--chrome-raised)",
 
-  accent: "#9c4f6a",
-  accentPressed: "#8b4460",
+  accent: "var(--accent)",
+  accentPressed: "var(--accent-pressed)",
   /** Reserved for "this is happening now". Never decorative. */
-  current: "#4a7c59",
+  current: "var(--current)",
 
-  desktop: "#f2ddda",
+  desktop: "var(--desktop)",
+
+  /** The wash under a hovered control. Light on dark, dark on light. */
+  hover: "var(--hover)",
+  scrollbar: "var(--scrollbar)",
+  scrollbarHover: "var(--scrollbar-hover)",
 } as const;
 
 /** 1.25 scale, capped at the sizes the product actually needs. */
@@ -71,20 +76,19 @@ export const font = {
 } as const;
 
 export const radius = {
-  window: "10px",
-  control: "6px",
-  chip: "5px",
-  pill: "8px",
+  window: "var(--radius-window)",
+  control: "var(--radius-control)",
+  chip: "var(--radius-chip)",
+  pill: "var(--radius-pill)",
 } as const;
 
 export const shadow = {
-  window:
-    "0 24px 48px -20px rgba(60, 40, 70, .34), 0 4px 12px -6px rgba(60, 40, 70, .16)",
-  windowRest: "0 8px 20px -14px rgba(60, 40, 70, .3)",
-  chrome: "0 14px 30px -18px rgba(60, 40, 70, .4)",
+  window: "var(--shadow-window)",
+  windowRest: "var(--shadow-window-rest)",
+  chrome: "var(--shadow-chrome)",
   /** Hairline drawn with an inset shadow so it survives translucency. */
-  edge: "inset 0 0 0 1px rgba(255, 255, 255, .75)",
-  edgeRest: "inset 0 0 0 1px rgba(255, 255, 255, .55)",
+  edge: "var(--shadow-edge)",
+  edgeRest: "var(--shadow-edge-rest)",
 } as const;
 
 export const blur = {

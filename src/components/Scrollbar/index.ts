@@ -1,5 +1,6 @@
 import debounce from "../../utils/debounce";
 import OSElement from "../../utils/OSElement";
+import { color } from "../../theme";
 
 /** How close the pointer must get to the right edge before the bar appears. */
 const PROXIMITY_PX = 40;
@@ -72,7 +73,7 @@ class ScrollBar extends OSElement {
           position: "relative",
           width: `${TRACK_WIDTH_PX}px`,
           borderRadius: `${TRACK_WIDTH_PX / 2}px`,
-          backgroundColor: "rgba(90,90,90,.45)",
+          backgroundColor: color.scrollbar,
           cursor: "pointer",
           // Starts unclickable to match the resting opacity of 0; show() turns
           // it on. Otherwise a thumb nobody can see still swallows clicks along
@@ -80,7 +81,7 @@ class ScrollBar extends OSElement {
           pointerEvents: "none",
           transition: "background-color 150ms",
           "&:hover": {
-            backgroundColor: "rgba(60,60,60,.7)"
+            backgroundColor: color.scrollbarHover
           }
         }
       }

@@ -1,4 +1,5 @@
 import OSElement from "../../utils/OSElement";
+import { color } from "../../theme";
 
 class SwitchToggle extends OSElement {
   onClick?: (e: MouseEvent) => void;
@@ -14,8 +15,10 @@ class SwitchToggle extends OSElement {
   ) {
     super("switch", "switch");
     this.size = size;
-    this.onColor = onColor ||"#2196F3";
-    this.offColor = offColor ||  "#ccc";
+    // Tokens, so a switch belongs to whichever theme is in force. The old
+    // defaults were a stray Material blue and a #ccc that vanished on dark.
+    this.onColor = onColor || color.accent;
+    this.offColor = offColor || color.line;
     this.value = value || false;
     const label = document.createElement("label");
     const input = document.createElement("input");
@@ -71,7 +74,7 @@ class SwitchToggle extends OSElement {
               content: "''",
               width: `${this.size}px`,
               height: `${this.size}px`,
-              backgroundColor: "white",
+              backgroundColor: color.glassEdge,
               "-webkit-transition": ".4s",
               transition: ".4s",
               borderRadius: "50%"

@@ -3,6 +3,7 @@ import windowManager from "../../utils/windowManager";
 import AboutContent from "../../contents/about";
 import Desktop from "../../components/Desktop";
 import OSElement from "../../utils/OSElement";
+import { color } from "../../theme";
 import SwitchToggle from "../../components/SwitchToggle";
 import db, {FeatureFlag, FEATURE_FLAG_DEFAULTS} from './../../Store'
 
@@ -63,7 +64,7 @@ class FeatureFlagsContent extends OSElement {
       [this.id]: {
         "& > div > div": {
           height: "20px",
-          borderBottom: "1px solid #ccc",
+          borderBottom: `1px solid ${color.lineSoft}`,
           display: "flex",
           flexFlow: "row nowrap",
           justifyContent: "space-between",

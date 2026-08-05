@@ -33,7 +33,7 @@ class Bootscreen extends OSElement {
         opacity: "1",
         transition: "250ms opacity linear",
         background:
-          "linear-gradient(180deg, #f7c6d2 0%, #f9d5cd 26%, #fae3d4 44%, #f2ddda 58%, #e6dced 100%)",
+          "var(--wallpaper-sky)",
         display: "flex",
         flexFlow: "column",
         justifyContent: "center",
@@ -45,7 +45,7 @@ class Bootscreen extends OSElement {
           width: "168px",
           height: "3px",
           borderRadius: "2px",
-          background: "rgba(43,37,48,.13)",
+          background: color.line,
           overflow: "hidden"
         },
         "& > .boot-bar > i": {

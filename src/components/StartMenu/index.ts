@@ -1,4 +1,5 @@
 import OSElement from "../../utils/OSElement";
+import { color } from "../../theme";
 import WindowBlur from "../Window/blur";
 import MenuItem from "./menuItem";
 import User from "./user";
@@ -13,6 +14,7 @@ import Settings from "../../utils/settings";
 import LoggerWindow from "../../contents/logger";
 import { isNarrow } from "../../utils/utils";
 import FeatureFlagsApp from "../../apps/FeatureFlags";
+import SettingsApp from "../../apps/Settings";
 
 class StartMenu extends OSElement {
   menuItems: MenuItem[];
@@ -31,7 +33,7 @@ class StartMenu extends OSElement {
         padding: "10px",
         borderRadius: "8px",
         zIndex: "999",
-        background: "rgba(200,200,200, .5)",
+        background: color.chrome,
         boxShadow: `0 17px 50px 0 rgba(0, 0, 0, 0.19),
         0 12px 15px 0 rgba(0, 0, 0, 0.24)`
       }
@@ -161,16 +163,7 @@ class StartMenu extends OSElement {
       })(),
       text: "Settings",
       action: () => {
-        windowManager.new({
-          title: `Settings Unavailable`,
-          content: new AlertContent({title: "Settings Unavailable", text: "This window isnt built yet, come back later"}),
-          dimensions: {
-            width: 250,
-            height: 180
-          },
-          desktop: this.desktop,
-          isDialog: true
-        });
+        new SettingsApp(this.desktop).load();
       }
     });
     settings.load(menuGrid.getElement());

@@ -1,4 +1,5 @@
 import OSElement from "../../utils/OSElement";
+import { color } from "../../theme";
 import FluentButton from "../FluentButton";
 
 class MenuItem extends OSElement {
@@ -24,7 +25,7 @@ class MenuItem extends OSElement {
         userSelect: "none",
         transition: "background 250ms ease",
         "&:hover": {
-          background: "rgba(255,255,255,.5)"
+          background: color.hover
         }
       }
     });

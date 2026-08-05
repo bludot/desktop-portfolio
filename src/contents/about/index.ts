@@ -148,7 +148,7 @@ class AboutContent extends OSElement {
           fontSize: size.micro,
           letterSpacing: ".03em",
           color: color.inkSoft,
-          background: "rgba(255,255,255,.5)",
+          background: color.chrome,
           border: `1px solid ${color.lineSoft}`,
           borderRadius: "5px",
           padding: "2px 7px"

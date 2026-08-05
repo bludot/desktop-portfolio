@@ -33,7 +33,7 @@ class TopbarButton extends OSElement {
         fill: palette.inkFaint,
         transition: "background-color 130ms ease, color 130ms ease",
         "&:hover": {
-          background: "rgba(43,37,48,.08)",
+          background: palette.hover,
           color: palette.ink,
           fill: palette.ink
         },
@@ -93,7 +93,7 @@ class WindowButtons extends OSElement {
             return icon;
           })(),
           action: minimize,
-          color: "#ccc"
+          color: palette.inkFaint
         }),
         new TopbarButton({
           icon: (() => {
@@ -107,7 +107,7 @@ class WindowButtons extends OSElement {
             return icon;
           })(),
           action: maximize ?? (() => {}),
-          color: "#ccc"
+          color: palette.inkFaint
         }),
         new TopbarButton({
           icon: (() => {

@@ -12,6 +12,9 @@ import Bootscreen from "./components/Bootscreen";
 import queryString from "query-string";
 import Logger, {GlobalLogger} from "./Logger";
 import windowManager from "./utils/windowManager";
+import appearance from "./utils/appearance";
+import { attachGlobalStyles } from "./theme";
+import { loadSettings } from "./Store";
 import LoggerWindow from "./contents/logger";
 import ExperienceContent from "./contents/experience";
 import AboutContent from "./contents/about";
@@ -35,6 +38,23 @@ logger.info("Starting up...");
 async function startup() {
   // The desktop draws its own sky, so there is nothing to fetch or blur here.
   logger.debug("Preparing desktop");
+
+  /*
+   * Appearance first, and before anything paints. The tokens are applied to the
+   * root element, so a desktop built before this runs would flash the default
+   * light theme for a frame and then swap — the classic wrong-theme flicker.
+   *
+   * A failed read is not fatal: the defaults are already in force, and losing a
+   * wallpaper preference is a much smaller problem than failing to boot.
+   */
+  attachGlobalStyles();
+  appearance.apply();
+  try {
+    const saved = await loadSettings();
+    if (Object.keys(saved).length) appearance.hydrate(saved);
+  } catch (error) {
+    logger.debug(`Could not read saved settings: ${error}`);
+  }
 }
 
 // Built once the desktop exists, so each opener can be handed it directly

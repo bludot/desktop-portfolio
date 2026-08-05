@@ -1,4 +1,5 @@
 import { motion as token } from "../theme";
+import appearance from "./appearance";
 
 /**
  * A very small motion layer for the desktop.
@@ -28,8 +29,14 @@ export interface PlayOptions {
   fill?: FillMode;
 }
 
-/** True when the viewer has asked for less movement. */
+/**
+ * True when the viewer has asked for less movement — either in Settings, or in
+ * the operating system. The setting can only ever add to what the OS asks for:
+ * turning it off here does not override someone who has asked their system for
+ * reduced motion.
+ */
 export function prefersReducedMotion(): boolean {
+  if (appearance.get().reduceMotion) return true;
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;
   }

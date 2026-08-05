@@ -163,4 +163,24 @@ class Logger {
   }
 }
 
+/*
+ * A way to read the log from the console while developing.
+ *
+ * The Debugger window shows everything every component says, which is a lot of
+ * start-up noise to read a handful of lines through. This gives the same log
+ * back as data, filterable by the name a Logger was created with:
+ *
+ *   __osLogs("Launcher")
+ *
+ * Development only — it is behind `import.meta.env.DEV`, so it is not in the
+ * built bundle at all.
+ */
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__osLogs = (name?: string) =>
+    GlobalLogger.getInstance()
+      .getLogs()
+      .filter((log) => !name || log.serviceName === name)
+      .map((log) => `${log.timestamp ?? ""} ${log.serviceName}: ${log.message}`);
+}
+
 export { Logger as default, GlobalLogger };

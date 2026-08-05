@@ -120,11 +120,17 @@ class Desktop extends OSElement {
     super.load(element);
   }
 
-  async startup(bootscreen: { unload: () => Promise<void> }) {
+  async startup(bootscreen: {
+    unload: () => Promise<void>;
+    complete?: () => Promise<void>;
+  }) {
     logger.debug("Starting desktop");
     this.mainElement.appendChild(this.element);
     this.taskbar.load(this.element);
     await this.applyStyle();
+    // Let the boot sequence finish before it fades; the desktop is already
+    // built behind it, so this costs nothing but the animation.
+    await bootscreen.complete?.();
     await bootscreen.unload();
   }
 }

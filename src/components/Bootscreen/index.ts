@@ -1,12 +1,24 @@
 import OSElement from "../../utils/OSElement";
-import Loader from "../Loader";
 import Bootlogo from "./bootlogo";
+import { color, font, size } from "../../theme";
+
+/**
+ * How long the boot sequence is on screen.
+ *
+ * This used to be incidental: startup awaited two canvas stack blurs of the
+ * wallpaper, so the screen happened to sit there for over a second. With that
+ * work gone the sequence flashed past, so the duration is now stated outright —
+ * it is an intro, not a wait for anything.
+ */
+const BOOT_MS = 1100;
 
 class Bootscreen extends OSElement {
-  loader: Loader;
   canvas!: SVGSVGElement;
   path!: SVGPathElement;
   bootlogo: Bootlogo;
+  private bar!: HTMLElement;
+  private fill!: HTMLElement;
+  private label!: HTMLElement;
   constructor() {
     super("Bootscreen", "bootscreen");
     this.style = () => ({
@@ -20,12 +32,37 @@ class Bootscreen extends OSElement {
         overflow: "hidden",
         opacity: "1",
         transition: "250ms opacity linear",
-        background: "#EEEEEE",
+        background:
+          "linear-gradient(180deg, #f7c6d2 0%, #f9d5cd 26%, #fae3d4 44%, #f2ddda 58%, #e6dced 100%)",
         display: "flex",
         flexFlow: "column",
         justifyContent: "center",
         alignContent: "center",
         alignItems: "center",
+        gap: "22px",
+        fontFamily: font.ui,
+        "& > .boot-bar": {
+          width: "168px",
+          height: "3px",
+          borderRadius: "2px",
+          background: "rgba(43,37,48,.13)",
+          overflow: "hidden"
+        },
+        "& > .boot-bar > i": {
+          display: "block",
+          width: "6%",
+          height: "100%",
+          borderRadius: "2px",
+          background: color.accent,
+          transition: `width ${BOOT_MS}ms cubic-bezier(.25,.8,.35,1)`
+        },
+        "& > .boot-label": {
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: ".1em",
+          textTransform: "uppercase",
+          color: color.inkFaint
+        },
         "&::before": {
           position: "absolute",
           top: 0,
@@ -36,11 +73,35 @@ class Bootscreen extends OSElement {
       },
     });
     this.bootlogo = new Bootlogo();
-    this.loader = new Loader();
+
+    this.bar = document.createElement("div");
+    this.bar.className = "boot-bar";
+    this.fill = document.createElement("i");
+    this.bar.appendChild(this.fill);
+
+    this.label = document.createElement("span");
+    this.label.className = "boot-label";
+    this.label.appendChild(document.createTextNode("Starting up"));
   }
+
   async beforeLoad() {
     await this.bootlogo.load(this.element);
-    await this.loader.load(this.element);
+    this.element.appendChild(this.bar);
+    this.element.appendChild(this.label);
+  }
+
+  /**
+   * Run the bar to full, then resolve. Determinate rather than a spinner: boot
+   * knows how long it intends to take, so it should say so.
+   */
+  complete(): Promise<void> {
+    return new Promise((resolve) => {
+      // Next frame, so the transition has a starting value to animate from.
+      requestAnimationFrame(() => {
+        this.fill.style.width = "100%";
+      });
+      setTimeout(resolve, BOOT_MS);
+    });
   }
   
   

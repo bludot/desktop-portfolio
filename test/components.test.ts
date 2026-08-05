@@ -123,6 +123,32 @@ describe('Bootscreen', () => {
     expect(boot.getElement().children.length).toBeGreaterThan(0)
   })
 
+  // Regression: the boot sequence used to be visible only because startup
+  // awaited two canvas stack blurs of the wallpaper. With that work gone it
+  // flashed past, so the duration is now stated rather than incidental.
+  it('runs a determinate bar and holds the screen while it does', async () => {
+    vi.useFakeTimers()
+    const boot = new Bootscreen()
+    await boot.load(host)
+
+    const fill = boot.getElement().querySelector<HTMLElement>('.boot-bar > i')!
+    expect(fill).toBeTruthy()
+    expect(boot.getElement().textContent).toContain('Starting up')
+
+    let done = false
+    const running = boot.complete().then(() => { done = true })
+
+    // Not finished before the sequence has had its time.
+    await vi.advanceTimersByTimeAsync(600)
+    expect(done).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(600)
+    await running
+    expect(done).toBe(true)
+    expect(fill.style.width).toBe('100%')
+    vi.useRealTimers()
+  })
+
   it('fades out before unloading', async () => {
     vi.useFakeTimers()
     const boot = new Bootscreen()

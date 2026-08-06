@@ -152,16 +152,6 @@ class ResizableBorder extends OSElement {
     this.parentDimensions.y = this.resizeTarget.offsetTop;
     this.cursorPosition.y = e.clientY;
     this.cursorPosition.x = e.clientX;
-    /*
-     * Cover the screen before the first move.
-     *
-     * A window holding an app is a window holding a cross-origin frame, and
-     * the moves that do the resizing are delivered to `window` here. Drag an
-     * edge far enough that the pointer crosses that frame and the events go to
-     * the frame's document instead: the window stops resizing halfway through,
-     * and the release is swallowed too, so the drag never ends.
-     */
-    raiseDragShim(CURSORS[this.type]);
     // Both handlers are removed on release. The previous version registered a
     // fresh anonymous mouseup listener per drag and never took it off, so every
     // resize left one behind for the life of the page.
@@ -190,6 +180,22 @@ class ResizableBorder extends OSElement {
 
   mouseMove(e: MouseEvent) {
     e.preventDefault();
+
+    /*
+     * Cover the screen, now that this is a drag rather than a press.
+     *
+     * A window holding an app is a window holding a cross-origin frame, and
+     * the moves that do the resizing are delivered to `window` here. Pull an
+     * edge far enough that the pointer crosses that frame and the events go to
+     * the frame's document instead: the resize stops halfway through, and the
+     * release is swallowed too, so the drag never ends.
+     *
+     * Raised on the move rather than the press for the same reason as the
+     * titlebar — a sheet up before the release turns every click underneath it
+     * into nothing.
+     */
+    raiseDragShim(CURSORS[this.type]);
+
     if (this.type === ResizeType.RIGHT) {
       this.updateParentDimensions(
         this.resizeTarget,

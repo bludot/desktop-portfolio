@@ -36,11 +36,23 @@ let shim: HTMLElement | undefined;
 /**
  * Cover the screen for the duration of a drag.
  *
+ * Call this from the first *move*, never from the press.
+ *
+ * A press is not yet a drag — most of them are clicks, and the buttons on this
+ * desktop act on `click`, which the browser only fires when the press and the
+ * release land on the same element. A sheet raised on mousedown catches the
+ * release instead, so the click never happens: window controls stopped closing
+ * windows the moment their titlebar was pressed, because the titlebar is what
+ * raised the sheet over them. Raising on movement means a gesture that turns
+ * out to be a click never sees one.
+ *
  * `cursor` is the gesture's own — `grabbing` for a window being moved, the
- * matching arrow for whichever edge is being pulled.
+ * matching arrow for whichever edge is being pulled. Cheap to call on every
+ * move: it returns immediately once the sheet is up and showing that cursor.
  */
 export function raiseDragShim(cursor = "default"): void {
   if (typeof document === "undefined") return;
+  if (shim?.isConnected && shim.style.cursor === cursor) return;
 
   if (!shim) {
     shim = document.createElement("div");
@@ -62,6 +74,20 @@ export function raiseDragShim(cursor = "default"): void {
 
   shim.style.cursor = cursor;
   document.body.appendChild(shim);
+
+  /*
+   * The sheet takes itself down on the next release, whatever happens upstream.
+   *
+   * Every caller drops it on their own `mouseup` already, and this is the
+   * backstop for when that never arrives — a handler removed early, a gesture
+   * abandoned, a caller added later that forgets. The failure it guards against
+   * is not a small one: a sheet left up covers the desktop at z-index 9500 and
+   * silently eats every click on it, which reads as the whole page having died.
+   *
+   * On capture, so it runs before the drag's own release handler rather than
+   * racing it, and `once`, so it never accumulates across gestures.
+   */
+  window.addEventListener("mouseup", dropDragShim, { capture: true, once: true });
 }
 
 /**

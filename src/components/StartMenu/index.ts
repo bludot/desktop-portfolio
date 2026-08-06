@@ -1,4 +1,7 @@
 import OSElement from "../../utils/OSElement";
+import { APPS, openAppWindow } from "../../apps/external";
+import appIcon from "../AppIcon";
+import MenuLabel from "./menuLabel";
 import { color, font } from "../../theme";
 import WindowBlur from "../Window/blur";
 import MenuItem from "./menuItem";
@@ -27,6 +30,13 @@ class StartMenu extends OSElement {
       [this.id]: {
         left: "15px",
         bottom: "75px",
+        /*
+         * Stated, not inherited from the longest label. Sized by its content
+         * the panel came out about 100px wide — narrow enough that the rows
+         * read as a column of text rather than as a menu.
+         */
+        width: "232px",
+        boxSizing: "border-box",
         display: "flex",
         position: "fixed",
         flexFlow: "column nowrap",
@@ -155,6 +165,30 @@ class StartMenu extends OSElement {
       }
     });
     contact.load(menuGrid.getElement());
+
+    /*
+     * The apps, grouped and marked.
+     *
+     * Everything above this opens a window on this desktop; everything in here
+     * is a whole product somewhere else. Mixing the two in one list would mean
+     * two items that look identical behaving completely differently when
+     * pressed, so the group label and the arrow say which is which before the
+     * press rather than after it.
+     */
+    const appsLabel = new MenuLabel("Apps");
+    appsLabel.load(menuGrid.getElement());
+
+    APPS.forEach((app) => {
+      const item = new MenuItem({
+        icon: appIcon(app),
+        text: app.name,
+        action: () => openAppWindow(app, this.desktop)
+      });
+      item.load(menuGrid.getElement());
+    });
+
+    const appsEnd = new MenuLabel();
+    appsEnd.load(menuGrid.getElement());
     const settings = new MenuItem({
       icon: (() => {
         const icon = new DOMParser().parseFromString(

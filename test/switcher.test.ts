@@ -157,6 +157,64 @@ describe('Switcher', () => {
     expect(switcher.isOpen()).toBe(true)
   })
 
+  /*
+   * Regression: below 760px the taskbar hides its chips, leaving the overview
+   * as the only way back to a window — and the overview filtered out exactly
+   * the windows that needed it. Minimising on a phone lost the window for good.
+   */
+  describe('a minimised window', () => {
+    const makeMinimized = (title: string) => {
+      const open = makeWindow(title)
+      open.minimized = true
+      open.window.minimized = true
+      open.window.getElement().style.display = 'none'
+      open.window.restore = vi.fn(async () => {
+        open.window.minimized = false
+        open.window.getElement().style.display = ''
+      })
+      return open
+    }
+
+    it('still gets a tile', async () => {
+      const hidden = makeMinimized('About')
+      vi.spyOn(windowManager, 'list').mockReturnValue([hidden, makeWindow('Experience')])
+
+      const switcher = build()
+      await switcher.show(host)
+
+      const tiles = [...host.querySelectorAll('.switcher-tile')]
+      expect(tiles.map((t) => t.textContent)).toEqual(['About', 'Experience'])
+      // Shown while the overview is open, or its tile would measure nothing.
+      expect(hidden.window.getElement().style.display).toBe('')
+    })
+
+    it('is restored when it is the one picked', async () => {
+      const hidden = makeMinimized('About')
+      vi.spyOn(windowManager, 'list').mockReturnValue([hidden])
+
+      const switcher = build()
+      await switcher.show(host)
+      ;(host.querySelector('.switcher-tile') as HTMLElement).click()
+      await vi.waitFor(() => expect(switcher.isOpen()).toBe(false))
+
+      expect(hidden.window.restore).toHaveBeenCalled()
+      expect(hidden.window.getElement().style.display).toBe('')
+    })
+
+    // Looking at a window is not the same as asking for it.
+    it('goes back out of sight when the overview closes without it', async () => {
+      const hidden = makeMinimized('About')
+      vi.spyOn(windowManager, 'list').mockReturnValue([hidden, makeWindow('Experience')])
+
+      const switcher = build()
+      await switcher.show(host)
+      await switcher.close()
+
+      expect(hidden.window.restore).not.toHaveBeenCalled()
+      expect(hidden.window.getElement().style.display).toBe('none')
+    })
+  })
+
   it('says so when nothing is open', async () => {
     vi.spyOn(windowManager, 'list').mockReturnValue([])
 

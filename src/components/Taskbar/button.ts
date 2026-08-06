@@ -158,10 +158,6 @@ class TaskbarButtons extends OSElement {
       menuOpen = true;
 
       const el = startMenu.getElement();
-      // Hidden before it mounts: load() appends at full opacity, so without
-      // this the menu paints at full strength for a frame and only then gets
-      // animated from zero — which reads as a flicker.
-      el.style.opacity = "0";
 
       /*
        * Attached now rather than after the await. Capture on window runs before
@@ -183,7 +179,11 @@ class TaskbarButtons extends OSElement {
        */
       try {
         await startMenu.load(document.querySelector("#app") as HTMLElement);
-        await motion.popIn(el);
+        // `enter` owns the hide and the reveal. Doing it here by hand is what
+        // made the menu blink as it finished opening: the entrance fills
+        // backwards, so on its last frame the element fell back to the inline
+        // `opacity: 0` that was only cleared after the await.
+        await motion.enter(el, motion.popIn);
       } catch (error) {
         /*
          * An open that failed is not an open. Leaving the state saying it was
@@ -200,6 +200,8 @@ class TaskbarButtons extends OSElement {
           // Never loaded, so there is nothing to take down.
         }
       } finally {
+        // Belt and braces for the failure path: `enter` clears this itself on
+        // the way through, and a menu that threw must not be left invisible.
         el.style.opacity = "";
       }
 

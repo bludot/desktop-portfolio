@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   play,
+  enter,
   motion,
   prefersReducedMotion,
   swapAppearance,
@@ -31,6 +32,61 @@ const stubMatchMedia = (reduced: boolean) => {
     media: query,
   })
 }
+
+/*
+ * Regression: the start menu blinked as it finished opening. It hid itself
+ * inline before mounting and cleared that hide only after awaiting the
+ * entrance — but entrances fill `backwards`, so on the last frame the element
+ * fell back to the cascade and found the inline `opacity: 0` still there.
+ */
+describe('enter', () => {
+  beforeEach(() => {
+    el = document.createElement('div')
+    document.body.appendChild(el)
+    stubMatchMedia(false)
+  })
+
+  afterEach(() => {
+    el.remove()
+  })
+
+  it('hides the element before the entrance is created', () => {
+    let seenAtStart: string | undefined
+    const start = (target: HTMLElement) => {
+      seenAtStart = target.style.opacity
+      return Promise.resolve()
+    }
+
+    enter(el, start)
+    expect(seenAtStart).toBe('0')
+  })
+
+  // Synchronously, not after awaiting: the gap between the animation ending
+  // and a later continuation is exactly one paintable frame at zero.
+  it('clears the hide without waiting for the animation to finish', () => {
+    let settle: (() => void) | undefined
+    const start = () => new Promise<void>((resolve) => { settle = resolve })
+
+    const running = enter(el, start)
+
+    expect(el.style.opacity).toBe('')
+    settle!()
+    return running
+  })
+
+  it('leaves nothing behind once the entrance has run', async () => {
+    await enter(el, () => Promise.resolve())
+    expect(el.style.opacity).toBe('')
+  })
+
+  // Where nothing animates, the element simply appears — which is the right
+  // answer under reduced motion rather than a special case.
+  it('shows the element at once when there is no animation to play', async () => {
+    stubMatchMedia(true)
+    await enter(el, motion.popIn)
+    expect(el.style.opacity).toBe('')
+  })
+})
 
 describe('motion', () => {
   beforeEach(() => {

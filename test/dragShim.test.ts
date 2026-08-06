@@ -68,6 +68,20 @@ describe('the drag shim', () => {
     expect(() => dropDragShim()).not.toThrow()
   })
 
+  /*
+   * The backstop. A sheet left up covers the desktop and silently eats every
+   * click on it, which reads as the whole page having died — so it comes down
+   * on the next release even if the gesture that raised it never says so.
+   */
+  it('takes itself down on the next release, with no help from the caller', () => {
+    raiseDragShim('grabbing')
+    expect(shim()).toBeTruthy()
+
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+
+    expect(shim()).toBeNull()
+  })
+
   // One gesture at a time: a second raise must not leave the first on screen.
   it('never stacks', () => {
     raiseDragShim('grabbing')
@@ -105,15 +119,44 @@ describe('a resize gesture', () => {
     dropDragShim()
   })
 
-  it('raises the shim on the press and drops it on the release', () => {
+  /*
+   * The press alone must raise nothing. A `click` only fires when the press
+   * and the release land on the same element, so a sheet up before the release
+   * catches it instead and the click never happens — which is exactly how the
+   * window controls stopped closing windows: they sit inside the titlebar that
+   * raised the sheet over them.
+   */
+  it('leaves the screen alone until the pointer actually moves', () => {
     const right = borders[1]
 
     right.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 200 }))
+    expect(shim()).toBeNull()
+
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 240, clientY: 200 }))
     expect(shim()).toBeTruthy()
     // The edge's own cursor, held across the whole screen.
     expect(shim()!.style.cursor).toBe('ew-resize')
 
     window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
     expect(shim()).toBeNull()
+  })
+
+  // A press and release with no movement between them is a click, and every
+  // button on this desktop acts on one.
+  it('lets a click through when nothing was dragged', () => {
+    const right = borders[1]
+    const clicks: string[] = []
+    const button = document.createElement('button')
+    button.addEventListener('click', () => clicks.push('hit'))
+    document.body.appendChild(button)
+
+    right.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 200 }))
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+
+    // Nothing was ever in the way, so the press and release share a target.
+    expect(shim()).toBeNull()
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(clicks).toEqual(['hit'])
+    button.remove()
   })
 })

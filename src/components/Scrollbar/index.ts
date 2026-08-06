@@ -280,9 +280,6 @@ class ScrollBar extends OSElement {
     this.dragScrollStart = this.scrollPosition;
     this.show();
 
-    // Same reason as a window drag: a thumb pulled past a cross-origin frame
-    // loses the moves to it, and the scroll sticks with the thumb held.
-    raiseDragShim("pointer");
     window.addEventListener("mousemove", this.onThumbMove);
     window.addEventListener("mouseup", this.onThumbUp);
   }
@@ -290,6 +287,11 @@ class ScrollBar extends OSElement {
   thumbMouseMove(e: MouseEvent): void {
     if (!this.dragging || !this.scroller) return;
     e.preventDefault();
+
+    // Same reason as a window drag, and raised on the move for the same reason
+    // too: a thumb pulled past a cross-origin frame loses its moves to it, and
+    // the scroll sticks with the thumb still held.
+    raiseDragShim("pointer");
 
     const travel = Math.max(0, this.viewport - this.thumbLength);
     if (travel === 0) return;

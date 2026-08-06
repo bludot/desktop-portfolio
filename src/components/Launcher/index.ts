@@ -5,6 +5,8 @@ import { APPS, openAppWindow, type App } from "../../apps/external";
 import appIcon from "../AppIcon";
 import { loadRepos, type Repo } from "../../utils/github";
 import { GROUP_ORDER, SEARCH_URL, search, type Group, type Result } from "./results";
+import { overlayScroll } from "../Scrollbar";
+import type ScrollBar from "../Scrollbar";
 import type Desktop from "../Desktop";
 
 /** Below this the panel is the screen rather than a card on it. */
@@ -39,6 +41,7 @@ class Launcher extends OSElement {
   private list!: HTMLElement;
   private empty!: HTMLElement;
   private scrim!: HTMLElement;
+  private bar?: ScrollBar;
 
   private open = false;
   private results: Result[] = [];
@@ -298,7 +301,9 @@ class Launcher extends OSElement {
     field.className = "launcher-field";
     field.appendChild(
       new DOMParser().parseFromString(
-        `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
+        // Namespaced, or the XML parser hands back an "svg" element that belongs
+        // to no namespace, takes its size from the stylesheet and draws nothing.
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
         "image/svg+xml"
       ).documentElement
     );
@@ -348,10 +353,20 @@ class Launcher extends OSElement {
   async load(element: HTMLElement) {
     await super.load(element);
     window.addEventListener("keydown", this.onGlobalKey, true);
+    /*
+     * The desktop's own bar, like every other scrolling box here.
+     *
+     * Attached after mounting rather than in the constructor: the track is
+     * placed against the panel, and where the panel is cannot be read off an
+     * element that is not in the document yet.
+     */
+    this.bar = overlayScroll(this.list);
   }
 
   async unload() {
     window.removeEventListener("keydown", this.onGlobalKey, true);
+    await this.bar?.unload();
+    this.bar = undefined;
     await super.unload();
   }
 
@@ -576,6 +591,7 @@ class Launcher extends OSElement {
         : "Nothing to show.";
       this.empty.classList.add("is-shown");
       this.input.removeAttribute("aria-activedescendant");
+      this.bar?.sync();
       return;
     }
     this.empty.classList.remove("is-shown");
@@ -629,6 +645,14 @@ class Launcher extends OSElement {
 
       this.list.appendChild(row);
     });
+
+    /*
+     * The bar watches the box for a change of size, and this is the other kind
+     * of change: the list is the same height, and everything inside it is new.
+     * Without this the thumb keeps the length it had for the last set of
+     * results — full height after a search that narrowed ninety rows to three.
+     */
+    this.bar?.sync();
 
     const active = this.list.querySelector<HTMLElement>(".launcher-row.is-active");
     if (active) {

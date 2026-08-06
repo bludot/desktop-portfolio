@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
-import ScrollBar from '../src/components/Scrollbar'
+import ScrollBar, { ScrollBars, overlayScroll } from '../src/components/Scrollbar'
 
 jss.setup(preset())
 jss.use(nested())
@@ -230,5 +230,192 @@ describe('ScrollBar', () => {
     scroller.dispatchEvent(new Event('scroll'))
     // No longer tracking, so the thumb stays where it was.
     expect(thumb(bar).style.top).toBe('0px')
+  })
+
+  // A pane that redraws throws its content away first, taking any track mounted
+  // inside it. Tidying up after that must not be an error.
+  it('unloads cleanly when its host has already been emptied', async () => {
+    const bar = await mountScrollbar()
+    host.textContent = ''
+    await expect(bar.unload()).resolves.toBeUndefined()
+  })
+})
+
+/*
+ * Sideways. A code block, a wide table, a source listing: boxes that keep their
+ * long line rather than wrapping it, and grew the platform's own bar along the
+ * bottom before this.
+ */
+describe('ScrollBar along the bottom', () => {
+  let wide: HTMLElement
+
+  // 200px of box over 1000px of line: 800px of range, as above but turned.
+  const makeWideScroller = (client = 200, scroll = 1000, height = 60) => {
+    const el = document.createElement('div')
+    Object.defineProperty(el, 'clientWidth', { value: client, configurable: true })
+    Object.defineProperty(el, 'scrollWidth', { value: scroll, configurable: true })
+    Object.defineProperty(el, 'clientHeight', { value: height, configurable: true })
+    Object.defineProperty(el, 'offsetLeft', { value: 8, configurable: true })
+    Object.defineProperty(el, 'offsetTop', { value: 12, configurable: true })
+    el.getBoundingClientRect = () =>
+      ({ top: 12, bottom: 12 + height, left: 8, right: 8 + client, width: client, height }) as DOMRect
+    host.appendChild(el)
+    return el
+  }
+
+  const mountWide = async (target?: HTMLElement) => {
+    const bar = new ScrollBar('x')
+    bar.attachTo(target ?? wide)
+    await bar.load(host)
+    await vi.advanceTimersByTimeAsync(0)
+    return bar
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    wide = makeWideScroller()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('leaves the box scrolling itself sideways', async () => {
+    await mountWide()
+    expect(wide.style.overflowX).toBe('auto')
+    expect(wide.classList.contains('hide-native-scrollbar')).toBe(true)
+  })
+
+  it('lays the track along the bottom edge of the box', async () => {
+    const bar = await mountWide()
+    expect(bar.getElement().style.left).toBe('8px')
+    // Bottom of the box, less the thickness of the track itself.
+    expect(bar.getElement().style.top).toBe('62px')
+    expect(bar.getElement().style.width).toBe('200px')
+  })
+
+  it('sizes the thumb against the length of the line', async () => {
+    const bar = await mountWide()
+    expect(thumb(bar).style.width).toBe('40px')
+  })
+
+  it('follows the native scroll position', async () => {
+    const bar = await mountWide()
+    wide.scrollLeft = 400
+    wide.dispatchEvent(new Event('scroll'))
+    // Track travel is 200-40=160px; half the 800px range is 80px along it.
+    expect(thumb(bar).style.left).toBe('80px')
+  })
+
+  it('drags sideways', async () => {
+    const bar = await mountWide()
+    thumb(bar).dispatchEvent(mouse('mousedown', 0, 40))
+    window.dispatchEvent(mouse('mousemove', 80, 40))
+    expect(wide.scrollLeft).toBe(400)
+  })
+
+  /*
+   * Anywhere over the box, unlike the vertical bar. These are a few lines tall,
+   * so "within 40px of the bottom" would be most of the box anyway — and the
+   * pointer is usually in the middle of the code it is about to scroll.
+   */
+  it('appears for the pointer anywhere over the box', async () => {
+    const bar = await mountWide()
+    bar.hide()
+    wide.dispatchEvent(mouse('mousemove', 100, 20))
+    expect(bar.getElement().style.opacity).toBe('1')
+  })
+
+  it('stays hidden while the pointer is outside it', async () => {
+    const bar = await mountWide()
+    bar.hide()
+    wide.dispatchEvent(mouse('mousemove', 100, 400))
+    expect(bar.getElement().style.opacity).toBe('0')
+  })
+})
+
+describe('overlayScroll', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    scroller = makeScroller()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('hangs the track on a parent that can hold it', async () => {
+    host.style.position = 'relative'
+    const bar = overlayScroll(scroller)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(bar.getElement().parentElement).toBe(host)
+    expect(host.querySelector('.scroll-host')).toBeNull()
+  })
+
+  // A code block in the middle of a README: its parent is the prose, which is
+  // not positioned and would put the track somewhere else entirely.
+  it('makes a box for the track when the parent will not do', async () => {
+    const bar = overlayScroll(scroller)
+    await vi.advanceTimersByTimeAsync(0)
+
+    const wrapper = host.querySelector<HTMLElement>('.scroll-host')!
+    expect(wrapper).toBeTruthy()
+    expect(wrapper.style.position).toBe('relative')
+    // Wrapped in place: the scrolling box is still where it was in the document.
+    expect(scroller.parentElement).toBe(wrapper)
+    expect(bar.getElement().parentElement).toBe(wrapper)
+  })
+
+  // Window content is built before the window is on screen, and nothing
+  // detached has a computed position to go on.
+  it('takes a host it is given rather than working one out', async () => {
+    const named = document.createElement('div')
+    host.appendChild(named)
+
+    const bar = overlayScroll(scroller, 'y', named)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(bar.getElement().parentElement).toBe(named)
+    expect(host.querySelector('.scroll-host')).toBeNull()
+  })
+})
+
+describe('ScrollBars', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    host = document.createElement('div')
+    host.style.position = 'relative'
+    document.body.appendChild(host)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('hangs one on everything the selector finds', async () => {
+    host.appendChild(document.createElement('pre'))
+    host.appendChild(document.createElement('pre'))
+
+    const bars = new ScrollBars()
+    bars.attach(host, 'pre', 'x')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(host.querySelectorAll('scrollbar').length).toBe(2)
+  })
+
+  it('drops them all when the content is redrawn', async () => {
+    host.appendChild(document.createElement('pre'))
+    const bars = new ScrollBars()
+    bars.attach(host, 'pre', 'x')
+    await vi.advanceTimersByTimeAsync(0)
+
+    bars.clear()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(host.querySelectorAll('scrollbar').length).toBe(0)
   })
 })

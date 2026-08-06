@@ -301,7 +301,11 @@ class TaskbarButtons extends OSElement {
     this.search.setAttribute("aria-label", "Search apps, windows and projects");
     this.search.appendChild(
       new DOMParser().parseFromString(
-        `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
+        // The namespace is not decoration: parsed as XML without it, the tag is
+        // an element called "svg" in no namespace at all, which the browser
+        // sizes from the stylesheet and then draws nothing inside. The chip has
+        // been showing a 13px hole where the magnifier should be.
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
         "image/svg+xml"
       ).documentElement
     );

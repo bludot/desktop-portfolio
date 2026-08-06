@@ -83,11 +83,32 @@ export const APPS: App[] = [
 ];
 
 /**
+ * Wide enough that the app inside believes it is on a desktop.
+ *
+ * A framed app reads the *frame's* width, not the screen's, so a window a
+ * little too narrow serves the phone layout to somebody sitting at a monitor —
+ * a hamburger in place of the navigation, one column, artwork dropped.
+ *
+ * 1024 is where it turns, measured rather than assumed: weeb.vip framed at
+ * 1000px gives the hamburger, at 1024px the full navigation bar. That is the
+ * common `lg` breakpoint and all three apps are built on it. The window was
+ * 1000px wide, which missed it by 24 — near enough to look like a rendering
+ * fault rather than a width.
+ *
+ * So: comfortably past it, not on it. The headroom is what stops a window
+ * nudged smaller by a few pixels from collapsing the app to a phone.
+ */
+const DESKTOP_WIDTH = 1180;
+const DESKTOP_HEIGHT = 780;
+
+/**
  * Open one as a window on the desktop.
  *
  * Sized larger than the other windows because these are whole applications
  * with their own navigation rather than a page of prose, and clipped to the
- * viewport so the frame is never born larger than the screen it is on.
+ * viewport so the frame is never born larger than the screen it is on. On a
+ * screen too small to hold the desktop layout the app gets its phone one,
+ * which is the right answer there.
  */
 export function openAppWindow(app: App, desktop: Desktop): void {
   windowManager.new({
@@ -96,8 +117,8 @@ export function openAppWindow(app: App, desktop: Desktop): void {
     content: new AppContent(app),
     desktop,
     dimensions: {
-      width: Math.min(1000, Math.max(320, window.innerWidth - 80)),
-      height: Math.min(700, Math.max(320, window.innerHeight - 140))
+      width: Math.min(DESKTOP_WIDTH, Math.max(320, window.innerWidth - 80)),
+      height: Math.min(DESKTOP_HEIGHT, Math.max(320, window.innerHeight - 140))
     },
     center: true
   });

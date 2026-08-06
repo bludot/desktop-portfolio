@@ -9,6 +9,9 @@ import { centreOf, swapAppearance } from "../../utils/motion";
 import appearance from "../../utils/appearance";
 import { saveSettings } from "../../Store";
 import SettingsApp from "../../apps/Settings";
+import Launcher from "../Launcher";
+import ProjectsContent from "../../contents/projects";
+import type { Repo } from "../../utils/github";
 
 const logger = new Logger("Desktop");
 
@@ -48,6 +51,7 @@ class Desktop extends OSElement {
   instanceName: string = "Desktop";
   /** Kept so the backstop can be taken off the document again. */
   private unbindFallback?: () => void;
+  launcher!: Launcher;
 
   constructor({
     backgroundColor = "#EEEEEE",
@@ -176,6 +180,41 @@ class Desktop extends OSElement {
     );
   }
 
+  /**
+   * The desktop's own verbs, for anything that offers them.
+   *
+   * The wallpaper menu builds these against the item that was pressed, so the
+   * theme swap can open out of it. The launcher has no such item — it is a
+   * panel in the middle of the screen — so its swap opens from the centre.
+   */
+  private launcherActions() {
+    return {
+      toggleTheme: () => {
+        const next = appearance.scheme() === "dark" ? "light" : "dark";
+        swapAppearance(() => {
+          appearance.set({ theme: next });
+          void saveSettings(appearance.get());
+        });
+      },
+      showAll: () => void this.taskbar.showOverview(this.mainElement),
+      minimizeAll: () =>
+        windowManager
+          .list()
+          .filter((open) => !open.minimized)
+          .forEach((open) => void open.window.minimize()),
+      settings: () => void new SettingsApp(this).load(),
+      openProjects: (repo?: Repo) => {
+        windowManager.new({
+          title: "Projects",
+          meta: "github",
+          content: new ProjectsContent(repo),
+          desktop: this,
+          dimensions: { width: 760, height: 620 }
+        });
+      }
+    };
+  }
+
   async load(element: HTMLElement) {
     await super.load(element);
   }
@@ -204,6 +243,13 @@ class Desktop extends OSElement {
      */
     await contextMenu.load(this.mainElement);
     this.bindMenu();
+    /*
+     * Beside the desktop for the same reason as the menu and the selection
+     * layer: this is a fixed panel, and the desktop clips its overflow and is
+     * the element the overview scales.
+     */
+    this.launcher = new Launcher(this, this.launcherActions());
+    await this.launcher.load(this.mainElement);
     await this.applyStyle();
     // Let the boot sequence finish before it fades; the desktop is already
     // built behind it, so this costs nothing but the animation.

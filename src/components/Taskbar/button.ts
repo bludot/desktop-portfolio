@@ -88,10 +88,14 @@ class TaskbarButtons extends OSElement {
   private clock?: HTMLElement;
   private divider!: HTMLElement;
   private switcher!: HTMLButtonElement;
+  private search!: HTMLButtonElement;
+  /** Kept for the launcher, which is created on the desktop after this is. */
+  private desktop: Desktop;
   private overview!: Switcher;
   private tick?: ReturnType<typeof setInterval>;
   constructor(desktop: Desktop) {
     super("taskbar-buttons", "taskbar-buttons");
+    this.desktop = desktop;
     const startMenu = new StartMenu(desktop);
 
     /*
@@ -154,10 +158,6 @@ class TaskbarButtons extends OSElement {
       menuOpen = true;
 
       const el = startMenu.getElement();
-      // Hidden before it mounts: load() appends at full opacity, so without
-      // this the menu paints at full strength for a frame and only then gets
-      // animated from zero — which reads as a flicker.
-      el.style.opacity = "0";
 
       /*
        * Attached now rather than after the await. Capture on window runs before
@@ -179,7 +179,11 @@ class TaskbarButtons extends OSElement {
        */
       try {
         await startMenu.load(document.querySelector("#app") as HTMLElement);
-        await motion.popIn(el);
+        // `enter` owns the hide and the reveal. Doing it here by hand is what
+        // made the menu blink as it finished opening: the entrance fills
+        // backwards, so on its last frame the element fell back to the inline
+        // `opacity: 0` that was only cleared after the await.
+        await motion.enter(el, motion.popIn);
       } catch (error) {
         /*
          * An open that failed is not an open. Leaving the state saying it was
@@ -196,6 +200,8 @@ class TaskbarButtons extends OSElement {
           // Never loaded, so there is nothing to take down.
         }
       } finally {
+        // Belt and braces for the failure path: `enter` clears this itself on
+        // the way through, and a menu that threw must not be left invisible.
         el.style.opacity = "";
       }
 
@@ -280,6 +286,33 @@ class TaskbarButtons extends OSElement {
     this.switcher = document.createElement("button");
     this.switcher.className = "taskbar-switcher";
     this.switcher.type = "button";
+
+    /*
+     * The way in to the launcher for anybody who does not know it is there.
+     *
+     * A command palette reached only by a shortcut is reachable only by people
+     * who already know the shortcut, which on a portfolio is nobody. The chip
+     * carries the shortcut as its label, so pressing it once teaches the faster
+     * way — and on a phone, where there is no ⌘K to press, it is the only way.
+     */
+    this.search = document.createElement("button");
+    this.search.className = "taskbar-search";
+    this.search.type = "button";
+    this.search.setAttribute("aria-label", "Search apps, windows and projects");
+    this.search.appendChild(
+      new DOMParser().parseFromString(
+        `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
+        "image/svg+xml"
+      ).documentElement
+    );
+    const shortcut = document.createElement("span");
+    shortcut.className = "taskbar-search-key";
+    shortcut.setAttribute("aria-hidden", "true");
+    // One token, not two words: the non-breaking space that used to hold
+    // these together rendered as a visible gap in the mono face, and ⌘K is
+    // read as a single key anyway.
+    shortcut.appendChild(document.createTextNode("⌘K"));
+    this.search.appendChild(shortcut);
 
     this.divider = document.createElement("span");
     this.divider.className = "taskbar-divider";
@@ -393,6 +426,33 @@ class TaskbarButtons extends OSElement {
           fontWeight: weight.emphasise,
           fontVariantNumeric: "tabular-nums",
           cursor: "pointer"
+        },
+        "& > .taskbar-search": {
+          display: "flex",
+          alignItems: "center",
+          gap: "7px",
+          flex: "0 0 auto",
+          height: "28px",
+          padding: "0 10px",
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.pill,
+          background: "transparent",
+          color: color.inkSoft,
+          font: "inherit",
+          fontSize: size.caption,
+          cursor: "pointer"
+        },
+        "& > .taskbar-search:hover": { background: color.chrome, color: color.ink },
+        "& > .taskbar-search:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "1px"
+        },
+        "& > .taskbar-search svg": { width: "13px", height: "13px" },
+        "& > .taskbar-search .taskbar-search-key": {
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: ".04em",
+          color: color.inkFaint
         },
         "& > .taskbar-switcher svg": {
           width: "15px",
@@ -565,6 +625,7 @@ class TaskbarButtons extends OSElement {
     }
     this.element.appendChild(this.divider);
     this.element.appendChild(this.openList);
+    this.element.appendChild(this.search);
     this.element.appendChild(this.switcher);
     this.element.appendChild(this.status);
 
@@ -584,6 +645,9 @@ class TaskbarButtons extends OSElement {
 
     this.switcher.addEventListener("click", () => {
       void this.overview.toggle(document.querySelector("#app") as HTMLElement);
+    });
+    this.search.addEventListener("click", () => {
+      void this.desktop.launcher?.toggle();
     });
   }
 

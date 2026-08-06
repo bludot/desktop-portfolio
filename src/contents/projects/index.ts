@@ -99,8 +99,18 @@ class ProjectsContent extends OSElement {
   private fileText?: string;
   private filePhase: Phase = "idle";
 
-  constructor() {
+  /**
+   * Opened straight onto a repository when one is handed in.
+   *
+   * The launcher finds a repository by name and has to be able to land on it —
+   * dropping somebody into a list of eighty-seven, having just watched them
+   * type the name of the one they wanted, is not answering the question.
+   */
+  private initial?: Repo;
+
+  constructor(initial?: Repo) {
     super("projectscontent", "projects-content");
+    this.initial = initial;
 
     this.body = document.createElement("div");
     this.element.appendChild(this.body);
@@ -784,6 +794,15 @@ class ProjectsContent extends OSElement {
       this.phase = "ready";
     } catch {
       this.phase = "failed";
+    }
+
+    // Only ever the first load: a refresh should leave the reader where they
+    // are rather than throwing them back to where they came in.
+    const landOn = this.initial;
+    this.initial = undefined;
+    if (landOn && this.phase === "ready") {
+      this.show(landOn);
+      return;
     }
     this.render();
   }

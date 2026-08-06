@@ -44,6 +44,39 @@ export function prefersReducedMotion(): boolean {
 }
 
 /**
+ * Bring a freshly mounted element in, without a flash at either end.
+ *
+ * Both ends are easy to get wrong, and the wrong fix for one causes the other:
+ *
+ *   - Before. An element is appended at its natural opacity, so if anything
+ *     paints between the mount and the animation being created, it appears at
+ *     full strength for a frame and only then animates from zero.
+ *   - After. Entrances fill `backwards`, not `forwards` — deliberately, so a
+ *     finished entrance does not outrank later inline styles and pin a window
+ *     in place. That means when it ends the element falls back to the cascade
+ *     *and to any inline style still on it*. Hiding it beforehand and clearing
+ *     that hide after awaiting the animation therefore leaves a window, one
+ *     frame wide, where the element is back at `opacity: 0`.
+ *
+ * The order here closes both: hide, create the animation — which owns opacity
+ * for its whole run from the moment it exists — then clear the hide
+ * immediately, synchronously, rather than after awaiting.
+ *
+ * Reach for this rather than hand-rolling the hide. Under reduced motion, or
+ * anywhere without the Web Animations API, `start` animates nothing and the
+ * element is simply visible at once, which is the right answer there too.
+ */
+export function enter(
+  el: HTMLElement,
+  start: (el: HTMLElement) => Promise<void>
+): Promise<void> {
+  el.style.opacity = "0";
+  const running = start(el);
+  el.style.opacity = "";
+  return running;
+}
+
+/**
  * Drop every animation on an element, handing its styling back to the cascade.
  *
  * A filled animation keeps applying its final keyframe and outranks inline
@@ -335,6 +368,14 @@ export function play(
  * desktop moves consistently.
  */
 export const motion = {
+  /**
+   * Bring a freshly mounted element in without a flash at either end.
+   *
+   * See `enter` above for why both ends need care and why hand-rolling the
+   * hide is what causes the blink at the finish.
+   */
+  enter,
+
   /** A window arriving: rises and settles rather than appearing. */
   windowIn(el: HTMLElement) {
     return play(

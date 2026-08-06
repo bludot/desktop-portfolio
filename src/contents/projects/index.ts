@@ -80,6 +80,12 @@ class ProjectsContent extends OSElement {
   private phase: Phase = "loading";
   private result?: RepoResult;
   private owner: string = ALL;
+  /** Primary language, or ALL. Reset when it no longer exists in scope. */
+  private language: string = ALL;
+  /** Only what has somewhere to visit. */
+  private liveOnly = false;
+  /** Archived work is still work, so it is hidden on request rather than by default. */
+  private hideArchived = false;
 
   private open?: Repo;
   private tab: "readme" | "files" = "readme";
@@ -177,6 +183,58 @@ class ProjectsContent extends OSElement {
         "& .projects-filters": { display: "none" },
         "& .narrow-note": { display: "none" },
 
+        /*
+         * Wrapping, and always on: unlike the account chips this row has no
+         * equivalent in the rail, so it is the only way to reach these.
+         */
+        "& .projects-refine": {
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "4px",
+          margin: "0 0 10px"
+        },
+        "& .projects-refine button": {
+          display: "inline-flex",
+          alignItems: "baseline",
+          gap: "5px",
+          border: `1px solid ${color.lineSoft}`,
+          borderRadius: radius.pill,
+          padding: "3px 10px",
+          background: "transparent",
+          color: color.inkSoft,
+          font: "inherit",
+          fontSize: size.caption,
+          fontWeight: weight.emphasise,
+          cursor: "pointer"
+        },
+        "& .projects-refine button:hover": { background: color.hover },
+        "& .projects-refine button[aria-pressed='true']": {
+          background: color.chromeRaised,
+          borderColor: color.line,
+          color: color.ink
+        },
+        // The one chip that is about the work being reachable rather than about
+        // what it is, so it carries the accent the "Live" badge does.
+        "& .projects-refine .refine-live[aria-pressed='true']": {
+          borderColor: color.accent,
+          color: color.accent
+        },
+        "& .refine-count": {
+          fontFamily: font.mono,
+          fontSize: "9.5px",
+          color: color.inkFaint
+        },
+        "& .projects-refine button[aria-pressed='true'] .refine-count": {
+          color: "inherit"
+        },
+        "& .refine-divider": {
+          width: "1px",
+          alignSelf: "stretch",
+          margin: "1px 5px",
+          background: color.lineSoft
+        },
+
         "& .projects-list": {
           display: "flex",
           flexDirection: "column",
@@ -234,6 +292,25 @@ class ProjectsContent extends OSElement {
           letterSpacing: ".1em",
           color: color.inkFaint
         },
+        /*
+         * "There is something to visit here", on the row.
+         *
+         * A marker rather than a link: the whole row is already one button, and
+         * an anchor inside a button is neither valid nor clickable in any
+         * predictable way. The link itself is in the detail head, one press
+         * further in, where there is room to say where it goes.
+         */
+        "& .project-live": {
+          marginLeft: "7px",
+          padding: "1px 5px",
+          borderRadius: "3px",
+          border: `1px solid ${color.accent}`,
+          fontFamily: font.mono,
+          fontSize: "9.5px",
+          textTransform: "uppercase",
+          letterSpacing: ".1em",
+          color: color.accent
+        },
         "& .project-description": {
           gridColumn: "1 / -1",
           margin: "0",
@@ -283,6 +360,15 @@ class ProjectsContent extends OSElement {
           whiteSpace: "nowrap"
         },
         "& .detail-back:hover, & .detail-external:hover": { color: color.ink },
+        "& .detail-links": {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "14px"
+        },
+        // The one link that leads somewhere other than more source gets the
+        // accent; the pair are otherwise the same weight.
+        "& .detail-visit": { color: color.accent },
+        "& .detail-visit:hover": { color: color.accentPressed },
         "& .detail-tabs": {
           display: "inline-flex",
           padding: "2px",
@@ -386,7 +472,18 @@ class ProjectsContent extends OSElement {
           // about 95 characters a line, which is why a good README read as a
           // wall.
           maxWidth: "70ch",
-          marginTop: "16px",
+          /*
+           * Centred, not left-aligned.
+           *
+           * A measure narrower than the window has to sit somewhere, and against
+           * the left edge it leaves a gutter half the width of the pane on the
+           * right — which reads as a mistake rather than as a margin. It is also
+           * the frame anything the README centres itself is centred against, so
+           * a left-hugging column puts a `<p align="center">` title off to one
+           * side of the window. Auto margins collapse to nothing once the pane
+           * is narrower than the measure, so this costs a small window nothing.
+           */
+          margin: "16px auto 0",
           paddingTop: "14px",
           borderTop: `1px solid ${color.lineSoft}`,
           fontSize: size.bodyTight,
@@ -691,13 +788,49 @@ class ProjectsContent extends OSElement {
     this.render();
   }
 
-  private visible(): Repo[] {
+  /**
+   * The account's repositories, before the refinements are applied.
+   *
+   * Kept apart from `visible` so the language chips can be built from what the
+   * account actually contains rather than from what is left after choosing one
+   * — otherwise picking Go would leave Go as the only language on offer, with
+   * no way back to the others.
+   */
+  private inScope(): Repo[] {
     const repos = this.result?.repos ?? [];
     if (this.owner === ALL) return repos;
     // Compared without case: the account is "thatcatdev" but every repo it
     // owns comes back under the login "ThatCatDev".
     const owner = this.owner.toLowerCase();
     return repos.filter((repo) => repo.owner.toLowerCase() === owner);
+  }
+
+  private visible(): Repo[] {
+    return this.inScope().filter((repo) => {
+      if (this.liveOnly && !repo.homepage) return false;
+      if (this.hideArchived && repo.archived) return false;
+      if (this.language !== ALL && repo.language !== this.language) return false;
+      return true;
+    });
+  }
+
+  /**
+   * The languages in scope, most used first.
+   *
+   * Counted rather than listed, because the count is what makes the chip worth
+   * pressing: "Go 21" says where the work is in a way that "Go" does not.
+   */
+  private languages(): { name: string; count: number }[] {
+    const counts = new Map<string, number>();
+    this.inScope().forEach((repo) => {
+      if (!repo.language) return;
+      counts.set(repo.language, (counts.get(repo.language) ?? 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      // Ties fall back to alphabetical rather than to insertion order, so the
+      // row does not reshuffle itself between renders.
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }
 
   private ownedBy(account: string): Repo[] {
@@ -854,6 +987,7 @@ class ProjectsContent extends OSElement {
 
     // Both are rendered; the stylesheet shows whichever fits.
     pane.appendChild(this.filters());
+    pane.appendChild(this.refine());
     const blurb = ACCOUNT_NOTES[this.owner];
     if (blurb) {
       const narrowNote = document.createElement("p");
@@ -928,10 +1062,7 @@ class ProjectsContent extends OSElement {
         button.appendChild(text);
       }
 
-      button.addEventListener("click", () => {
-        this.owner = entry.id;
-        this.render();
-      });
+      button.addEventListener("click", () => this.chooseOwner(entry.id));
       rail.appendChild(button);
     });
 
@@ -954,14 +1085,108 @@ class ProjectsContent extends OSElement {
       button.type = "button";
       button.setAttribute("aria-pressed", String(this.owner === option.id));
       button.appendChild(document.createTextNode(option.label));
-      button.addEventListener("click", () => {
-        this.owner = option.id;
-        this.render();
-      });
+      button.addEventListener("click", () => this.chooseOwner(option.id));
       filters.appendChild(button);
     });
 
     return filters;
+  }
+
+  /**
+   * The refinements: what it is written in, whether it is running, and whether
+   * it is still alive.
+   *
+   * Beneath the account chips rather than beside them, because these narrow
+   * whichever account is chosen rather than choosing one. Every chip carries
+   * its count, so a chip that would empty the list says so before it is pressed
+   * — and a count of zero is shown rather than hidden, since a language
+   * disappearing as you filter is how a list starts lying about what is in it.
+   */
+  /**
+   * Move to another account, keeping the refinements that still mean something.
+   *
+   * A language chosen under one account usually does not exist under the next,
+   * and leaving it set would show an empty list with no visible reason for it.
+   */
+  private chooseOwner(owner: string) {
+    this.owner = owner;
+    if (
+      this.language !== ALL &&
+      !this.languages().some((language) => language.name === this.language)
+    ) {
+      this.language = ALL;
+    }
+    this.render();
+  }
+
+  private refine(): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "projects-refine";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", "Filter projects");
+
+    const scope = this.inScope();
+
+    const chip = (
+      label: string,
+      count: number,
+      pressed: boolean,
+      onPress: () => void,
+      extraClass?: string
+    ) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      if (extraClass) button.className = extraClass;
+      button.setAttribute("aria-pressed", String(pressed));
+      button.appendChild(document.createTextNode(label));
+
+      const tally = document.createElement("span");
+      tally.className = "refine-count";
+      tally.appendChild(document.createTextNode(String(count)));
+      button.appendChild(tally);
+
+      button.addEventListener("click", () => {
+        onPress();
+        this.render();
+      });
+      row.appendChild(button);
+      return button;
+    };
+
+    const live = scope.filter((repo) => repo.homepage).length;
+    if (live) {
+      chip("Live", live, this.liveOnly, () => {
+        this.liveOnly = !this.liveOnly;
+      }, "refine-live");
+    }
+
+    const archived = scope.filter((repo) => repo.archived).length;
+    if (archived) {
+      chip("Hide archived", archived, this.hideArchived, () => {
+        this.hideArchived = !this.hideArchived;
+      });
+    }
+
+    const languages = this.languages();
+    if (languages.length > 1) {
+      const divider = document.createElement("span");
+      divider.className = "refine-divider";
+      divider.setAttribute("aria-hidden", "true");
+      row.appendChild(divider);
+
+      chip("Any language", scope.length, this.language === ALL, () => {
+        this.language = ALL;
+      });
+      languages.forEach((language) => {
+        chip(language.name, language.count, this.language === language.name, () => {
+          // A second press on the chosen one clears it, so the row does not
+          // need a separate way out of a choice it just made.
+          this.language = this.language === language.name ? ALL : language.name;
+        });
+      });
+    }
+
+    return row;
   }
 
   private summary(): string {
@@ -995,6 +1220,13 @@ class ProjectsContent extends OSElement {
       owner.className = "project-owner";
       owner.appendChild(document.createTextNode(repo.owner));
       name.appendChild(owner);
+    }
+
+    if (repo.homepage) {
+      const live = document.createElement("span");
+      live.className = "project-live";
+      live.appendChild(document.createTextNode("Live"));
+      name.appendChild(live);
     }
 
     if (repo.archived) {
@@ -1105,13 +1337,36 @@ class ProjectsContent extends OSElement {
     });
     head.appendChild(tabs);
 
+    const links = document.createElement("div");
+    links.className = "detail-links";
+
+    /*
+     * The running thing first, when there is one.
+     *
+     * Somebody reading about a project would rather see it than read its
+     * source, and most of these have no site at all — so the link is only ever
+     * there when it leads somewhere, and it leads the pair when it is.
+     */
+    if (repo.homepage) {
+      const visit = document.createElement("a");
+      visit.className = "detail-external detail-visit";
+      visit.href = repo.homepage;
+      visit.target = "_blank";
+      visit.rel = "noopener noreferrer";
+      visit.appendChild(document.createTextNode("Visit site ↗"));
+      links.appendChild(visit);
+    }
+
     const external = document.createElement("a");
     external.className = "detail-external";
     external.href = repo.url;
     external.target = "_blank";
     external.rel = "noopener noreferrer";
-    external.appendChild(document.createTextNode("Open on GitHub ↗"));
-    head.appendChild(external);
+    external.appendChild(
+      document.createTextNode(repo.homepage ? "GitHub ↗" : "Open on GitHub ↗")
+    );
+    links.appendChild(external);
+    head.appendChild(links);
 
     return head;
   }

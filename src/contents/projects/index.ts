@@ -10,6 +10,7 @@ import {
   weight
 } from "../../theme";
 import { observeWidth } from "../../utils/utils";
+import { ScrollBars } from "../../components/Scrollbar";
 import sanitiseHtml from "../../utils/sanitiseHtml";
 import { motion } from "../../utils/motion";
 import highlight from "../../utils/highlight";
@@ -44,6 +45,17 @@ import {
 /** Below this the rail cannot sit beside the list. */
 const NARROW_CONTENT_PX = 560;
 
+/**
+ * The boxes in here that scroll sideways on their own.
+ *
+ * A code block, a wide table and a source listing all keep their own long line
+ * rather than wrapping it, so each is a scrolling box inside the window's
+ * scrolling box — and each grew the platform's own bar along the bottom, which
+ * is the one piece of browser furniture this desktop cannot theme. They get the
+ * same overlay bar the window does.
+ */
+const SIDEWAYS = ".detail-readme pre, .detail-readme table, .file-code";
+
 const ALL = "all";
 
 /**
@@ -76,6 +88,8 @@ type Phase = "idle" | "loading" | "ready" | "failed";
 class ProjectsContent extends OSElement {
   private stopObserving?: () => void;
   private body!: HTMLElement;
+  /** One per sideways-scrolling box in whatever is currently drawn. */
+  private readonly bars = new ScrollBars();
 
   private phase: Phase = "loading";
   private result?: RepoResult;
@@ -781,6 +795,7 @@ class ProjectsContent extends OSElement {
   async unload() {
     this.stopObserving?.();
     this.stopObserving = undefined;
+    this.bars.clear();
     await super.unload();
   }
 
@@ -972,7 +987,21 @@ class ProjectsContent extends OSElement {
 
   // ------------------------------------------------------------ rendering
 
+  /**
+   * Redraw, and re-hang the bars on whatever sideways-scrolling boxes the new
+   * content brought with it.
+   *
+   * They are dropped first because the old ones are pointed at elements that
+   * have just been thrown away — a bar listening to a code block nobody can
+   * see is a leak with a scroll handler on it.
+   */
   private render() {
+    this.bars.clear();
+    this.paint();
+    this.bars.attach(this.body, SIDEWAYS, "x");
+  }
+
+  private paint() {
     this.body.textContent = "";
 
     if (this.open) {

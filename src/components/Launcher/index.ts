@@ -1,11 +1,10 @@
 import OSElement from "../../utils/OSElement";
 import { color, font, motion as motionToken, radius, size, tracking, weight } from "../../theme";
-import { play, prefersReducedMotion } from "../../utils/motion";
 import windowManager from "../../utils/windowManager";
 import { APPS, openAppWindow, type App } from "../../apps/external";
 import appIcon from "../AppIcon";
 import { loadRepos, type Repo } from "../../utils/github";
-import { GROUP_ORDER, search, type Group, type Result } from "./results";
+import { GROUP_ORDER, SEARCH_URL, search, type Group, type Result } from "./results";
 import type Desktop from "../Desktop";
 
 /** Below this the panel is the screen rather than a card on it. */
@@ -79,26 +78,59 @@ class Launcher extends OSElement {
         right: "0",
         bottom: "0",
         zIndex: "9998",
-        display: "none",
+        display: "flex",
         justifyContent: "center",
         alignItems: "flex-start",
         padding: "12vh 16px 16px",
         fontFamily: font.ui,
 
-        "&.is-open": { display: "flex" },
+        /*
+         * Hidden by visibility rather than by display, because `display` has
+         * nothing to transition between — a panel that is not laid out cannot
+         * fade. `visibility` still takes it out of the pointer's way and off
+         * the accessibility tree, and delaying it by the length of the fade on
+         * the way out keeps the panel on screen long enough to be seen going.
+         */
+        visibility: "hidden",
+        transition: `visibility 0s linear ${motionToken.base}ms`,
+
+        "&.is-open": {
+          visibility: "visible",
+          transition: "visibility 0s"
+        },
 
         // Inside the root rather than mounted separately, so it is hidden and
         // shown by the same class the panel is.
+        /*
+         * The blur is fixed and its opacity is what moves.
+         *
+         * Animating `backdrop-filter` from 0 to 3px asks the compositor to
+         * re-filter the entire desktop — wallpaper, windows and all — on every
+         * frame, and it drops enough of them that the blur appears to arrive in
+         * one step. Held constant, the filtered layer is produced once and
+         * faded, which is a compositor property and costs nothing per frame.
+         */
         "& > .launcher-scrim": {
           position: "fixed",
           inset: "0",
+          opacity: 0,
           background: "rgba(12, 8, 18, .32)",
-          backdropFilter: "blur(2px)",
-          WebkitBackdropFilter: "blur(2px)"
+          backdropFilter: "blur(3px)",
+          WebkitBackdropFilter: "blur(3px)",
+          transition: `opacity ${motionToken.base}ms ${motionToken.standard}`
         },
+        "&.is-open > .launcher-scrim": { opacity: 1 },
 
+        // Rises the last few pixels into place, so the panel reads as coming
+        // forward rather than being pasted on.
         "& > .launcher-panel": {
           position: "relative",
+          opacity: 0,
+          transform: "translateY(-8px) scale(.985)",
+          transition: [
+            `opacity ${motionToken.fast}ms ${motionToken.standard}`,
+            `transform ${motionToken.base}ms ${motionToken.standard}`
+          ].join(", "),
           width: "min(560px, 100%)",
           maxHeight: "min(60vh, 520px)",
           display: "flex",
@@ -109,6 +141,18 @@ class Launcher extends OSElement {
           backdropFilter: "blur(28px) saturate(1.4)",
           WebkitBackdropFilter: "blur(28px) saturate(1.4)",
           boxShadow: `var(--shadow-window), inset 0 0 0 1px ${color.glassEdge}`
+        },
+
+        "&.is-open > .launcher-panel": { opacity: 1, transform: "none" },
+
+        /*
+         * Nothing moves for somebody who asked for less movement, but the panel
+         * still has to arrive and leave — so the change is instant rather than
+         * absent, which is what `motion` does everywhere else on this desktop.
+         */
+        "@media (prefers-reduced-motion: reduce)": {
+          transition: "visibility 0s",
+          "& > .launcher-scrim, & > .launcher-panel": { transition: "none" }
         },
 
         "& .launcher-field": {
@@ -375,22 +419,22 @@ class Launcher extends OSElement {
   async show() {
     if (this.open) return;
     this.open = true;
-    this.element.classList.add("is-open");
+
+    /*
+     * Built before the animation is asked for, not during it.
+     *
+     * `render` lays out every row, and doing that in the same task that starts
+     * the transition leaves the main thread busy through its first frames — the
+     * blur then appears to hang and then jump, which is exactly what it looked
+     * like. Filling the panel while it is still hidden means the only thing
+     * left to do when the class lands is composite.
+     */
     this.input.value = "";
     this.cursor = 0;
     this.render();
-    this.input.focus();
 
-    if (!prefersReducedMotion()) {
-      void play(
-        this.element.querySelector(".launcher-panel") as HTMLElement,
-        [
-          { opacity: 0, transform: "translateY(-6px) scale(.99)" },
-          { opacity: 1, transform: "none" }
-        ],
-        { duration: motionToken.fast }
-      );
-    }
+    this.element.classList.add("is-open");
+    this.input.focus();
 
     void this.fetchRepos();
   }
@@ -416,6 +460,38 @@ class Launcher extends OSElement {
     }
   }
 
+  /**
+   * Put the answer on the clipboard.
+   *
+   * `navigator.clipboard` needs a secure context and a permission that can be
+   * refused, so the older selection route is kept for when it is not there —
+   * copying a number should not depend on how the page was served.
+   */
+  private async copy(text: string) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+    } catch {
+      // Falls through to the older route below.
+    }
+
+    const carrier = document.createElement("textarea");
+    carrier.value = text;
+    carrier.setAttribute("aria-hidden", "true");
+    carrier.style.cssText = "position:fixed;top:-9999px;opacity:0";
+    document.body.appendChild(carrier);
+    carrier.select();
+    try {
+      document.execCommand("copy");
+    } catch {
+      // Nothing left to try, and a dialog about a failed copy is worse than a
+      // copy that quietly did not happen.
+    }
+    carrier.remove();
+  }
+
   private choose(result?: Result) {
     if (!result) return;
     void this.hide();
@@ -433,7 +509,23 @@ class Launcher extends OSElement {
         if (open.minimized) void open.window.restore();
         else open.window.onActive(open.window);
       },
-      openRepo: (repo) => this.actions.openProjects(repo)
+      openRepo: (repo) => this.actions.openProjects(repo),
+      copy: (text) => void this.copy(text),
+      /*
+       * A tab, because there is no alternative. Both DuckDuckGo and Google
+       * refuse to be framed — DuckDuckGo says so outright, with
+       * `frame-ancestors 'self' https://html.duckduckgo.com` — so a search
+       * cannot open as a window on this desktop however much one would prefer
+       * it to. `noopener` keeps the opened page from reaching back through
+       * `window.opener` and navigating this one somewhere else.
+       */
+      searchWeb: (query) => {
+        window.open(
+          SEARCH_URL + encodeURIComponent(query),
+          "_blank",
+          "noopener,noreferrer"
+        );
+      }
     });
 
     if (this.cursor >= this.results.length) this.cursor = 0;
@@ -559,10 +651,12 @@ function appIconFor(app: App): HTMLElement {
 }
 
 const GLYPHS: Record<Group, string> = {
+  Answer: "=",
   Apps: "▣",
   Windows: "▢",
   Projects: "◇",
-  Actions: "◐"
+  Actions: "◐",
+  Web: "↗"
 };
 
 function glyphFor(group: Group): HTMLElement {

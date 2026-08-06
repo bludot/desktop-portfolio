@@ -306,8 +306,10 @@ class TaskbarButtons extends OSElement {
     const shortcut = document.createElement("span");
     shortcut.className = "taskbar-search-key";
     shortcut.setAttribute("aria-hidden", "true");
-    // Non-breaking, so the key never wraps away from its modifier.
-    shortcut.appendChild(document.createTextNode("⌘ K"));
+    // One token, not two words: the non-breaking space that used to hold
+    // these together rendered as a visible gap in the mono face, and ⌘K is
+    // read as a single key anyway.
+    shortcut.appendChild(document.createTextNode("⌘K"));
     this.search.appendChild(shortcut);
 
     this.divider = document.createElement("span");

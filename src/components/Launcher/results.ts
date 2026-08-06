@@ -1,6 +1,7 @@
 import type { App } from "../../apps/external";
 import type { Repo } from "../../utils/github";
 import type { OpenWindow } from "../../utils/windowManager";
+import { calculate, formatAnswer } from "./math";
 
 /**
  * What the launcher can find, and how it decides what comes first.
@@ -10,7 +11,7 @@ import type { OpenWindow } from "../../utils/windowManager";
  * three letters — can be checked without a desktop to type into.
  */
 
-export type Group = "Apps" | "Windows" | "Projects" | "Actions";
+export type Group = "Answer" | "Apps" | "Windows" | "Projects" | "Actions" | "Web";
 
 export interface Result {
   id: string;
@@ -25,8 +26,22 @@ export interface Result {
   run: () => void;
 }
 
-/** Groups appear in this order, whatever the scores inside them. */
-export const GROUP_ORDER: Group[] = ["Apps", "Windows", "Projects", "Actions"];
+/*
+ * The answer first, the fallback last.
+ *
+ * Somebody who typed a sum wants the sum, and it is the one result that is
+ * certainly what they meant. A web search is the opposite: it is what to do
+ * when nothing here was it, so it sits at the bottom where it can be reached
+ * by holding one arrow rather than read past every time.
+ */
+export const GROUP_ORDER: Group[] = [
+  "Answer",
+  "Apps",
+  "Windows",
+  "Projects",
+  "Actions",
+  "Web"
+];
 
 /**
  * How well a candidate answers a query, or -1 for not at all.
@@ -62,7 +77,20 @@ export interface Sources {
   openApp: (app: App) => void;
   showWindow: (open: OpenWindow) => void;
   openRepo: (repo: Repo) => void;
+  copy: (text: string) => void;
+  searchWeb: (query: string) => void;
 }
+
+/**
+ * Where a web search goes.
+ *
+ * DuckDuckGo rather than Google because it does not need to know who asked, and
+ * this is a portfolio rather than somebody's daily browser. One constant to
+ * change if that is the wrong call — `https://www.google.com/search?q=` is the
+ * whole of the alternative.
+ */
+export const SEARCH_URL = "https://duckduckgo.com/?q=";
+export const SEARCH_NAME = "DuckDuckGo";
 
 /** How many repositories a query may contribute, before it is a wall of them. */
 const REPO_LIMIT = 6;
@@ -145,11 +173,50 @@ export function search(query: string, sources: Sources): Result[] {
     })
   );
 
+  /*
+   * A sum, when the query is one.
+   *
+   * Parsed rather than evaluated — see `math.ts`. Choosing it copies the
+   * answer, which is the only thing anybody wants from a calculator that lives
+   * in a search box.
+   */
+  const value = calculate(q);
+  const answer: Result[] =
+    value === null
+      ? []
+      : [
+          {
+            id: "answer",
+            group: "Answer" as const,
+            name: formatAnswer(value),
+            sub: q.replace(/=+$/, "").trim(),
+            badge: "copy",
+            run: () => sources.copy(formatAnswer(value))
+          }
+        ];
+
+  // The last resort, and only ever offered for something worth searching for.
+  const web: Result[] =
+    q.length > 1
+      ? [
+          {
+            id: "web",
+            group: "Web" as const,
+            name: `Search for “${q}”`,
+            sub: SEARCH_NAME,
+            badge: "opens a tab",
+            run: () => sources.searchWeb(q)
+          }
+        ]
+      : [];
+
   const byGroup: Record<Group, Result[]> = {
+    Answer: answer,
     Apps: apps,
     Windows: windows,
     Projects: repos,
-    Actions: actions
+    Actions: actions,
+    Web: web
   };
 
   return GROUP_ORDER.flatMap((group) => byGroup[group]);

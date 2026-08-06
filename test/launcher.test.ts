@@ -3,6 +3,7 @@ import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
 import { score, search, GROUP_ORDER } from '../src/components/Launcher/results'
+import { calculate, formatAnswer } from '../src/components/Launcher/math'
 import Launcher from '../src/components/Launcher'
 
 jss.setup(preset())
@@ -48,6 +49,8 @@ const sources = (over: Record<string, unknown> = {}) => ({
   openApp: vi.fn(),
   showWindow: vi.fn(),
   openRepo: vi.fn(),
+  copy: vi.fn(),
+  searchWeb: vi.fn(),
   ...over,
 })
 
@@ -95,7 +98,8 @@ describe('search', () => {
     }))
 
     const seen = results.map((r) => r.group).filter((g, i, all) => all.indexOf(g) === i)
-    expect(seen).toEqual(GROUP_ORDER)
+    // A subsequence of the fixed order — not every group answers every query.
+    expect(seen).toEqual(GROUP_ORDER.filter((g) => seen.includes(g)))
   })
 
   /*
@@ -232,7 +236,11 @@ describe('Launcher', () => {
     expect(launcher.isOpen()).toBe(false)
   })
 
-  it('says so when nothing matches, rather than showing an empty panel', async () => {
+  /*
+   * "Nothing matched" is now answered rather than announced: the web search is
+   * the last group, so an unrecognised query still leads somewhere.
+   */
+  it('falls back to a web search when nothing here matches', async () => {
     await launcher.load(host)
     await launcher.show()
 
@@ -240,8 +248,34 @@ describe('Launcher', () => {
     input.value = 'zzzzzz'
     input.dispatchEvent(new Event('input', { bubbles: true }))
 
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0].textContent).toContain('zzzzzz')
+    expect(host.querySelector('.launcher-empty.is-shown')).toBeNull()
+  })
+
+  // One character is not worth searching for, and there the panel does have to
+  // say something rather than show nothing.
+  it('says so when there is genuinely nothing to show', async () => {
+    await launcher.load(host)
+    await launcher.show()
+
+    const input = host.querySelector<HTMLInputElement>('.launcher-input')!
+    input.value = 'z'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+
     expect(rows()).toHaveLength(0)
-    expect(host.querySelector('.launcher-empty')?.textContent).toContain('zzzzzz')
+    expect(host.querySelector('.launcher-empty')?.textContent).toContain('z')
+  })
+
+  it('answers a sum inline, above everything else', async () => {
+    await launcher.load(host)
+    await launcher.show()
+
+    const input = host.querySelector<HTMLInputElement>('.launcher-input')!
+    input.value = '12 * 12'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+
+    expect(rows()[0].textContent).toContain('144')
   })
 
   it('stops listening for the shortcut once unloaded', async () => {
@@ -250,5 +284,112 @@ describe('Launcher', () => {
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
     expect(launcher.isOpen()).toBe(false)
+  })
+})
+
+/*
+ * Parsed, never evaluated. The query comes from a text field and could as
+ * easily come from a URL one day, and "it is only my own site" is the reasoning
+ * behind most of the interesting bugs.
+ */
+describe('calculate', () => {
+  it('does arithmetic, with the usual precedence', () => {
+    expect(calculate('2+2')).toBe(4)
+    expect(calculate('2 + 3 * 4')).toBe(14)
+    expect(calculate('(2 + 3) * 4')).toBe(20)
+    expect(calculate('10 / 4')).toBe(2.5)
+    expect(calculate('7 % 3')).toBe(1)
+  })
+
+  it('reads powers right to left, as they are written on paper', () => {
+    expect(calculate('2^3^2')).toBe(512)
+  })
+
+  it('handles signs and decimals', () => {
+    expect(calculate('-4 + 1')).toBe(-3)
+    expect(calculate('3 * -2')).toBe(-6)
+    expect(calculate('0.1 + 0.2')).toBeCloseTo(0.3, 10)
+  })
+
+  it('knows a few functions and constants', () => {
+    expect(calculate('sqrt(16)')).toBe(4)
+    expect(calculate('max(3, 9, 4)')).toBe(9)
+    expect(calculate('round(2.6)')).toBe(3)
+    expect(calculate('2 * pi')).toBeCloseTo(Math.PI * 2, 10)
+  })
+
+  it('tolerates a trailing equals, the way people type it', () => {
+    expect(calculate('2+2=')).toBe(4)
+  })
+
+  /*
+   * A launcher asks this of everything anybody types, so saying no has to be
+   * ordinary and quiet — and a bare number is a name as often as a sum.
+   */
+  it('says no to anything that is not a sum', () => {
+    expect(calculate('whisker')).toBeNull()
+    expect(calculate('12')).toBeNull()
+    expect(calculate('')).toBeNull()
+    expect(calculate('2 +')).toBeNull()
+    expect(calculate('1.2.3 + 1')).toBeNull()
+    expect(calculate('alert(1)')).toBeNull()
+    expect(calculate('anime-api')).toBeNull()
+  })
+
+  // It can only ever produce a number: there is nothing here that reaches the
+  // page, whatever is typed.
+  it('cannot be talked into running anything', () => {
+    expect(calculate('constructor')).toBeNull()
+    expect(calculate('window.alert(1)')).toBeNull()
+    expect(calculate('[].constructor(1)')).toBeNull()
+  })
+
+  it('divides by zero the way arithmetic does, without an answer', () => {
+    expect(calculate('1/0')).toBeNull()
+  })
+})
+
+describe('formatAnswer', () => {
+  it('groups long integers and trims long decimals', () => {
+    expect(formatAnswer(1234567)).toBe('1,234,567')
+    expect(formatAnswer(1 / 3)).toBe('0.3333333333')
+  })
+
+  it('keeps exponent form where rounding would print a wall of zeroes', () => {
+    expect(formatAnswer(1e20)).toContain('e+')
+    expect(formatAnswer(0.0000001)).toContain('e-')
+  })
+})
+
+describe('the answer and the web fallback', () => {
+  it('puts a sum first, above everything else', () => {
+    const results = search('2+2', sources({ apps: [app()] }))
+    expect(results[0].group).toBe('Answer')
+    expect(results[0].name).toBe('4')
+  })
+
+  it('copies the answer when it is chosen', () => {
+    const copy = vi.fn()
+    const results = search('2+2', sources({ copy }))
+    results[0].run()
+    expect(copy).toHaveBeenCalledWith('4')
+  })
+
+  // The last resort belongs last: it is what to do when nothing here was it.
+  it('offers a web search at the bottom', () => {
+    const results = search('something obscure', sources({ apps: [app()] }))
+    expect(results[results.length - 1].group).toBe('Web')
+  })
+
+  it('does not offer to search for a single character', () => {
+    const results = search('a', sources({}))
+    expect(results.some((r) => r.group === 'Web')).toBe(false)
+  })
+
+  it('hands the query to the search, untouched', () => {
+    const searchWeb = vi.fn()
+    const results = search('rust & go', sources({ searchWeb }))
+    results.find((r) => r.group === 'Web')!.run()
+    expect(searchWeb).toHaveBeenCalledWith('rust & go')
   })
 })

@@ -298,7 +298,9 @@ class Launcher extends OSElement {
     field.className = "launcher-field";
     field.appendChild(
       new DOMParser().parseFromString(
-        `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
+        // Namespaced, or the XML parser hands back an "svg" element that belongs
+        // to no namespace, takes its size from the stylesheet and draws nothing.
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
         "image/svg+xml"
       ).documentElement
     );

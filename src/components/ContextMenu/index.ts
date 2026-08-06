@@ -370,19 +370,38 @@ class ContextMenu extends OSElement {
 const contextMenu = new ContextMenu();
 
 /**
+ * The one place the browser's own menu is worth more than ours: text fields.
+ *
+ * Cut, paste, undo, spelling and the clipboard itself are things only the
+ * browser can offer, and no menu written here can stand in for them. Everywhere
+ * else the desktop answers the gesture.
+ */
+export function isNativeMenuTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return !!target.closest(
+    "input, textarea, [contenteditable]:not([contenteditable='false'])"
+  );
+}
+
+/**
  * Give an element a context menu.
  *
  * `build` runs at the moment of the press and may return an empty list, in
- * which case the browser's own menu is left alone — right-clicking a link or a
- * paragraph should still do what it does everywhere else. Returning items is
- * what claims the gesture.
+ * which case the browser's own menu is left alone. Returning items is what
+ * claims the gesture.
+ *
+ * Takes the document as happily as an element, which is how the desktop puts a
+ * menu under every press that nothing else has claimed: handlers that answer a
+ * press stop it there, so anything reaching the document is by definition
+ * unclaimed.
  */
 export function bindContextMenu(
-  element: HTMLElement,
+  element: HTMLElement | Document,
   build: (e: MouseEvent) => MenuItem[]
 ): () => void {
   const handler = (event: Event) => {
     const e = event as MouseEvent;
+    if (isNativeMenuTarget(e.target)) return;
     const items = build(e);
     if (!items.length) return;
     e.preventDefault();

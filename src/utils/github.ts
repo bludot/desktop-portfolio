@@ -23,6 +23,14 @@ export interface Repo {
   language: string;
   stars: number;
   url: string;
+  /**
+   * Where the thing actually runs, when there is somewhere.
+   *
+   * GitHub's own "Website" field, which is the one place a repository says
+   * this. Empty for most of them — plenty of work has no site to visit — so
+   * everything downstream treats it as optional rather than expected.
+   */
+  homepage: string;
   pushedAt: string;
   createdAt: string;
   /** Kilobytes, as GitHub reports it. */
@@ -62,7 +70,13 @@ export interface RepoResult extends RepoIndex {
   cached: boolean;
 }
 
-const CACHE_KEY = "github:repos";
+/*
+ * Versioned, because the cache holds trimmed repositories rather than GitHub's
+ * own reply. A cached entry written before a field existed cannot grow one, so
+ * a reader mid-visit would go hours without it; a new key retires those entries
+ * the moment the shape changes.
+ */
+export const CACHE_KEY = "github:repos:v2";
 /** Long enough that browsing the site never re-fetches; short enough to be current. */
 export const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -79,6 +93,7 @@ function toRepo(raw: Record<string, unknown>): Repo {
     language: String(raw.language ?? ""),
     stars: Number(raw.stargazers_count ?? 0),
     url: String(raw.html_url ?? ""),
+    homepage: String(raw.homepage ?? ""),
     pushedAt: String(raw.pushed_at ?? ""),
     createdAt: String(raw.created_at ?? ""),
     size: Number(raw.size ?? 0),

@@ -197,6 +197,7 @@ describe('brief', () => {
     language: 'Go',
     stars: 1,
     url: '',
+    homepage: '',
     pushedAt: '2026-07-09T00:00:00Z',
     createdAt: '2026-02-21T00:00:00Z',
     size: 43494,

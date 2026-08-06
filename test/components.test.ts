@@ -126,6 +126,23 @@ describe('Bootscreen', () => {
     expect(boot.getElement().children.length).toBeGreaterThan(0)
   })
 
+  // A floor, not a duration: a start-up that has already taken longer than the
+  // sequence would have has waited enough, and the screen gets out of the way.
+  it('adds nothing to a start-up that has already outrun it', async () => {
+    vi.useFakeTimers()
+    const boot = new Bootscreen()
+    await boot.load(host)
+
+    vi.setSystemTime(Date.now() + 3000)
+
+    let done = false
+    const running = boot.complete().then(() => { done = true })
+    await vi.advanceTimersByTimeAsync(0)
+    await running
+    expect(done).toBe(true)
+    vi.useRealTimers()
+  })
+
   // Regression: the boot sequence used to be visible only because startup
   // awaited two canvas stack blurs of the wallpaper. With that work gone it
   // flashed past, so the duration is now stated rather than incidental.
@@ -164,6 +181,97 @@ describe('Bootscreen', () => {
     expect(boot.getElement().style.opacity).toBe('0')
     expect(host.contains(boot.getElement())).toBe(false)
     vi.useRealTimers()
+  })
+
+  /*
+   * The desktop is built behind the boot screen, so the sequence shows it
+   * through a blur rather than hiding it behind a flat colour. The flat sky
+   * only sits there until there is something worth looking at.
+   */
+  it('drops the flat sky once the sequence starts, and comes back into focus on the way out', async () => {
+    vi.useFakeTimers()
+    const boot = new Bootscreen()
+    await boot.load(host)
+
+    expect(boot.getElement().classList.contains('boot-revealed')).toBe(false)
+
+    const running = boot.complete()
+    expect(boot.getElement().classList.contains('boot-revealed')).toBe(true)
+    await vi.advanceTimersByTimeAsync(1100)
+    await running
+
+    const unloading = boot.unload()
+    await vi.advanceTimersByTimeAsync(250)
+    await unloading
+    expect(boot.getElement().style.backdropFilter).toBe('blur(0px)')
+    vi.useRealTimers()
+  })
+
+  describe('with the log showing', () => {
+    it('replays what has already been said and follows the rest', async () => {
+      const logger = GlobalLogger.getInstance()
+      logger.log(new Log(LOG_TYPE.DEBUG, 'Before the screen was up', 'Early'))
+
+      const boot = new Bootscreen({ log: true })
+      await boot.load(host)
+
+      const panel = boot.getElement().querySelector('.boot-log')!
+      expect(panel.textContent).toContain('Before the screen was up')
+      expect(panel.textContent).toContain('Early')
+
+      logger.log(new Log(LOG_TYPE.ERROR, 'And this one after', 'Later'))
+      expect(panel.textContent).toContain('And this one after')
+      // Errors are the only lines that get to shout.
+      expect(panel.querySelector('span.is-loud')?.textContent).toContain(
+        'And this one after'
+      )
+
+      // Nothing is written to a screen that has been taken down.
+      await boot.unload()
+      logger.log(new Log(LOG_TYPE.DEBUG, 'Long after', 'Later'))
+      expect(panel.textContent).not.toContain('Long after')
+    })
+
+    /*
+     * Every component says half a dozen of these on its way up, which buries
+     * the lines that say what start-up is actually doing. One line per
+     * component is the part worth watching.
+     */
+    it('drops the lifecycle chatter but never a warning', async () => {
+      const boot = new Bootscreen({ log: true })
+      await boot.load(host)
+      const panel = boot.getElement().querySelector('.boot-log')!
+
+      const logger = GlobalLogger.getInstance()
+      logger.log(new Log(LOG_TYPE.DEBUG, 'Finished afterLoad hook', 'Taskbar'))
+      logger.log(new Log(LOG_TYPE.DEBUG, 'Applying styles', 'Taskbar'))
+      expect(panel.textContent).not.toContain('afterLoad')
+      expect(panel.textContent).not.toContain('Applying styles')
+
+      logger.log(new Log(LOG_TYPE.DEBUG, 'Loaded Instance', 'Taskbar'))
+      expect(panel.textContent).toContain('Loaded Instance')
+
+      // A warning saying the same thing is still a warning.
+      logger.log(new Log(LOG_TYPE.WARNING, 'Applying styles', 'Taskbar'))
+      const loud = panel.querySelectorAll('span.is-loud')
+      expect(loud[loud.length - 1].textContent).toContain('Applying styles')
+      await boot.unload()
+    })
+
+    it('keeps the panel to a readable length', async () => {
+      const boot = new Bootscreen({ log: true })
+      await boot.load(host)
+      const panel = boot.getElement().querySelector('.boot-log')!
+
+      const logger = GlobalLogger.getInstance()
+      for (let i = 0; i < 80; i++) {
+        logger.log(new Log(LOG_TYPE.DEBUG, `line ${i}`, 'Spam'))
+      }
+
+      expect(panel.childElementCount).toBeLessThanOrEqual(60)
+      expect(panel.textContent).toContain('line 79')
+      await boot.unload()
+    })
   })
 })
 

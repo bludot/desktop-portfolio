@@ -8,6 +8,7 @@ import {
   loadRepos,
   summarise,
   CACHE_TTL_MS,
+  CACHE_KEY,
   ACCOUNTS,
 } from '../src/utils/github'
 import db, { readCache, writeCache } from '../src/Store'
@@ -100,6 +101,7 @@ describe('fetchRepos', () => {
           stargazers_count: 3,
           archived: true,
           created_at: '2026-01-01T00:00:00Z',
+          homepage: 'https://tanren.ai',
         }),
       ],
       'weeb-vip': [],
@@ -115,6 +117,7 @@ describe('fetchRepos', () => {
       language: 'Go',
       stars: 3,
       url: 'https://github.com/bludot/thing',
+      homepage: 'https://tanren.ai',
       pushedAt: '2026-01-01T00:00:00Z',
       createdAt: '2026-01-01T00:00:00Z',
       size: 0,
@@ -162,7 +165,7 @@ describe('loadRepos', () => {
   const fresh = { repos: [], forksHidden: 0, failed: [] }
 
   it('spends nothing when the cache is recent enough', async () => {
-    await writeCache('github:repos', { ...fresh, forksHidden: 7 }, 1_000)
+    await writeCache(CACHE_KEY, { ...fresh, forksHidden: 7 }, 1_000)
     const fetchMock = serve({ thatcatdev: [], 'weeb-vip': [], bludot: [] })
 
     const result = await loadRepos({ now: 1_000 + CACHE_TTL_MS - 1 })
@@ -172,7 +175,7 @@ describe('loadRepos', () => {
   })
 
   it('goes back to GitHub once the cache is stale', async () => {
-    await writeCache('github:repos', fresh, 1_000)
+    await writeCache(CACHE_KEY, fresh, 1_000)
     const fetchMock = serve({
       thatcatdev: [repo({ name: 'new' })],
       'weeb-vip': [],
@@ -186,7 +189,7 @@ describe('loadRepos', () => {
   })
 
   it('refetches on demand even when the cache is warm', async () => {
-    await writeCache('github:repos', fresh, 1_000)
+    await writeCache(CACHE_KEY, fresh, 1_000)
     const fetchMock = serve({ thatcatdev: [], 'weeb-vip': [], bludot: [] })
 
     await loadRepos({ force: true, now: 1_000 })
@@ -198,7 +201,7 @@ describe('loadRepos', () => {
    * back to whatever is stored however old it is.
    */
   it('falls back to a stale cache rather than failing', async () => {
-    await writeCache('github:repos', { ...fresh, forksHidden: 4 }, 1_000)
+    await writeCache(CACHE_KEY, { ...fresh, forksHidden: 4 }, 1_000)
     serve({
       thatcatdev: new Error('offline'),
       'weeb-vip': new Error('offline'),
@@ -224,7 +227,7 @@ describe('loadRepos', () => {
     serve({ thatcatdev: [repo({ name: 'kept' })], 'weeb-vip': [], bludot: [] })
 
     await loadRepos({ now: 5_000 })
-    const cached = await readCache<{ repos: { name: string }[] }>('github:repos')
+    const cached = await readCache<{ repos: { name: string }[] }>(CACHE_KEY)
     expect(cached?.value.repos.map((r) => r.name)).toEqual(['kept'])
   })
 })
@@ -236,6 +239,7 @@ describe('metaLine', () => {
     owner: 'bludot',
     description: '',
     url: '',
+    homepage: '',
     createdAt: '',
     size: 0,
     archived: false,
@@ -258,6 +262,7 @@ describe('summarise', () => {
     language: 'Go',
     stars: 0,
     url: '',
+    homepage: '',
     pushedAt: '2026-01-01T00:00:00Z',
     createdAt: '2024-01-01T00:00:00Z',
     size: 0,
@@ -449,6 +454,153 @@ describe('Projects window', () => {
     expect(link.href).toBe('https://github.com/bludot/thing')
     expect(link.target).toBe('_blank')
     expect(link.rel).toBe('noopener noreferrer')
+  })
+
+  /*
+   * Somebody reading about a project would rather see it than read its source.
+   * Most of these have no site, so the link only exists when it leads
+   * somewhere — and the row says so before you open it.
+   */
+  it('offers the running thing when there is one', async () => {
+    serve(
+      {
+        thatcatdev: [repo({ name: 'kaimu', homepage: 'https://kaimu.vercel.app' })],
+        'weeb-vip': [],
+        bludot: [],
+      },
+      { readme: '<p>hi</p>' },
+    )
+    await open()
+
+    expect(host.querySelector('.project-live')?.textContent).toBe('Live')
+    ;(host.querySelector('.project') as HTMLElement).click()
+
+    await vi.waitFor(() => expect(host.querySelector('.detail-visit')).toBeTruthy())
+    const visit = host.querySelector<HTMLAnchorElement>('.detail-visit')!
+    expect(visit.href).toBe('https://kaimu.vercel.app/')
+    expect(visit.target).toBe('_blank')
+    expect(visit.rel).toBe('noopener noreferrer')
+  })
+
+  it('says nothing about a site for a repository that has none', async () => {
+    serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] }, { readme: '<p>hi</p>' })
+    await open()
+
+    expect(host.querySelector('.project-live')).toBeNull()
+    ;(host.querySelector('.project') as HTMLElement).click()
+
+    await vi.waitFor(() => expect(host.querySelector('.detail-external')).toBeTruthy())
+    expect(host.querySelector('.detail-visit')).toBeNull()
+  })
+
+  /*
+   * The refinements narrow whichever account is chosen. Each chip carries its
+   * count, so a chip that would empty the list says so before it is pressed.
+   */
+  describe('filtering', () => {
+    const mixed = () =>
+      serve(
+        {
+          thatcatdev: [
+            repo({ name: 'tanrenai', language: 'Go' }),
+            repo({ name: 'kaimu', language: 'TypeScript', homepage: 'https://kaimu.app' }),
+            repo({ name: 'old-thing', language: 'Go', archived: true }),
+          ],
+          'weeb-vip': [],
+          bludot: [],
+        },
+        { readme: '<p>hi</p>' },
+      )
+
+    const chip = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('.projects-refine button')].find(
+        (b) => b.textContent?.startsWith(label),
+      )!
+
+    const listed = () =>
+      [...host.querySelectorAll('.project-name')].map(
+        (n) => n.childNodes[0].textContent,
+      )
+
+    it('narrows to one language, and back out again on a second press', async () => {
+      mixed()
+      await open()
+      expect(listed()).toHaveLength(3)
+
+      chip('Go').click()
+      expect(listed()).toEqual(['tanrenai', 'old-thing'])
+
+      // A second press clears it, so the row needs no separate way out.
+      chip('Go').click()
+      expect(listed()).toHaveLength(3)
+    })
+
+    it('narrows to what is actually running', async () => {
+      mixed()
+      await open()
+
+      chip('Live').click()
+      expect(listed()).toEqual(['kaimu'])
+    })
+
+    it('hides archived work only when asked', async () => {
+      mixed()
+      await open()
+      expect(listed()).toContain('old-thing')
+
+      chip('Hide archived').click()
+      expect(listed()).not.toContain('old-thing')
+    })
+
+    it('counts what each chip would leave, before it is pressed', async () => {
+      mixed()
+      await open()
+      expect(chip('Go').querySelector('.refine-count')?.textContent).toBe('2')
+      expect(chip('Live').querySelector('.refine-count')?.textContent).toBe('1')
+    })
+
+    // Two filters are an "and", not a race between them.
+    it('applies the filters together', async () => {
+      mixed()
+      await open()
+
+      chip('Live').click()
+      chip('Go').click()
+      expect(listed()).toHaveLength(0)
+    })
+
+    /*
+     * A language chosen under one account usually does not exist under the
+     * next, and leaving it set would show an empty list for no visible reason.
+     */
+    it('drops a language that the next account does not have', async () => {
+      serve(
+        {
+          thatcatdev: [
+            repo({ name: 'tanrenai', language: 'Go', owner: { login: 'ThatCatDev' } }),
+          ],
+          'weeb-vip': [
+            repo({
+              name: 'weeb-frontend',
+              language: 'TypeScript',
+              owner: { login: 'weeb-vip' },
+            }),
+          ],
+          bludot: [],
+        },
+        { readme: '<p>hi</p>' },
+      )
+      await open()
+
+      chip('Go').click()
+      expect(listed()).toEqual(['tanrenai'])
+
+      const rail = [...host.querySelectorAll<HTMLButtonElement>('.rail-item')].find(
+        (b) => b.textContent?.startsWith('weeb-vip'),
+      )!
+      rail.click()
+      expect(listed()).toEqual(['weeb-frontend'])
+    })
   })
 
   it('goes back to the list', async () => {

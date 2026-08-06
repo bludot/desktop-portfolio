@@ -23,6 +23,17 @@ import type Desktop from "../components/Desktop";
  * third-party context, so the cookie holding its session is a third-party
  * cookie and may be dropped — an app that is logged in elsewhere can appear
  * logged out in here. Both are settings on the app's own edge.
+ *
+ * Neither is recorded here. Framing permission used to be a flag on each entry,
+ * and a flag is a claim about somebody else's headers that goes stale silently:
+ * weeb.vip answered `X-Frame-Options: DENY` until it did not, and nothing in
+ * here noticed. What an app's edge currently says is a question for its edge —
+ *
+ *   curl -sI https://weeb.vip | grep -i 'x-frame-options\|content-security'
+ *
+ * — and note that a `frame-ancestors` list naming the deployed origin will not
+ * name a dev server, so an app can frame in production and refuse on
+ * `localhost`. `contents/app` handles all of this at the window instead.
  */
 export interface App {
   id: string;
@@ -42,24 +53,6 @@ export interface App {
    * three 16px squares. Refresh them if an app is rebranded.
    */
   icon: string;
-  /**
-   * Whether this app's edge permits this origin to frame it.
-   *
-   * Stated rather than detected, because it cannot be detected. A frame that
-   * was refused and a frame that loaded perfectly are identical from here:
-   * both fire `load`, neither exposes a readable document, and both report
-   * zero child frames. The browser deliberately tells the embedder nothing, so
-   * any runtime "is it blank?" check is a guess that will eventually accuse a
-   * working app of being blocked.
-   *
-   * Measured from the response headers instead:
-   *
-   *   curl -sI https://weeb.vip | grep -i 'x-frame-options\|content-security'
-   *
-   * weeb.vip answers `X-Frame-Options: DENY`. Flip this to `true` once its
-   * Cloudflare rule sends `frame-ancestors` naming this origin instead.
-   */
-  embeds: boolean;
 }
 
 export const APPS: App[] = [
@@ -69,9 +62,7 @@ export const APPS: App[] = [
     host: "weeb.vip",
     url: "https://weeb.vip",
     blurb: "Anime tracking — schedules, watch lists and a catalogue.",
-    icon: "/apps/weeb-vip.ico",
-    // X-Frame-Options: DENY at the Cloudflare edge, as of 2026-08-06.
-    embeds: false
+    icon: "/apps/weeb-vip.ico"
   },
   {
     id: "sakiyomi",
@@ -79,8 +70,7 @@ export const APPS: App[] = [
     host: "sakiyomi.dev",
     url: "https://sakiyomi.dev",
     blurb: "Story point estimation for planning sessions.",
-    icon: "/apps/sakiyomi.svg",
-    embeds: true
+    icon: "/apps/sakiyomi.svg"
   },
   {
     id: "whisker",
@@ -88,8 +78,7 @@ export const APPS: App[] = [
     host: "whisker.kaimu.app",
     url: "https://whisker.kaimu.app",
     blurb: "A collaborative whiteboard on an infinite canvas.",
-    icon: "/apps/whisker.svg",
-    embeds: true
+    icon: "/apps/whisker.svg"
   }
 ];
 

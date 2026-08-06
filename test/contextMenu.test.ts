@@ -12,6 +12,7 @@ import {
   windowMenuItems,
 } from '../src/components/ContextMenu/menus'
 import OSWindow from '../src/components/Window'
+import Desktop from '../src/components/Desktop'
 
 jss.setup(preset())
 jss.use(nested())
@@ -386,11 +387,10 @@ describe('a window through its own menu', () => {
   })
 
   /*
-   * The titlebar only. Right-clicking inside the content should still reach
-   * whatever is under the pointer rather than being taken over by window
-   * controls.
+   * The whole window, titlebar and content alike: a right-click should always
+   * land on something, and inside a window the honest answer is the window.
    */
-  it('offers the menu on its titlebar and nowhere else', async () => {
+  it('offers the menu anywhere in the window', async () => {
     const content = document.createElement('div')
     content.className = 'the-content'
     const win = makeWindow({ content })
@@ -406,22 +406,86 @@ describe('a window through its own menu', () => {
 
     const inContent = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
     content.dispatchEvent(inContent)
-    expect(inContent.defaultPrevented).toBe(false)
+    expect(inContent.defaultPrevented).toBe(true)
   })
 
-  // The buttons sit inside the titlebar, so the surface that offers the menu is
-  // also the surface that offers close. A menu over the control you were aiming
-  // at is worse than no menu.
-  it('leaves the window buttons alone', async () => {
-    const win = makeWindow()
+  // Cut, paste and spelling are things only the browser can offer, so a text
+  // field is the one place its own menu is worth more than ours.
+  it('leaves a text field to the browser', async () => {
+    const content = document.createElement('div')
+    const field = document.createElement('input')
+    content.appendChild(field)
+    const win = makeWindow({ content })
     await win.load(host)
 
-    const button = win.getElement().querySelector('topbar-button')
-    expect(button).toBeTruthy()
-
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
-    button!.dispatchEvent(event)
+    field.dispatchEvent(event)
     expect(event.defaultPrevented).toBe(false)
+  })
+})
+
+/*
+ * A right-click should always land on something. Surfaces that answer one stop
+ * it there; everything else falls through to the desktop, so the browser's own
+ * menu never turns up in the middle of a desktop.
+ */
+describe('the menu under everything', () => {
+  let host: HTMLElement
+  let desktop: Desktop
+
+  beforeEach(async () => {
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    desktop = new Desktop({ backgroundColor: '#fff', mainElement: host })
+    await desktop.startup({ unload: vi.fn().mockResolvedValue(undefined) } as any)
+  })
+
+  afterEach(async () => {
+    contextMenu.close()
+    await desktop.unload()
+    // The menu is one instance for the whole desktop, so it has to be handed
+    // back before the next desktop mounts its own copy.
+    if (contextMenu.parent) await contextMenu.unload()
+    host.remove()
+  })
+
+  const rightClickOn = (el: Element) => {
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    el.dispatchEvent(event)
+    return event
+  }
+
+  it('answers a press on something with no menu of its own', () => {
+    const stray = document.createElement('div')
+    document.body.appendChild(stray)
+
+    expect(rightClickOn(stray).defaultPrevented).toBe(true)
+    expect(contextMenu.getElement().textContent).toContain('Dark mode')
+
+    stray.remove()
+  })
+
+  it('still answers a press on the wallpaper itself', () => {
+    expect(rightClickOn(desktop.getElement()).defaultPrevented).toBe(true)
+  })
+
+  it('leaves text fields to the browser wherever they are', () => {
+    const field = document.createElement('textarea')
+    document.body.appendChild(field)
+
+    expect(rightClickOn(field).defaultPrevented).toBe(false)
+
+    field.remove()
+  })
+
+  it('stops answering once the desktop is gone', async () => {
+    const stray = document.createElement('div')
+    document.body.appendChild(stray)
+
+    await desktop.unload()
+    expect(rightClickOn(stray).defaultPrevented).toBe(false)
+
+    stray.remove()
   })
 })
 

@@ -2,7 +2,7 @@ import Logger from "../../Logger";
 import OSElement from "../../utils/OSElement";
 import Taskbar from "./../Taskbar";
 import SelectionLayer from "../Selection";
-import contextMenu, { bindContextMenu } from "../ContextMenu";
+import contextMenu, { bindContextMenu, type MenuItem } from "../ContextMenu";
 import { desktopMenuItems } from "../ContextMenu/menus";
 import windowManager from "../../utils/windowManager";
 import { centreOf, swapAppearance } from "../../utils/motion";
@@ -46,6 +46,8 @@ class Desktop extends OSElement {
   taskbar: Taskbar;
   selection: SelectionLayer;
   instanceName: string = "Desktop";
+  /** Kept so the backstop can be taken off the document again. */
+  private unbindFallback?: () => void;
 
   constructor({
     backgroundColor = "#EEEEEE",
@@ -121,60 +123,66 @@ class Desktop extends OSElement {
   }
 
   /**
-   * The menu on the wallpaper.
+   * The menu on the wallpaper, and the one under everything else.
    *
-   * Bound to the desktop element and tested against it exactly, rather than
-   * filtered by what the press landed on: windows are children of the desktop,
-   * so a right-click anywhere in one bubbles to here. The sky and the ridges
-   * take no pointer events, which leaves this element as the only thing a press
-   * on the background can be aimed at.
+   * Bound twice. The desktop element is the surface the wallpaper menu belongs
+   * to; the document is the backstop, so a press that no surface has claimed
+   * still gets a menu instead of the browser's. Handlers that answer a press
+   * stop it there, so a window or a taskbar chip still wins over this.
    */
   private bindMenu() {
-    bindContextMenu(this.element, (e) => {
-      if (e.target !== this.element) return [];
+    bindContextMenu(this.element, () => this.menuItems());
+    this.unbindFallback = bindContextMenu(document, () => this.menuItems());
+  }
 
-      const open = windowManager.list();
-      const onScreen = open.filter((w) => !w.minimized);
+  /** What the wallpaper offers. Built at the moment of the press. */
+  private menuItems(): MenuItem[] {
+    const open = windowManager.list();
+    const onScreen = open.filter((w) => !w.minimized);
 
-      return desktopMenuItems(
-        {
-          dark: appearance.scheme() === "dark",
-          open: open.length,
-          onScreen: onScreen.length
+    return desktopMenuItems(
+      {
+        dark: appearance.scheme() === "dark",
+        open: open.length,
+        onScreen: onScreen.length
+      },
+      {
+        /*
+         * Straight to the other scheme, not through "system": picking a side
+         * here is picking a side, and leaving it following the OS would let
+         * the choice undo itself the next time the OS changed its mind.
+         *
+         * Opened out of the item that was pressed, and both the change and
+         * the write live inside the callback — it runs after the old picture
+         * has been taken, so anything reading `appearance.get()` outside it
+         * would be reading the theme this is replacing.
+         */
+        toggleTheme: (event) => {
+          const next = appearance.scheme() === "dark" ? "light" : "dark";
+          swapAppearance(() => {
+            appearance.set({ theme: next });
+            // `appearance.set` only repaints; persisting is the caller's job,
+            // as it is in the Settings window. Without this the theme would
+            // go back on the next reload, which is not what flipping a switch
+            // means.
+            void saveSettings(appearance.get());
+          }, centreOf(event.currentTarget as Element));
         },
-        {
-          /*
-           * Straight to the other scheme, not through "system": picking a side
-           * here is picking a side, and leaving it following the OS would let
-           * the choice undo itself the next time the OS changed its mind.
-           *
-           * Opened out of the item that was pressed, and both the change and
-           * the write live inside the callback — it runs after the old picture
-           * has been taken, so anything reading `appearance.get()` outside it
-           * would be reading the theme this is replacing.
-           */
-          toggleTheme: (event) => {
-            const next = appearance.scheme() === "dark" ? "light" : "dark";
-            swapAppearance(() => {
-              appearance.set({ theme: next });
-              // `appearance.set` only repaints; persisting is the caller's job,
-              // as it is in the Settings window. Without this the theme would
-              // go back on the next reload, which is not what flipping a switch
-              // means.
-              void saveSettings(appearance.get());
-            }, centreOf(event.currentTarget as Element));
-          },
-          showAll: () => void this.taskbar.showOverview(this.mainElement),
-          minimizeAll: () =>
-            onScreen.forEach((open) => void open.window.minimize()),
-          settings: () => void new SettingsApp(this).load()
-        }
-      );
-    });
+        showAll: () => void this.taskbar.showOverview(this.mainElement),
+        minimizeAll: () =>
+          onScreen.forEach((open) => void open.window.minimize()),
+        settings: () => void new SettingsApp(this).load()
+      }
+    );
   }
 
   async load(element: HTMLElement) {
     await super.load(element);
+  }
+
+  async beforeUnload() {
+    this.unbindFallback?.();
+    this.unbindFallback = undefined;
   }
 
   async startup(bootscreen: {

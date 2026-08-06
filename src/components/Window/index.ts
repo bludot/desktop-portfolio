@@ -393,19 +393,23 @@ class OSWindow extends OSElement {
     };
     await this.topbar.load(this.element);
 
-    // The titlebar, not the whole window: right-clicking inside the content
-    // should still reach whatever is under the pointer — a link, a selection,
-    // the browser's own menu — rather than being taken over by window controls.
-    const titlebar = this.element.querySelector(".topbar-window");
-    if (titlebar) {
-      bindContextMenu(titlebar as HTMLElement, (e) => {
-        // Raise it first: a menu is about to describe this window, so it had
-        // better be the one in front.
-        if ((e.target as Element)?.closest("topbar-button")) return [];
-        this.onActive(this);
-        return this.menuItems();
-      });
-    }
+    /*
+     * The whole window, not just its titlebar.
+     *
+     * A right-click should always land on something, and the nearest true
+     * answer to "what did I press on?" inside a window is the window itself.
+     * The one thing left to the browser is a text field, which `bindContextMenu`
+     * excludes everywhere: nothing written here can stand in for paste.
+     *
+     * Anything not claimed here reaches the desktop's backstop instead, so the
+     * gesture is never handed back to the browser by accident.
+     */
+    bindContextMenu(this.element, () => {
+      // Raise it first: a menu is about to describe this window, so it had
+      // better be the one in front.
+      this.onActive(this);
+      return this.menuItems();
+    });
 
     this.element.appendChild(main);
 

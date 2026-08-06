@@ -1,4 +1,5 @@
 import OSElement from "./OSElement";
+import { raiseDragShim, dropDragShim } from "./dragShim";
 class ResizableBorder extends OSElement {
   borderWidth: number
   type: ResizeType;
@@ -40,7 +41,11 @@ class ResizableBorder extends OSElement {
       zIndex: "1",
       overflow: "hidden",
       // Resize handles are grab targets, never text.
-      userSelect: "none"
+      userSelect: "none",
+      // Read from one place, because the shim raised for the drag has to show
+      // the same one — an edge whose cursor changed as soon as the pointer left
+      // its 6px would say the resize had stopped while it was still going.
+      cursor: CURSORS[type]
     };
     if (type == ResizeType.TOP) {
       this.style = () => ({
@@ -49,8 +54,7 @@ class ResizableBorder extends OSElement {
           top: 0,
           left: 0,
           right: 0,
-          height: this.borderWidth,
-          cursor: "ns-resize"
+          height: this.borderWidth
         }
       });
     } else if (type == ResizeType.RIGHT) {
@@ -60,8 +64,7 @@ class ResizableBorder extends OSElement {
           top: 0,
           bottom: 0,
           right: 0,
-          width: this.borderWidth,
-          cursor: "ew-resize"
+          width: this.borderWidth
         }
       });
     } else if (type == ResizeType.BOTTOM) {
@@ -71,8 +74,7 @@ class ResizableBorder extends OSElement {
           bottom: 0,
           right: 0,
           left: 0,
-          height: this.borderWidth,
-          cursor: "ns-resize"
+          height: this.borderWidth
         }
       });
     } else if (type == ResizeType.LEFT) {
@@ -82,8 +84,7 @@ class ResizableBorder extends OSElement {
           bottom: 0,
           top: 0,
           left: 0,
-          width: this.borderWidth,
-          cursor: "ew-resize"
+          width: this.borderWidth
         }
       });
     } else if (type == ResizeType.BOTTOM_RIGHT) {
@@ -93,8 +94,7 @@ class ResizableBorder extends OSElement {
           bottom: 0,
           right: 0,
           width: this.borderWidth,
-          height: this.borderWidth,
-          cursor: "nwse-resize"
+          height: this.borderWidth
         }
       });
     } else if (type == ResizeType.BOTTOM_LEFT) {
@@ -104,8 +104,7 @@ class ResizableBorder extends OSElement {
           bottom: 0,
           left: 0,
           width: this.borderWidth,
-          height: this.borderWidth,
-          cursor: "nesw-resize"
+          height: this.borderWidth
         }
       });
     } else if (type == ResizeType.TOP_LEFT) {
@@ -115,8 +114,7 @@ class ResizableBorder extends OSElement {
           top: 0,
           left: 0,
           width: this.borderWidth,
-          height: this.borderWidth,
-          cursor: "nwse-resize"
+          height: this.borderWidth
         }
       });
     } else if (type == ResizeType.TOP_RIGHT) {
@@ -126,8 +124,7 @@ class ResizableBorder extends OSElement {
           top: 0,
           right: 0,
           width: this.borderWidth,
-          height: this.borderWidth,
-          cursor: "nesw-resize"
+          height: this.borderWidth
         }
       });
     }
@@ -155,11 +152,22 @@ class ResizableBorder extends OSElement {
     this.parentDimensions.y = this.resizeTarget.offsetTop;
     this.cursorPosition.y = e.clientY;
     this.cursorPosition.x = e.clientX;
+    /*
+     * Cover the screen before the first move.
+     *
+     * A window holding an app is a window holding a cross-origin frame, and
+     * the moves that do the resizing are delivered to `window` here. Drag an
+     * edge far enough that the pointer crosses that frame and the events go to
+     * the frame's document instead: the window stops resizing halfway through,
+     * and the release is swallowed too, so the drag never ends.
+     */
+    raiseDragShim(CURSORS[this.type]);
     // Both handlers are removed on release. The previous version registered a
     // fresh anonymous mouseup listener per drag and never took it off, so every
     // resize left one behind for the life of the page.
     const mousemove = this.mouseMove.bind(this);
     const mouseup = () => {
+      dropDragShim();
       window.removeEventListener("mousemove", mousemove);
       window.removeEventListener("mouseup", mouseup);
     };
@@ -260,6 +268,18 @@ enum ResizeType {
   RIGHT = "right",
   BOTTOM = "bottom"
 }
+
+/** What each edge shows at rest, and what the shim holds during its drag. */
+const CURSORS: Record<ResizeType, string> = {
+  [ResizeType.TOP]: "ns-resize",
+  [ResizeType.BOTTOM]: "ns-resize",
+  [ResizeType.LEFT]: "ew-resize",
+  [ResizeType.RIGHT]: "ew-resize",
+  [ResizeType.TOP_LEFT]: "nwse-resize",
+  [ResizeType.BOTTOM_RIGHT]: "nwse-resize",
+  [ResizeType.TOP_RIGHT]: "nesw-resize",
+  [ResizeType.BOTTOM_LEFT]: "nesw-resize"
+};
 
 function Resizeable(element: OSElement) {
   //setTimeout(function () {

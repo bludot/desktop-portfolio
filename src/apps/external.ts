@@ -23,6 +23,17 @@ import type Desktop from "../components/Desktop";
  * third-party context, so the cookie holding its session is a third-party
  * cookie and may be dropped — an app that is logged in elsewhere can appear
  * logged out in here. Both are settings on the app's own edge.
+ *
+ * Neither is recorded here. Framing permission used to be a flag on each entry,
+ * and a flag is a claim about somebody else's headers that goes stale silently:
+ * weeb.vip answered `X-Frame-Options: DENY` until it did not, and nothing in
+ * here noticed. What an app's edge currently says is a question for its edge —
+ *
+ *   curl -sI https://weeb.vip | grep -i 'x-frame-options\|content-security'
+ *
+ * — and note that a `frame-ancestors` list naming the deployed origin will not
+ * name a dev server, so an app can frame in production and refuse on
+ * `localhost`. `contents/app` handles all of this at the window instead.
  */
 export interface App {
   id: string;
@@ -42,24 +53,6 @@ export interface App {
    * three 16px squares. Refresh them if an app is rebranded.
    */
   icon: string;
-  /**
-   * Whether this app's edge permits this origin to frame it.
-   *
-   * Stated rather than detected, because it cannot be detected. A frame that
-   * was refused and a frame that loaded perfectly are identical from here:
-   * both fire `load`, neither exposes a readable document, and both report
-   * zero child frames. The browser deliberately tells the embedder nothing, so
-   * any runtime "is it blank?" check is a guess that will eventually accuse a
-   * working app of being blocked.
-   *
-   * Measured from the response headers instead:
-   *
-   *   curl -sI https://weeb.vip | grep -i 'x-frame-options\|content-security'
-   *
-   * weeb.vip answers `X-Frame-Options: DENY`. Flip this to `true` once its
-   * Cloudflare rule sends `frame-ancestors` naming this origin instead.
-   */
-  embeds: boolean;
 }
 
 export const APPS: App[] = [
@@ -69,9 +62,7 @@ export const APPS: App[] = [
     host: "weeb.vip",
     url: "https://weeb.vip",
     blurb: "Anime tracking — schedules, watch lists and a catalogue.",
-    icon: "/apps/weeb-vip.ico",
-    // X-Frame-Options: DENY at the Cloudflare edge, as of 2026-08-06.
-    embeds: false
+    icon: "/apps/weeb-vip.ico"
   },
   {
     id: "sakiyomi",
@@ -79,8 +70,7 @@ export const APPS: App[] = [
     host: "sakiyomi.dev",
     url: "https://sakiyomi.dev",
     blurb: "Story point estimation for planning sessions.",
-    icon: "/apps/sakiyomi.svg",
-    embeds: true
+    icon: "/apps/sakiyomi.svg"
   },
   {
     id: "whisker",
@@ -88,17 +78,37 @@ export const APPS: App[] = [
     host: "whisker.kaimu.app",
     url: "https://whisker.kaimu.app",
     blurb: "A collaborative whiteboard on an infinite canvas.",
-    icon: "/apps/whisker.svg",
-    embeds: true
+    icon: "/apps/whisker.svg"
   }
 ];
+
+/**
+ * Wide enough that the app inside believes it is on a desktop.
+ *
+ * A framed app reads the *frame's* width, not the screen's, so a window a
+ * little too narrow serves the phone layout to somebody sitting at a monitor —
+ * a hamburger in place of the navigation, one column, artwork dropped.
+ *
+ * 1024 is where it turns, measured rather than assumed: weeb.vip framed at
+ * 1000px gives the hamburger, at 1024px the full navigation bar. That is the
+ * common `lg` breakpoint and all three apps are built on it. The window was
+ * 1000px wide, which missed it by 24 — near enough to look like a rendering
+ * fault rather than a width.
+ *
+ * So: comfortably past it, not on it. The headroom is what stops a window
+ * nudged smaller by a few pixels from collapsing the app to a phone.
+ */
+const DESKTOP_WIDTH = 1180;
+const DESKTOP_HEIGHT = 780;
 
 /**
  * Open one as a window on the desktop.
  *
  * Sized larger than the other windows because these are whole applications
  * with their own navigation rather than a page of prose, and clipped to the
- * viewport so the frame is never born larger than the screen it is on.
+ * viewport so the frame is never born larger than the screen it is on. On a
+ * screen too small to hold the desktop layout the app gets its phone one,
+ * which is the right answer there.
  */
 export function openAppWindow(app: App, desktop: Desktop): void {
   windowManager.new({
@@ -107,8 +117,8 @@ export function openAppWindow(app: App, desktop: Desktop): void {
     content: new AppContent(app),
     desktop,
     dimensions: {
-      width: Math.min(1000, Math.max(320, window.innerWidth - 80)),
-      height: Math.min(700, Math.max(320, window.innerHeight - 140))
+      width: Math.min(DESKTOP_WIDTH, Math.max(320, window.innerWidth - 80)),
+      height: Math.min(DESKTOP_HEIGHT, Math.max(320, window.innerHeight - 140))
     },
     center: true
   });

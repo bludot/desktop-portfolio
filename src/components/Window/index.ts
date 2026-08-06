@@ -5,6 +5,7 @@ import type {IWindow} from "./interfaces";
 import TopBar from "./topbar";
 import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
+import { raiseDragShim, dropDragShim } from "../../utils/dragShim";
 import { isNarrow } from "../../utils/utils";
 // `blur` is aliased: the constructor already has a WindowBlur named blur.
 import { blur as blurFx, color, radius, shadow } from "../../theme";
@@ -247,6 +248,7 @@ class OSWindow extends OSElement {
   }
 
   mouseup(e: MouseEvent): void {
+    dropDragShim();
     window.removeEventListener("mousemove", this.onMouseMove);
     window.removeEventListener("mouseup", this.onMouseUp);
 
@@ -341,6 +343,16 @@ class OSWindow extends OSElement {
     this.element.style.willChange = "transform";
 
     this.onActive(this);
+    /*
+     * Cover the screen for the length of the drag.
+     *
+     * The moves are listened for on `window`, so any cross-origin frame the
+     * pointer passes over takes them instead — its own window, its own event
+     * loop, nothing forwarded. Dragging a window across an app window used to
+     * drop it there, and the release landed in the frame too, leaving the drag
+     * running until the next click somewhere else finished it.
+     */
+    raiseDragShim("grabbing");
     window.addEventListener("mouseup", this.onMouseUp);
     window.addEventListener("mousemove", this.onMouseMove);
   }

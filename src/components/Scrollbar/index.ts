@@ -1,6 +1,7 @@
 import jss, { StyleSheet } from "jss";
 import debounce from "../../utils/debounce";
 import OSElement from "../../utils/OSElement";
+import { raiseDragShim, dropDragShim } from "../../utils/dragShim";
 import { color } from "../../theme";
 
 /** How close the pointer must get to the edge before the bar appears. */
@@ -279,6 +280,9 @@ class ScrollBar extends OSElement {
     this.dragScrollStart = this.scrollPosition;
     this.show();
 
+    // Same reason as a window drag: a thumb pulled past a cross-origin frame
+    // loses the moves to it, and the scroll sticks with the thumb held.
+    raiseDragShim("pointer");
     window.addEventListener("mousemove", this.onThumbMove);
     window.addEventListener("mouseup", this.onThumbUp);
   }
@@ -302,6 +306,7 @@ class ScrollBar extends OSElement {
 
   thumbMouseUp(): void {
     this.dragging = false;
+    dropDragShim();
     window.removeEventListener("mousemove", this.onThumbMove);
     window.removeEventListener("mouseup", this.onThumbUp);
     this.hideSoonIfIdle();

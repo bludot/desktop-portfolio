@@ -17,7 +17,6 @@ const app = (over: Record<string, unknown> = {}) =>
     url: 'https://whisker.kaimu.app',
     blurb: 'a whiteboard',
     icon: '/apps/whisker.svg',
-    embeds: true,
     ...over,
   }) as any
 

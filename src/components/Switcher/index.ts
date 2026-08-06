@@ -67,6 +67,16 @@ interface Tile {
   previousTransformOrigin: string;
   previousPointerEvents: string;
   previousVisibility: string;
+  previousDisplay: string;
+  /**
+   * Shown here only because the overview is open.
+   *
+   * A minimised window is `display: none`, so it has to be put back on the page
+   * to be measured and drawn as a tile. Closing the overview without choosing
+   * it must hide it again — it was minimised before, and looking at it is not
+   * the same as asking for it.
+   */
+  wasMinimized: boolean;
   /** Offset from the element's layout box to its place in the overview. */
   dx: number;
   dy: number;
@@ -408,9 +418,19 @@ class Switcher extends OSElement {
 
   async show(host: HTMLElement) {
     if (this.open) return;
-    // A minimised window is display:none, so it measures zero and would take a
-    // tile showing nothing. The overview is what is on screen.
-    const windows = windowManager.list().filter((open) => !open.minimized);
+    /*
+     * Every open window, minimised or not.
+     *
+     * These used to be filtered out, because a minimised window is
+     * `display: none` and so measures zero and would have taken a tile showing
+     * nothing. But below 760px the taskbar hides its chips and this overview is
+     * the only way back to a window — so filtering out the minimised ones left
+     * them unreachable on a phone: minimise, and the window was gone for good.
+     *
+     * They are put back on the page to be measured instead, and hidden again on
+     * the way out if they are not the one chosen.
+     */
+    const windows = windowManager.list();
     this.open = true;
 
     if (!this.parent) await this.load(host);
@@ -433,9 +453,13 @@ class Switcher extends OSElement {
     this.viewportHeight = area.height;
     this.clearTiles();
 
-    this.tiles = windows.map(({ window: win, title }, i) => {
+    this.tiles = windows.map(({ window: win, title, minimized }, i) => {
       const el = win.getElement();
       const cell = cells[i];
+      const previousDisplay = el.style.display;
+      // On the page before anything is measured: `display: none` has no box,
+      // so its rect would be all zeroes and its tile would be empty.
+      if (minimized) el.style.display = "";
       // The window keeps its aspect ratio inside the cell; the label takes a
       // fixed strip underneath it.
       const boxHeight = Math.max(cell.height - LABEL_H, 1);
@@ -470,6 +494,8 @@ class Switcher extends OSElement {
         previousTransformOrigin: el.style.transformOrigin,
         previousPointerEvents: el.style.pointerEvents,
         previousVisibility: el.style.visibility,
+        previousDisplay,
+        wasMinimized: minimized,
         dx: cell.left + (cell.width - box.width * scale) / 2 - box.left,
         dy: cell.top + (boxHeight - box.height * scale) / 2 - box.top,
         scale,
@@ -553,6 +579,19 @@ class Switcher extends OSElement {
   };
 
   private async pick(win: OSWindow) {
+    /*
+     * Restored before the overview closes, not focused after it.
+     *
+     * `onActive` raises a window; it does not un-hide one, and a minimised
+     * window is hidden. Choosing one from the overview and being given nothing
+     * is how it used to behave for anything minimised. Doing it before the
+     * close also tells `close` that this tile is not to be hidden again.
+     */
+    if (win.minimized) {
+      await win.restore();
+      await this.close();
+      return;
+    }
     await this.close();
     win.onActive(win);
   }
@@ -594,6 +633,16 @@ class Switcher extends OSElement {
       tile.element.style.transformOrigin = tile.previousTransformOrigin;
       tile.element.style.pointerEvents = tile.previousPointerEvents;
       tile.element.style.visibility = tile.previousVisibility;
+      /*
+       * Back out of sight, unless it was chosen.
+       *
+       * `pick` restores the window before this runs, which clears `minimized`
+       * — so a window that is still minimised by the time the overview closes
+       * is one that was only ever shown in order to be looked at.
+       */
+      if (tile.wasMinimized && tile.window.minimized) {
+        tile.element.style.display = tile.previousDisplay || "none";
+      }
     });
 
     this.clearTiles();

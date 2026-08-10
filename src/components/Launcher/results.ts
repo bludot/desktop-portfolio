@@ -89,16 +89,10 @@ export interface Sources {
   searchWeb: (query: string) => void;
 }
 
-/**
- * Where a web search goes.
- *
- * DuckDuckGo rather than Google because it does not need to know who asked, and
- * this is a portfolio rather than somebody's daily browser. One constant to
- * change if that is the wrong call — `https://www.google.com/search?q=` is the
- * whole of the alternative.
- */
-export const SEARCH_URL = "https://duckduckgo.com/?q=";
-export const SEARCH_NAME = "DuckDuckGo";
+// Shared with the chat window, which offers the same search when it is asked
+// something it cannot answer.
+export { SEARCH_URL, SEARCH_NAME } from "../../utils/websearch";
+import { SEARCH_URL, SEARCH_NAME } from "../../utils/websearch";
 
 /** How many repositories a query may contribute, before it is a wall of them. */
 const REPO_LIMIT = 6;

@@ -135,16 +135,17 @@ describe('the chat window', () => {
   })
 
   /*
-   * A small model will agree to anything it is asked whether it can do — it
-   * offered to search the web, then discovered a turn later that it could not.
-   * The prompt has to rule the capability out rather than leave it open.
+   * The prompt still rules the capability out — it helps at the margin — but it
+   * is not what is relied on: at this size an instruction is a suggestion, and
+   * questions about searching or about today never reach the model at all. See
+   * `ai/capability` and its tests.
    */
-  it('is told what it cannot do, in the prompt rather than by discovery', async () => {
+  it('carries the constraints in the prompt, for everything that does reach it', async () => {
     const engine = stubEngine()
     const content = new ChatContent(() => engine)
     await content.load(host)
     await vi.waitFor(() => expect(input().disabled).toBe(false))
-    await ask(content.getElement(), 'can you search the web?')
+    await ask(content.getElement(), 'explain what a monolith is')
 
     const [sent] = (engine.reply as any).mock.calls[0]
     const system: string = sent[0].content

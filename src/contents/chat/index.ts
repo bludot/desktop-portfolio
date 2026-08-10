@@ -11,6 +11,9 @@ import {
 import type { DevicePreference } from "../../ai/engine";
 import { gpuAvailable } from "../../ai/engine";
 import { loadSettings, saveSettings } from "../../Store";
+import { Knowledge, ground } from "../../ai/knowledge";
+import { refuse } from "../../ai/capability";
+import { SEARCH_URL } from "../../utils/websearch";
 
 /**
  * A conversation with a model that lives on this machine.
@@ -72,6 +75,16 @@ class ChatContent extends OSElement {
   private phase: Phase = "loading";
   private answering = false;
   private stop?: AbortController;
+
+  /**
+   * What the model is allowed to know about James.
+   *
+   * Built alongside the chat model rather than before it: the weights are the
+   * long pole, and the notes are 23MB the launcher may well have fetched
+   * already. Nothing waits on it — a question asked before it is ready is
+   * simply answered without notes.
+   */
+  private readonly knowledge = new Knowledge();
 
   /**
    * How an engine is got, rather than the engine itself.
@@ -199,6 +212,24 @@ class ChatContent extends OSElement {
           verticalAlign: "-2px",
           background: color.accent,
           opacity: 0.7
+        },
+
+        "& .chat-web": {
+          alignSelf: "flex-start",
+          marginTop: "2px",
+          padding: "5px 11px",
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.pill,
+          background: "transparent",
+          color: color.inkSoft,
+          fontSize: size.caption,
+          textDecoration: "none",
+          transition: "background 150ms ease, color 150ms ease"
+        },
+        "& .chat-web:hover": { background: color.hover, color: color.accent },
+        "& .chat-web:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "1px"
         },
 
         "& .chat-status": {
@@ -486,6 +517,9 @@ class ChatContent extends OSElement {
       this.input.disabled = false;
       this.send.disabled = false;
       this.input.focus();
+      // In the background: a question asked before it lands is answered
+      // without notes rather than made to wait.
+      void this.knowledge.build();
     } catch (error) {
       this.phase = "failed";
       this.say(
@@ -519,6 +553,24 @@ class ChatContent extends OSElement {
     return said;
   }
 
+  /**
+   * The desktop can search even though the model cannot.
+   *
+   * A link rather than a sentence about how one might search: the question is
+   * already typed, and the only thing standing between somebody and an answer
+   * is a click. Opened in a tab because no search engine allows itself to be
+   * framed — see the launcher, which has the same constraint.
+   */
+  private webSearch(query: string): HTMLElement {
+    const link = document.createElement("a");
+    link.className = "chat-web";
+    link.href = SEARCH_URL + encodeURIComponent(query);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.appendChild(document.createTextNode(`Search the web for “${query}” ↗`));
+    return link;
+  }
+
   private async ask() {
     const question = this.input.value.trim();
     if (!question || this.phase !== "ready" || this.answering) return;
@@ -526,6 +578,23 @@ class ChatContent extends OSElement {
     this.input.value = "";
     this.turn("You", question);
     this.history.push({ role: "user", content: question });
+
+    /*
+     * Some questions never reach the model.
+     *
+     * It cannot search, and it does not know what day it is — but told so in
+     * its prompt it still agreed to search, and invented an anime when asked
+     * what was airing. So the honest answer is given here, with the desktop's
+     * own search offered underneath it.
+     */
+    const refusal = refuse(question);
+    if (refusal) {
+      const said = this.turn("Model", refusal.answer);
+      if (refusal.search) said.parentElement?.appendChild(this.webSearch(refusal.search));
+      this.history.push({ role: "assistant", content: refusal.answer });
+      this.input.focus();
+      return;
+    }
 
     this.answering = true;
     this.input.disabled = true;
@@ -537,8 +606,24 @@ class ChatContent extends OSElement {
     this.stop = new AbortController();
 
     try {
+      /*
+       * The question, with whatever is known about it above it.
+       *
+       * Only in the request: the transcript keeps the plain question, so the
+       * notes are not carried forward turn after turn until they crowd out the
+       * conversation.
+       */
+      const found = await this.knowledge.find(question);
+      this.logger.debug(
+        `grounded with ${found.length}: ${found.map((p) => p.source).join(" | ")}`
+      );
+      const asked: Message[] = [
+        ...this.history.slice(0, -1),
+        { role: "user", content: ground(question, found) }
+      ];
+
       const answer = await this.engine.reply(
-        this.history,
+        asked,
         (token) => {
           said.textContent += token;
           this.log.scrollTop = this.log.scrollHeight;

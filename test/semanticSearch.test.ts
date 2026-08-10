@@ -160,7 +160,7 @@ describe('RepoIndex', () => {
     expect((embedder.embed as any).mock.calls).toHaveLength(1)
   })
 
-  it('comes back from the cache rather than the model on a later visit', async () => {
+  it('takes the vectors from the cache but still brings the model in', async () => {
     const first = model()
     await new RepoIndex(first).build(corpus)
 
@@ -169,8 +169,16 @@ describe('RepoIndex', () => {
     await index.build(corpus)
 
     expect(index.ready).toBe(true)
-    // The weights were never brought in: the vectors were already stored.
-    expect(second.load).not.toHaveBeenCalled()
+    // The corpus was not embedded again — that is the saving.
+    expect((second.embed as any).mock.calls).toHaveLength(0)
+    /*
+     * But the model still loads, because the *question* has to be embedded at
+     * query time. Skipping it left every visit after the first with a full
+     * index and no way to ask it anything: `embed` threw, the catch swallowed
+     * it, and search silently returned nothing.
+     */
+    expect(second.load).toHaveBeenCalled()
+    expect((await index.search('message queue'))[0].key).toBe(keyOf(corpus[0]))
   })
 
   it('rebuilds when the repositories have changed underneath it', async () => {

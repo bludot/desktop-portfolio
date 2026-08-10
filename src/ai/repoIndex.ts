@@ -110,6 +110,17 @@ export class RepoIndex {
   }
 
   private async fill(repos: Repo[], corpus: string, onProgress?: Progress) {
+    /*
+     * The model comes in even when the vectors do not.
+     *
+     * Cached vectors answer "what does the corpus mean"; they cannot answer
+     * "what does this question mean", and that needs the model at query time.
+     * Loading it only on the miss left the second visit — every visit after the
+     * first — with a full index and no way to ask it anything: `embed` threw,
+     * the catch swallowed it, and searching silently returned nothing at all.
+     */
+    await this.model.load(onProgress);
+
     const stored = await readCache<StoredVectors>(CACHE_KEY);
     if (
       stored?.value &&
@@ -119,11 +130,8 @@ export class RepoIndex {
       Object.entries(stored.value.vectors).forEach(([key, vector]) =>
         this.vectors.set(key, Float32Array.from(vector))
       );
-      onProgress?.(1);
       return;
     }
-
-    await this.model.load(onProgress);
 
     const keys = repos.map(keyOf);
     const vectors = await this.model.embed(repos.map(sentence));

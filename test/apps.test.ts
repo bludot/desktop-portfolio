@@ -103,18 +103,24 @@ describe('FeatureFlagsApp', () => {
     windowManager.windows.length = 0
   })
 
-  // Nothing is declared at the moment, so there is nothing to seed.
-  it('seeds nothing while no flags are declared', async () => {
+  // Opening the app is what writes the declared flags down, so somebody can
+  // turn them on — until then the defaults are all that ship.
+  it('seeds the declared flags, off', async () => {
     const app = new FeatureFlagsApp(makeDesktop())
-    expect(await app.loadFeatures()).toEqual([])
-    expect(await db.featureFlags.count()).toBe(0)
+    const flags = await app.loadFeatures()
+
+    expect(flags.map((f) => f.code)).toEqual(['semanticSearch', 'localChat'])
+    expect(flags.every((f) => !f.enabled)).toBe(true)
+    expect(await db.featureFlags.count()).toBe(2)
   })
 
-  it('returns whatever rows already exist', async () => {
+  it('returns whatever rows already exist, alongside the declared ones', async () => {
     await new FeatureFlag('experimental', 'Experimental', true).save()
     const app = new FeatureFlagsApp(makeDesktop())
     const flags = await app.loadFeatures()
-    expect(flags.map((f) => f.code)).toEqual(['experimental'])
+
+    expect(flags.map((f) => f.code)).toContain('experimental')
+    expect(flags.map((f) => f.code)).toContain('localChat')
   })
 
   it('opens a window listing each flag', async () => {

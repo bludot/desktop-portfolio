@@ -95,10 +95,28 @@ describe('isFeatureEnabled', () => {
     await db.featureFlags.clear()
   })
 
-  // No flags are declared right now — the overlay scrollbar graduated out of
-  // the system. The helper still has to behave for whatever is added next.
-  it('declares no flags at present', () => {
-    expect(Object.keys(FEATURE_FLAG_DEFAULTS)).toEqual([])
+  /*
+   * Both of the declared flags gate something that downloads a model, and both
+   * ship off: a visitor who landed here rather than chose to be should not be
+   * fetching weights because they opened a menu.
+   */
+  it('declares only the model-backed features, and both are off', () => {
+    expect(Object.keys(FEATURE_FLAG_DEFAULTS)).toEqual([
+      'semanticSearch',
+      'localChat',
+    ])
+    Object.values(FEATURE_FLAG_DEFAULTS).forEach((flag) => {
+      expect(flag.enabled, flag.name).toBe(false)
+    })
+  })
+
+  it('reports a declared flag from its default when nothing is stored', async () => {
+    await expect(isFeatureEnabled('semanticSearch')).resolves.toBe(false)
+  })
+
+  it('lets a stored row override a declared default', async () => {
+    await new FeatureFlag('localChat', 'Local chat model', true).save()
+    await expect(isFeatureEnabled('localChat')).resolves.toBe(true)
   })
 
   it('reports an undeclared flag as off', async () => {

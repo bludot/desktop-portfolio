@@ -21,9 +21,11 @@ import ExperienceContent from "../../contents/experience";
 import ProjectsContent from "../../contents/projects";
 import AlertContent from "../../contents/alert";
 import LoggerWindow from "../../contents/logger";
+import ChatContent from "../../contents/chat";
 import FeatureFlagsApp from "../../apps/FeatureFlags";
 import SettingsApp from "../../apps/Settings";
 import { NARROW_PX } from "../../utils/utils";
+import { isFeatureEnabled } from "../../Store";
 
 /**
  * Everything this desktop can open, as one board.
@@ -123,6 +125,16 @@ class StartMenu extends OSElement {
 
   /** The button this was opened from. Pressing it again is not a dismissal. */
   private anchor?: HTMLElement;
+
+  /**
+   * Whether the chat window is on offer.
+   *
+   * Read on every open rather than once at boot, so turning the flag on in
+   * Settings shows the tile at the next press instead of the next reload. The
+   * model itself is still untouched until that tile is pressed — this is a
+   * boolean from IndexedDB, not a download.
+   */
+  private chatOffered = false;
 
   constructor(private readonly desktop: Desktop) {
     super("startmenu", "start-menu");
@@ -590,6 +602,24 @@ class StartMenu extends OSElement {
             dimensions: { width: 760, height: 620 }
           })
       },
+      ...(this.chatOffered
+        ? [
+            {
+              title: "Chat",
+              label: "Chat",
+              meta: "local",
+              glyph: "chat" as const,
+              open: () =>
+                windowManager.new({
+                  title: "Chat",
+                  meta: "on this machine",
+                  content: new ChatContent(),
+                  desktop: this.desktop,
+                  dimensions: { width: 460, height: 520 }
+                })
+            }
+          ]
+        : []),
       {
         title: "Contact Unavailable",
         label: "Contact",
@@ -857,6 +887,14 @@ class StartMenu extends OSElement {
   }
 
   async load(element: HTMLElement) {
+    // Before the render, so the board is drawn once with whatever it offers
+    // rather than appearing and then growing a tile.
+    try {
+      this.chatOffered = await isFeatureEnabled("localChat");
+    } catch {
+      // A flag that cannot be read is a flag that is off.
+      this.chatOffered = false;
+    }
     this.render();
     // Before the first paint, so the board never appears in the wrong place and
     // then corrects itself.

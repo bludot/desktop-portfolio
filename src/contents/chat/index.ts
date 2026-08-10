@@ -11,8 +11,8 @@ import {
 import type { DevicePreference } from "../../ai/engine";
 import { gpuAvailable } from "../../ai/engine";
 import { loadSettings, saveSettings } from "../../Store";
-import { Knowledge, ground } from "../../ai/knowledge";
-import { refuse } from "../../ai/capability";
+import { Knowledge, contextual, ground, type Passage } from "../../ai/knowledge";
+import { asksForSources, refuse } from "../../ai/capability";
 import { SEARCH_URL } from "../../utils/websearch";
 
 /**
@@ -53,6 +53,9 @@ const SYSTEM: Message = {
 
 type Phase = "loading" | "ready" | "failed";
 
+/** How much of a passage to show. Enough to check the answer against. */
+const EXCERPT = 240;
+
 /** What is remembered between visits. Not the conversation — just the choices. */
 interface ChatChoice {
   model: string;
@@ -85,6 +88,15 @@ class ChatContent extends OSElement {
    * simply answered without notes.
    */
   private readonly knowledge = new Knowledge();
+
+  /**
+   * What the last answer was built from.
+   *
+   * Kept so the window can say — under the answer, and again if somebody asks
+   * outright what it was based on, which is the reasonable next question when a
+   * machine tells you about somebody.
+   */
+  private sources: Passage[] = [];
 
   /**
    * How an engine is got, rather than the engine itself.
@@ -214,6 +226,42 @@ class ChatContent extends OSElement {
           opacity: 0.7
         },
 
+        "& .chat-source": {
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.mono,
+          color: color.inkFaint
+        },
+        "& .chat-source summary": {
+          cursor: "pointer",
+          listStyle: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px"
+        },
+        // The default triangle is the browser's, in the browser's colour. This
+        // one is a caret that turns, in ink that belongs to the theme.
+        "& .chat-source summary::-webkit-details-marker": { display: "none" },
+        "& .chat-source summary::before": {
+          content: "'\\203A'",
+          display: "inline-block",
+          transition: "transform 150ms ease"
+        },
+        "& .chat-source[open] summary::before": { transform: "rotate(90deg)" },
+        "& .chat-source summary:hover": { color: color.inkSoft },
+        "& .chat-source summary:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "2px"
+        },
+        "& .chat-source ul": {
+          margin: "7px 0 0",
+          padding: "0 0 0 14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px"
+        },
+        "& .chat-source li": { lineHeight: 1.5 },
+        "& .chat-source b": { color: color.inkSoft, fontWeight: weight.emphasise },
         "& .chat-web": {
           alignSelf: "flex-start",
           marginTop: "2px",
@@ -571,6 +619,52 @@ class ChatContent extends OSElement {
     return link;
   }
 
+  /**
+   * Where an answer came from.
+   *
+   * The difference between "the machine said so" and something checkable — and
+   * on a window whose whole claim is that it is not making things up, the
+   * receipts are the claim. Sources rather than a count: "Engineering Manager
+   * at GoTu" is a fact about the answer; "3 passages" is a fact about the
+   * implementation.
+   */
+  private citation(found: Passage[]): HTMLElement {
+    const box = document.createElement("details");
+    box.className = "chat-source";
+
+    const summary = document.createElement("summary");
+    const seen = [...new Set(found.map((passage) => passage.source))];
+    summary.appendChild(document.createTextNode(`from ${seen.join(" · ")}`));
+    box.appendChild(summary);
+
+    /*
+     * The sentences themselves, not a reference to them.
+     *
+     * A label alone still asks somebody to trust that the label matched — the
+     * excerpt is what lets them see the answer was a paraphrase and not an
+     * invention. Closed by default, because the answer is the thing being read
+     * and this is the working underneath it.
+     */
+    const list = document.createElement("ul");
+    found.forEach((passage) => {
+      const item = document.createElement("li");
+
+      const where = document.createElement("b");
+      where.appendChild(document.createTextNode(passage.source));
+      item.appendChild(where);
+
+      const text =
+        passage.text.length > EXCERPT
+          ? `${passage.text.slice(0, EXCERPT).trimEnd()}…`
+          : passage.text;
+      item.appendChild(document.createTextNode(` ${text}`));
+      list.appendChild(item);
+    });
+    box.appendChild(list);
+
+    return box;
+  }
+
   private async ask() {
     const question = this.input.value.trim();
     if (!question || this.phase !== "ready" || this.answering) return;
@@ -587,6 +681,24 @@ class ChatContent extends OSElement {
      * what was airing. So the honest answer is given here, with the desktop's
      * own search offered underneath it.
      */
+    /*
+     * "What was that based on?" is about the conversation, not about James.
+     * Retrieval cannot tell the difference — it fired on it, handed over the
+     * same notes, and the model repeated its previous answer instead of
+     * sourcing it. The window knows what it used, so the window answers.
+     */
+    if (asksForSources(question)) {
+      const answer = this.sources.length
+        ? `That came from ${[...new Set(this.sources.map((p) => p.source))].join(
+            ", "
+          )} — James's own experience and project notes, which this window keeps locally.`
+        : "Nothing in particular — there were no notes on that, so it was the model's own words. Treat it as unreliable.";
+      this.turn("Model", answer);
+      this.history.push({ role: "assistant", content: answer });
+      this.input.focus();
+      return;
+    }
+
     const refusal = refuse(question);
     if (refusal) {
       const said = this.turn("Model", refusal.answer);
@@ -613,7 +725,18 @@ class ChatContent extends OSElement {
        * notes are not carried forward turn after turn until they crowd out the
        * conversation.
        */
-      const found = await this.knowledge.find(question);
+      /*
+       * Searched with the previous question carried forward, answered with
+       * only what was typed. See `contextual`: a follow-up is about the subject
+       * before it, but the model should not be handed a question nobody asked.
+       */
+      const previous = [...this.history]
+        .reverse()
+        .find((turn) => turn.role === "user" && turn.content !== question);
+      const found = await this.knowledge.find(
+        contextual(question, previous?.content)
+      );
+      this.sources = found;
       this.logger.debug(
         `grounded with ${found.length}: ${found.map((p) => p.source).join(" | ")}`
       );
@@ -633,6 +756,7 @@ class ChatContent extends OSElement {
       // A model that answered in one piece rather than in tokens.
       if (!said.textContent) said.textContent = answer;
       this.history.push({ role: "assistant", content: said.textContent ?? "" });
+      if (found.length) said.parentElement?.appendChild(this.citation(found));
       this.say("");
     } catch (error) {
       said.textContent = said.textContent || "It stopped partway through.";

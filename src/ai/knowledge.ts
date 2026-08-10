@@ -308,7 +308,25 @@ export class Knowledge {
  * this size the nearest instruction is the one that gets followed.
  */
 export function ground(question: string, found: Passage[]): string {
-  if (!found.length) return question;
+  if (!found.length) {
+    /*
+     * Nothing found, and the question was about him.
+     *
+     * Left alone, the model answers from a memory it does not have: asked for
+     * James's weaknesses — which nothing here records — it produced a paragraph
+     * of plausible, invented criticism. Saying outright that there is nothing
+     * is the one instruction that reliably produces "I do not know" rather than
+     * fiction.
+     */
+    if (aboutJames(question)) {
+      return [
+        "There are no notes about this.",
+        "",
+        `Say plainly that you do not know, in one sentence. Question: ${question}`
+      ].join("\n");
+    }
+    return question;
+  }
 
   /*
    * Notes first, then the question, and no prohibitions in between.
@@ -330,6 +348,35 @@ export function ground(question: string, found: Passage[]): string {
     "",
     `Using the notes above, answer briefly: ${question}`
   ].join("\n");
+}
+
+/**
+ * The question a follow-up is really asking.
+ *
+ * "what about weaknesses?" means nothing on its own: embedded alone it matched
+ * the same notes as the question before it, and the model — handed a paragraph
+ * about strengths and asked for faults — invented some. A short question after
+ * another question is almost always about the same subject, so it is carried
+ * forward for the *search* only. What the model is asked stays what was typed.
+ *
+ * Length is the test rather than a list of opening words, because "and infra?"
+ * and "why" are follow-ups too, and nothing about them looks like one.
+ */
+export function contextual(question: string, previous?: string): string {
+  const q = question.trim();
+  if (!previous) return q;
+  return q.split(/\s+/).length <= 6 ? `${previous.trim()} ${q}` : q;
+}
+
+/**
+ * Whether this is a question about James at all.
+ *
+ * The notes only cover him, so only questions about him should be answered
+ * "there is nothing about that" when they turn up nothing. Asked to explain
+ * what a monolith is, the model should simply answer.
+ */
+export function aboutJames(question: string): boolean {
+  return /\b(james|he|his|him|you|your|himself)\b/i.test(question);
 }
 
 export { FLOOR as KNOWLEDGE_FLOOR };

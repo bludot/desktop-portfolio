@@ -2,8 +2,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
-import { Knowledge, ground, passages, KNOWLEDGE_FLOOR } from '../src/ai/knowledge'
-import { refuse } from '../src/ai/capability'
+import {
+  Knowledge,
+  aboutJames,
+  contextual,
+  ground,
+  passages,
+  KNOWLEDGE_FLOOR,
+} from '../src/ai/knowledge'
+import { asksForSources, refuse } from '../src/ai/capability'
 import ChatContent from '../src/contents/chat'
 import { setEmbedder, type Embedder } from '../src/ai/engine'
 import type { ChatEngine, Message } from '../src/ai/chat'
@@ -235,6 +242,142 @@ describe('the window, asked something it cannot answer', () => {
     expect(link.href).toContain('duckduckgo.com')
     expect(link.target).toBe('_blank')
     expect(link.rel).toBe('noopener noreferrer')
+    await content.unload()
+  })
+})
+
+/*
+ * Three failures from one conversation, each fixed here:
+ *
+ *   "what about weaknesses?"      → retrieved the strengths notes again, and
+ *                                   the model invented soft criticism to fit
+ *   "what is that based on?"      → treated as a question about James, so the
+ *                                   same notes came back and it repeated itself
+ *   neither answer                → could point at anything it had used
+ */
+describe('a conversation rather than a series of questions', () => {
+  it('searches a short follow-up with the question before it', () => {
+    expect(contextual('what about weaknesses?', 'what are his best qualities?'))
+      .toBe('what are his best qualities? what about weaknesses?')
+  })
+
+  // A question long enough to stand up on its own is left to do so, or every
+  // search would drag the last subject along behind it.
+  it('leaves a full question alone', () => {
+    const asked = 'what did James build at Taskworld with Docker and Kubernetes?'
+    expect(contextual(asked, 'tell me about GoTu')).toBe(asked)
+  })
+
+  it('has nothing to carry on the first question', () => {
+    expect(contextual('hello there')).toBe('hello there')
+  })
+
+  /*
+   * Asked for weaknesses — which nothing here records — it produced a
+   * paragraph of plausible invented criticism. Saying outright that there is
+   * nothing is what produces "I don't know" instead.
+   */
+  it('says outright when there is nothing on a question about James', () => {
+    const asked = ground('what are his weaknesses?', [])
+    expect(asked).toContain('There are no notes about this')
+    expect(asked).toContain('you do not know')
+  })
+
+  // Everything else is still the model's to answer normally.
+  it('leaves a general question ungrounded rather than refused', () => {
+    expect(ground('what is a monolith?', [])).toBe('what is a monolith?')
+    expect(aboutJames('what is a monolith?')).toBe(false)
+    expect(aboutJames('what does he do?')).toBe(true)
+  })
+
+  /*
+   * Retrieval cannot answer this one: asked for weaknesses it returns the
+   * *strengths* passages, because that is what the question is about, and the
+   * model writes plausible criticism out of them. A CV does not record faults,
+   * so the honest answer is about the source rather than the man.
+   */
+  it('refuses what the notes do not record by construction', () => {
+    ;['what about weaknesses?', 'what is he bad at', 'his flaws?', 'what does he earn'].forEach(
+      (q) => expect(refuse(q)?.answer, q).toContain("don't record"),
+    )
+    // And offers no web search for it: nobody's faults are on DuckDuckGo either.
+    expect(refuse('what about weaknesses?')?.search).toBeUndefined()
+    expect(refuse('what are his strengths?')).toBeUndefined()
+  })
+
+  it('recognises somebody asking where an answer came from', () => {
+    ;[
+      'what is that based on?',
+      'where did you get that',
+      'how do you know?',
+      "what's your source",
+    ].forEach((q) => expect(asksForSources(q), q).toBe(true))
+
+    expect(asksForSources('what did James do at GoTu?')).toBe(false)
+  })
+})
+
+describe('showing the working', () => {
+  const stub = (): ChatEngine => ({
+    device: 'wasm',
+    model: 'stub/model',
+    fellBackToCpu: false,
+    load: vi.fn().mockResolvedValue(undefined),
+    reply: vi.fn(async (_m: Message[], onToken: (t: string) => void) => {
+      onToken('He led delivery at GoTu.')
+      return 'He led delivery at GoTu.'
+    }),
+    dispose: vi.fn(),
+  })
+
+  const ask = async (text: string) => {
+    host.querySelector<HTMLTextAreaElement>('.chat-input')!.value = text
+    host.querySelector<HTMLFormElement>('.chat-form')!.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    )
+    await vi.waitFor(() =>
+      expect(host.querySelector<HTMLTextAreaElement>('.chat-input')!.disabled).toBe(false),
+    )
+  }
+
+  it('cites the passages an answer was built from, with the words in them', async () => {
+    setEmbedder(fakeEmbedder({ gotu: ['gotu', 'engineering manager'] }))
+    const content = new ChatContent(() => stub())
+    await content.load(host)
+    await vi.waitFor(() =>
+      expect(host.querySelector<HTMLTextAreaElement>('.chat-input')!.disabled).toBe(false),
+    )
+    // The notes are built in the background; wait for them before asking.
+    await vi.waitFor(() => expect(host.querySelector('.chat-input')).toBeTruthy())
+    await new Promise((r) => setTimeout(r, 50))
+
+    await ask('what did James do at GoTu?')
+
+    const source = host.querySelector('.chat-source')
+    if (source) {
+      // A label alone asks somebody to trust that the label matched.
+      expect(source.querySelector('summary')!.textContent).toContain('from ')
+      expect(source.querySelectorAll('li').length).toBeGreaterThan(0)
+      expect(source.querySelector('li')!.textContent!.length).toBeGreaterThan(20)
+    }
+    await content.unload()
+  })
+
+  it('answers where the last one came from, rather than retrieving again', async () => {
+    const engine = stub()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() =>
+      expect(host.querySelector<HTMLTextAreaElement>('.chat-input')!.disabled).toBe(false),
+    )
+
+    await ask('what is that based on?')
+
+    // The model is not asked a question about the conversation.
+    expect(engine.reply).not.toHaveBeenCalled()
+    const said = [...host.querySelectorAll('.chat-said')].pop()!.textContent!
+    // Nothing had been retrieved yet, so it says so rather than inventing.
+    expect(said).toContain('no notes')
     await content.unload()
   })
 })

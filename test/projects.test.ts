@@ -370,6 +370,70 @@ describe('Projects window', () => {
     )
   }
 
+  /*
+   * The window covers this pane until GitHub has answered — see the splash
+   * tests for the cover itself. All this content owes it is the mark, the words
+   * the default cannot know, and a promise that settles when the read is over.
+   */
+  describe('what the window waits on', () => {
+    it('asks for GitHub\'s mark in place of the default', () => {
+      content = new ProjectsContent()
+      const splash = content.splash as Exclude<typeof content.splash, false>
+
+      expect(splash.label).toBe('Reading GitHub…')
+      expect((splash.icon as Element)?.tagName.toLowerCase()).toBe('svg')
+    })
+
+    it('is ready once the read has landed', async () => {
+      serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] })
+      await open()
+
+      await expect(content.ready).resolves.toBeUndefined()
+    })
+
+    /*
+     * A failure has as much to show as a success — the reason, and the button
+     * that tries again — and both are behind the cover until this settles.
+     */
+    it('is ready when the read failed, rather than staying covered', async () => {
+      serve({
+        thatcatdev: new Error('offline'),
+        'weeb-vip': new Error('offline'),
+        bludot: new Error('offline'),
+      })
+      content = new ProjectsContent()
+      await content.load(host)
+
+      await expect(content.ready).resolves.toBeUndefined()
+      await vi.waitFor(() =>
+        expect(host.querySelector('.projects-action')?.textContent).toBe('Try again'),
+      )
+    })
+
+    /*
+     * The cover already says "Reading GitHub…" over this pane, and the glass it
+     * is made of shows what is underneath — so the same sentence appeared
+     * twice. It is still drawn for a retry, which has no cover over it.
+     */
+    it('leaves the first read to the cover, and speaks for itself on a retry', async () => {
+      serve({
+        thatcatdev: new Error('offline'),
+        'weeb-vip': new Error('offline'),
+        bludot: new Error('offline'),
+      })
+      content = new ProjectsContent()
+      const drawn = content.load(host)
+      expect(host.querySelector('.projects-note')).toBeNull()
+      await drawn
+
+      await vi.waitFor(() =>
+        expect(host.querySelector('.projects-action')).toBeTruthy(),
+      )
+      ;(host.querySelector('.projects-action') as HTMLElement).click()
+      expect(host.querySelector('.projects-note')?.textContent).toBe('Reading GitHub…')
+    })
+  })
+
   it('lists what came back, with a summary', async () => {
     serve({
       thatcatdev: [repo({ name: 'tanrenai', owner: { login: 'ThatCatDev' } })],

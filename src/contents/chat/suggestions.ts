@@ -38,20 +38,38 @@ export interface Suggestion {
  * window itself is — which is the question an engineer is already asking by the
  * time they find it.
  */
+/*
+ * Two questions were removed after watching the model answer them.
+ *
+ * "What does James do?" and "How does he test?" both invite a summary of a
+ * person rather than a fact about one, and at 0.5B that is answered from the
+ * shape of every engineer it has ever read. With the notes in front of it, and
+ * with greedy decoding so the result is not luck, it said he "also excels in
+ * Java, Spring Boot, and Android development" — none of which appear anywhere
+ * in his notes — and that he tests with Jenkins, which he has never used. On a
+ * portfolio that is not a bad answer, it is a fabricated credential.
+ *
+ * Every question that survives names something: a company, a tool, a piece of
+ * work. Those were accurate in every run — the GoTu answer comes back almost
+ * verbatim from the bullet it belongs to. See the `answerable` check in the
+ * chat window, which holds the model's own follow-ups to the same standard.
+ */
 export const SUGGESTIONS: Suggestion[] = [
-  { text: "What does James do?", about: ["About"] },
   { text: "What did he do at GoTu?", about: ["GoTu"] },
-  { text: "What is this desktop written in?", about: ["About"] },
-
   /*
    * Manager or engineer is the first thing a recruiter is scanning for, and
    * the answer is "both, in that order" — which the GoTu passages say plainly.
    */
   { text: "What does he do as a manager?", about: ["GoTu"] },
+  { text: "What is this desktop written in?", about: ["About"] },
+
   { text: "How did he move GoTu off its monolith?", about: ["GoTu"] },
 
-  // How somebody works, which is what an engineer is really asking.
-  { text: "How does he test?", about: ["Honest", "Selfapy", "Taskworld"] },
+  // How somebody works, which is what an engineer is really asking — but named
+  // as tools rather than as a practice. "How does he test?" invented Jenkins;
+  // "what testing tools" comes back with Cypress, Mocha, nyc and Selenium,
+  // which is what the notes actually say.
+  { text: "What testing tools has he used?", about: ["Honest", "Selfapy", "Taskworld"] },
   { text: "How does he deploy?", about: ["GoTu", "Komatsu"] },
   { text: "What has he done with Terraform?", about: ["GoTu", "Honest"] },
   { text: "What has he done with Kafka?", about: ["Honest", "About"] },

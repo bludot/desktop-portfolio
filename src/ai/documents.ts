@@ -76,7 +76,13 @@ export function aboutJames(repos: Repo[] = []): Document[] {
   out.push({
     id: "about:desktop",
     source: "About",
-    text: "This desktop is James's portfolio, and it is written in TypeScript with no framework: no React, no Vue, no Svelte. The windows, the taskbar, the launcher, the theming and the window manager are all his own code. It is built with Vite, styled with JSS, stores what it needs in IndexedDB through Dexie, and is tested with Vitest."
+    /*
+     * It says "operating system" because that is what somebody looking at it
+     * calls it — "tell me about this os" found this passage at 0.33, barely
+     * over the floor, when the only words for the thing were "desktop" and
+     * "portfolio". The page is titled Portfolio OS; the notes may as well know.
+     */
+    text: "This desktop is James's portfolio, and it is written in TypeScript with no framework: no React, no Vue, no Svelte. It is made to look and work like an operating system — windows you can drag and resize, a taskbar, a start menu and a launcher — and all of that, including the window manager and the theming, is his own code. It is built with Vite, styled with JSS, stores what it needs in IndexedDB through Dexie, and is tested with Vitest."
   });
 
   out.push({

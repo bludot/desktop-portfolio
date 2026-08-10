@@ -1350,9 +1350,24 @@ class ChatContent extends OSElement {
       const previous = [...this.history]
         .reverse()
         .find((turn) => turn.role === "user" && turn.content !== question);
-      const found = (
-        await this.knowledge.search(contextual(question, previous?.content))
-      ).map((match) => match.document);
+
+      /*
+       * The question on its own first, and the previous one carried forward
+       * only if it turned up nothing.
+       *
+       * `contextual` carries context whenever a question is short, which is
+       * right for "what about weaknesses?" — nothing on its own — and wrong for
+       * "tell me about this os", which is short *and* changes the subject.
+       * Carried, that one scored 0.60 against the passage about James and
+       * answered a question nobody had asked; alone it finds the desktop. So
+       * the test is not length but whether the question stands up by itself.
+       */
+      let matches = await this.knowledge.search(question);
+      if (!matches.length) {
+        const carried = contextual(question, previous?.content);
+        if (carried !== question) matches = await this.knowledge.search(carried);
+      }
+      const found = matches.map((match) => match.document);
       this.sources = found;
       this.logger.debug(
         `grounded with ${found.length}: ${found.map((p) => p.source).join(" | ")}`

@@ -8,8 +8,9 @@ import {
   CHAT_MODELS,
   setChatEngine,
   type ChatEngine,
+  type ChatModel,
   type Message,
-} from '../src/ai/chat'
+} from '@thatcatdev/browser-ai'
 import { FEATURE_FLAG_DEFAULTS, loadSettings } from '../src/Store'
 
 jss.setup(preset())
@@ -277,12 +278,12 @@ describe('the chat window', () => {
  */
 describe('choosing the model and where it runs', () => {
   it('offers three rungs, smallest first, each with its price on it', () => {
-    expect(CHAT_MODELS.map((m) => m.label)).toEqual([
+    expect(CHAT_MODELS.map((m: ChatModel) => m.label)).toEqual([
       'SmolLM2 135M',
       'Qwen2.5 0.5B',
       'Llama 3.2 1B',
     ])
-    CHAT_MODELS.forEach((model) => expect(model.size).toMatch(/MB$/))
+    CHAT_MODELS.forEach((model: ChatModel) => expect(model.size).toMatch(/MB$/))
   })
 
   // The one that answers the question it was asked, rather than the one that
@@ -300,7 +301,7 @@ describe('choosing the model and where it runs', () => {
     expect(models.value).toBe(CHAT_MODEL)
     expect(devices.value).toBe('auto')
     expect([...models.options].map((o) => o.value)).toEqual(
-      CHAT_MODELS.map((m) => m.id),
+      CHAT_MODELS.map((m: ChatModel) => m.id),
     )
     await content.unload()
   })

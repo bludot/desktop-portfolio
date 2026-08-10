@@ -5,7 +5,7 @@ import { APPS, openAppWindow, type App } from "../../apps/external";
 import appIcon from "../AppIcon";
 import { loadRepos, type Repo } from "../../utils/github";
 import { isFeatureEnabled } from "../../Store";
-import type { Match } from "../../ai/repoIndex";
+import type { Match } from "@thatcatdev/browser-ai";
 import { GROUP_ORDER, SEARCH_URL, search, type Group, type Result } from "./results";
 import { overlayScroll } from "../Scrollbar";
 import type ScrollBar from "../Scrollbar";
@@ -541,9 +541,9 @@ class Launcher extends OSElement {
     if (this.index || !this.repos.length) return;
     try {
       if (!(await isFeatureEnabled("semanticSearch"))) return;
-      const { RepoIndex } = await import("../../ai/repoIndex");
-      const index = new RepoIndex();
-      await index.build(this.repos);
+      const { repoIndex, fromRepos } = await import("../../ai");
+      const index = repoIndex();
+      await index.build(fromRepos(this.repos));
       this.index = index;
       // Whatever is in the box now may already have an answer waiting.
       if (this.open) void this.findRelated(this.input.value);
@@ -569,7 +569,9 @@ class Launcher extends OSElement {
     // The box has moved on; whatever this found is about an older query.
     if (this.relatedFor !== q) return;
 
-    const next = new Map(matches.map((match) => [match.key, match.score]));
+    const next = new Map(
+      matches.map((match) => [match.document.id, match.score])
+    );
     const changed =
       next.size !== this.related.size ||
       [...next.keys()].some((key) => !this.related.has(key));

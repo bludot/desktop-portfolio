@@ -11,6 +11,7 @@
         "date-fns": "^2.29.3",
         "dexie": "^3.2.2",
         "eventemitter3": "^4.0.7",
+        "@thatcatdev/browser-ai": "github:ThatCatDev/browser-ai",
         "jss": "10.7.1",
         "jss-plugin-nested": "10.7.1",
         "jss-preset-default": "10.7.1",
@@ -214,6 +215,8 @@
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
+
+    "@thatcatdev/browser-ai": ["@thatcatdev/browser-ai@github:ThatCatDev/browser-ai#f4eb72e", { "peerDependencies": { "@huggingface/transformers": ">=3 <5" } }, "ThatCatDev-browser-ai-f4eb72e", "sha512-MVlKUJld4THvILd24olgmyCfABYqFkgO72Fwi5h1vzGpHqiBuKTxYeU3/es1tQSYM+aSB4za42bIJHfnWBrj4A=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

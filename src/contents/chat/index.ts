@@ -4,15 +4,24 @@ import {
   CHAT_MODEL,
   CHAT_MODELS,
   chatEngine,
+  gpuAvailable,
   type ChatEngine,
   type ChatModel,
+  type DevicePreference,
   type Message
-} from "../../ai/chat";
-import type { DevicePreference } from "../../ai/engine";
-import { gpuAvailable } from "../../ai/engine";
+} from "@thatcatdev/browser-ai";
 import { loadSettings, saveSettings } from "../../Store";
-import { Knowledge, contextual, ground, type Passage } from "../../ai/knowledge";
-import { asksForSources, refuse } from "../../ai/capability";
+import {
+  asksForSources,
+  contextual,
+  ground,
+  knowledgeDocuments,
+  knowledgeIndex,
+  personal,
+  refuse,
+  type Document
+} from "../../ai";
+import { loadRepos } from "../../utils/github";
 import { SEARCH_URL } from "../../utils/websearch";
 
 /**
@@ -87,7 +96,7 @@ class ChatContent extends OSElement {
    * already. Nothing waits on it — a question asked before it is ready is
    * simply answered without notes.
    */
-  private readonly knowledge = new Knowledge();
+  private readonly knowledge = knowledgeIndex();
 
   /**
    * What the last answer was built from.
@@ -96,7 +105,7 @@ class ChatContent extends OSElement {
    * outright what it was based on, which is the reasonable next question when a
    * machine tells you about somebody.
    */
-  private sources: Passage[] = [];
+  private sources: Document[] = [];
 
   /**
    * How an engine is got, rather than the engine itself.
@@ -542,6 +551,25 @@ class ChatContent extends OSElement {
    * fetches a model, and closing it without opening it again means nobody ever
    * paid for one.
    */
+  /**
+   * Gather what there is to know about James, and learn it.
+   *
+   * The repositories are optional — GitHub may be unreachable — but everything
+   * about his own history is local, so the useful half never depends on the
+   * network. Nothing waits on this: a question asked before it lands is
+   * answered without notes rather than made to wait.
+   */
+  private async learn() {
+    let repos: Awaited<ReturnType<typeof loadRepos>>["repos"] = [];
+    try {
+      repos = (await loadRepos()).repos;
+    } catch {
+      // Answerable without them, just not about the code.
+    }
+    await this.knowledge.build(knowledgeDocuments(repos));
+    this.logger.debug(`notes ready: ${this.knowledge.ready}`);
+  }
+
   private async warm() {
     const chosen = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
     const size = chosen ? chosen.size : "a few hundred MB";
@@ -567,7 +595,7 @@ class ChatContent extends OSElement {
       this.input.focus();
       // In the background: a question asked before it lands is answered
       // without notes rather than made to wait.
-      void this.knowledge.build();
+      void this.learn();
     } catch (error) {
       this.phase = "failed";
       this.say(
@@ -628,7 +656,7 @@ class ChatContent extends OSElement {
    * at GoTu" is a fact about the answer; "3 passages" is a fact about the
    * implementation.
    */
-  private citation(found: Passage[]): HTMLElement {
+  private citation(found: Document[]): HTMLElement {
     const box = document.createElement("details");
     box.className = "chat-source";
 
@@ -733,16 +761,24 @@ class ChatContent extends OSElement {
       const previous = [...this.history]
         .reverse()
         .find((turn) => turn.role === "user" && turn.content !== question);
-      const found = await this.knowledge.find(
-        contextual(question, previous?.content)
-      );
+      const found = (
+        await this.knowledge.search(contextual(question, previous?.content))
+      ).map((match) => match.document);
       this.sources = found;
       this.logger.debug(
         `grounded with ${found.length}: ${found.map((p) => p.source).join(" | ")}`
       );
       const asked: Message[] = [
         ...this.history.slice(0, -1),
-        { role: "user", content: ground(question, found) }
+        {
+          role: "user",
+          content: ground(question, found, {
+            heading: "Notes about James:",
+            instruction: "Using the notes above, answer briefly:",
+            // Only when the notes were the only thing that could have answered.
+            whenEmpty: personal(question) ? "say-unknown" : "ask-anyway"
+          })
+        }
       ];
 
       const answer = await this.engine.reply(

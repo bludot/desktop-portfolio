@@ -1,15 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { search } from '../src/components/Launcher/results'
-import {
-  RepoIndex,
-  fingerprint,
-  keyOf,
-  sentence,
-  SIMILARITY_FLOOR,
-} from '../src/ai/repoIndex'
-import { similarity, bestDevice, setEmbedder, type Embedder } from '../src/ai/engine'
-import db from '../src/Store'
 import { FEATURE_FLAG_DEFAULTS } from '../src/Store'
+
+/*
+ * What is left here is the part that is this desktop's: how a match found by
+ * meaning sits among the ones found by spelling. The index itself, the scoring,
+ * the caching and the device negotiation are `@thatcatdev/browser-ai`'s, and
+ * are tested there.
+ */
 
 const repo = (over: Record<string, unknown> = {}) =>
   ({
@@ -22,7 +20,6 @@ const repo = (over: Record<string, unknown> = {}) =>
     url: 'https://github.com/bludot/thing',
     pushedAt: '2026-01-01T00:00:00Z',
     archived: false,
-    homepage: undefined,
     ...over,
   }) as any
 
@@ -40,178 +37,7 @@ const sources = (over: Record<string, unknown> = {}) =>
     ...over,
   }) as any
 
-/** An embedder with opinions we control: one axis per topic word. */
-const fakeEmbedder = (topics: Record<string, string[]>): Embedder => {
-  const axes = Object.keys(topics)
-  const vector = (text: string) => {
-    const lower = text.toLowerCase()
-    const values = axes.map((axis) =>
-      topics[axis].some((word) => lower.includes(word)) ? 1 : 0,
-    )
-    const length = Math.hypot(...values) || 1
-    return Float32Array.from(values.map((v) => v / length))
-  }
-  return {
-    device: 'wasm',
-    load: vi.fn().mockResolvedValue(undefined),
-    embed: vi.fn(async (texts: string[]) => texts.map(vector)),
-    dispose: vi.fn(),
-  }
-}
-
-beforeEach(async () => {
-  await db.cache.clear()
-})
-
-afterEach(() => {
-  setEmbedder(undefined)
-})
-
-describe('the engine', () => {
-  it('picks WebGPU when the browser has it, and WASM when it does not', () => {
-    const nav = navigator as unknown as Record<string, unknown>
-    expect(bestDevice()).toBe('wasm')
-
-    nav.gpu = {}
-    expect(bestDevice()).toBe('webgpu')
-    delete nav.gpu
-  })
-
-  // Everything is normalised on the way out of the model, so a dot product is
-  // the cosine — dividing by two lengths of 1 is work for nothing.
-  it('scores identical vectors at 1 and opposite ones at -1', () => {
-    const a = Float32Array.from([1, 0, 0])
-    const b = Float32Array.from([-1, 0, 0])
-    expect(similarity(a, a)).toBeCloseTo(1)
-    expect(similarity(a, b)).toBeCloseTo(-1)
-    expect(similarity(a, Float32Array.from([0, 1, 0]))).toBeCloseTo(0)
-  })
-})
-
-describe('what a repository is turned into', () => {
-  it('reads its name as words, since that is how it was meant', () => {
-    expect(sentence(repo({ name: 'key-management-service', description: 'auth' })))
-      .toContain('key management service')
-  })
-
-  it('leaves out what is not there rather than leaving a gap', () => {
-    expect(sentence(repo({ name: 'thing', language: null, description: null })))
-      .toBe('thing')
-  })
-
-  // A renamed repository or a rewritten description has to rebuild the index,
-  // or the launcher answers today's query from last month's corpus.
-  it('changes its fingerprint when a description changes', () => {
-    const before = fingerprint([repo({ name: 'a', description: 'one' })])
-    const after = fingerprint([repo({ name: 'a', description: 'two' })])
-    expect(before).not.toBe(after)
-  })
-})
-
-describe('RepoIndex', () => {
-  const corpus = [
-    repo({ name: 'ep', description: 'events with Kafka, Pulsar, RabbitMQ' }),
-    repo({ name: 'anime-api', description: 'anime catalogue service' }),
-    repo({ name: 'terraform-modules', description: 'infrastructure as code' }),
-  ]
-
-  const model = () =>
-    fakeEmbedder({
-      queues: ['kafka', 'pulsar', 'rabbitmq', 'message queue', 'events'],
-      anime: ['anime', 'weeb'],
-      infra: ['terraform', 'infrastructure'],
-    })
-
-  it('finds what a query is about, with none of its letters', async () => {
-    const index = new RepoIndex(model())
-    await index.build(corpus)
-
-    const matches = await index.search('message queue')
-    expect(matches[0].key).toBe(keyOf(corpus[0]))
-    expect(matches[0].score).toBeGreaterThan(SIMILARITY_FLOOR)
-  })
-
-  // Cosine similarity always has a best answer, however wrong. The floor is
-  // what stops nonsense returning three confident results.
-  it('answers nothing for a query about nothing', async () => {
-    const index = new RepoIndex(model())
-    await index.build(corpus)
-
-    expect(await index.search('asdfghjkl')).toEqual([])
-  })
-
-  // Two letters are a prefix, not a topic, and the literal match answers those
-  // better than any model does.
-  it('leaves short queries to the literal matching', async () => {
-    const index = new RepoIndex(model())
-    await index.build(corpus)
-
-    expect(await index.search('ka')).toEqual([])
-  })
-
-  it('embeds the corpus once and keeps the answer', async () => {
-    const embedder = model()
-    const index = new RepoIndex(embedder)
-
-    await index.build(corpus)
-    await index.build(corpus)
-
-    // One call for the corpus; nothing more for a rebuild of the same thing.
-    expect((embedder.embed as any).mock.calls).toHaveLength(1)
-  })
-
-  it('takes the vectors from the cache but still brings the model in', async () => {
-    const first = model()
-    await new RepoIndex(first).build(corpus)
-
-    const second = model()
-    const index = new RepoIndex(second)
-    await index.build(corpus)
-
-    expect(index.ready).toBe(true)
-    // The corpus was not embedded again — that is the saving.
-    expect((second.embed as any).mock.calls).toHaveLength(0)
-    /*
-     * But the model still loads, because the *question* has to be embedded at
-     * query time. Skipping it left every visit after the first with a full
-     * index and no way to ask it anything: `embed` threw, the catch swallowed
-     * it, and search silently returned nothing.
-     */
-    expect(second.load).toHaveBeenCalled()
-    expect((await index.search('message queue'))[0].key).toBe(keyOf(corpus[0]))
-  })
-
-  it('rebuilds when the repositories have changed underneath it', async () => {
-    const first = model()
-    await new RepoIndex(first).build(corpus)
-
-    const second = model()
-    await new RepoIndex(second).build([
-      ...corpus,
-      repo({ name: 'new-thing', description: 'something else entirely' }),
-    ])
-
-    expect(second.load).toHaveBeenCalled()
-  })
-
-  /*
-   * This is an improvement on a search box that already works. A model that
-   * will not load has to leave the launcher exactly as it was.
-   */
-  it('stays empty and silent when the model will not load', async () => {
-    const broken: Embedder = {
-      device: undefined,
-      load: vi.fn().mockRejectedValue(new Error('no WebGPU, no WASM, no luck')),
-      embed: vi.fn(),
-      dispose: vi.fn(),
-    }
-    const index = new RepoIndex(broken)
-
-    await expect(index.build(corpus)).resolves.toBeUndefined()
-    expect(index.ready).toBe(false)
-    expect(await index.search('message queue')).toEqual([])
-  })
-})
+const key = (r: { owner: string; name: string }) => `${r.owner}/${r.name}`
 
 describe('where related results sit in the launcher', () => {
   const kafka = repo({ name: 'ep', description: 'events with Kafka' })
@@ -220,24 +46,21 @@ describe('where related results sit in the launcher', () => {
   it('offers what the query is about, marked as such', () => {
     const results = search(
       'message queue',
-      sources({ repos: [kafka, anime], related: new Map([[keyOf(kafka), 0.61]]) }),
+      sources({ repos: [kafka, anime], related: new Map([[key(kafka), 0.61]]) }),
     )
 
     const projects = results.filter((r) => r.group === 'Projects')
     expect(projects.map((r) => r.name)).toEqual(['ep'])
-    // A result that matches nothing you typed looks like a bug unless it says
-    // why it is there.
+    // A result matching nothing you typed reads as a bug unless it says why.
     expect(projects[0].badge).toBe('related')
   })
 
-  /*
-   * Somebody typing "anime" wants anime-api first, and no similarity score
-   * improves on that.
-   */
+  // Somebody typing "anime" wants anime-api first, and no similarity score
+  // improves on that.
   it('puts literal matches ahead of related ones', () => {
     const results = search(
       'anime',
-      sources({ repos: [kafka, anime], related: new Map([[keyOf(kafka), 0.44]]) }),
+      sources({ repos: [kafka, anime], related: new Map([[key(kafka), 0.44]]) }),
     )
 
     const projects = results.filter((r) => r.group === 'Projects')
@@ -248,9 +71,8 @@ describe('where related results sit in the launcher', () => {
   it('never lists the same repository twice', () => {
     const results = search(
       'anime',
-      sources({ repos: [anime], related: new Map([[keyOf(anime), 0.9]]) }),
+      sources({ repos: [anime], related: new Map([[key(anime), 0.9]]) }),
     )
-
     expect(results.filter((r) => r.group === 'Projects')).toHaveLength(1)
   })
 
@@ -261,84 +83,11 @@ describe('where related results sit in the launcher', () => {
   })
 })
 
-describe('the flag', () => {
-  // Off for a visitor who landed here rather than chose to be: it is the one
-  // thing on this desktop that fetches a model.
-  it('ships off', () => {
+describe('the flags', () => {
+  // Both gate something that downloads a model, and a visitor who landed here
+  // rather than chose to be should not be fetching weights.
+  it('ship off', () => {
     expect(FEATURE_FLAG_DEFAULTS.semanticSearch.enabled).toBe(false)
-  })
-})
-
-/*
- * The failure this exists to prevent: somebody picks GPU, Chrome has shipped
- * `navigator.gpu` but refuses an adapter — a long list of older Intel parts and
- * Linux drivers — and the window announces that the model cannot be loaded at
- * all, on a machine where the CPU path would have worked.
- */
-describe('deciding where to run', () => {
-  const withGpu = (adapter: unknown) => {
-    const nav = navigator as unknown as Record<string, unknown>
-    nav.gpu = { requestAdapter: async () => adapter }
-    return () => {
-      delete nav.gpu
-    }
-  }
-
-  beforeEach(async () => {
-    // The probe is cached for the life of the page; each case needs its own.
-    vi.resetModules()
-  })
-
-  it('uses the GPU when the driver actually hands one over', async () => {
-    const undo = withGpu({})
-    const { resolveDevice } = await import('../src/ai/engine')
-    await expect(resolveDevice('auto')).resolves.toEqual({
-      device: 'webgpu',
-      fellBack: false,
-    })
-    undo()
-  })
-
-  // The API present and the adapter refused: the case that produced the bug.
-  it('falls back to the CPU when the adapter is refused', async () => {
-    const undo = withGpu(null)
-    const { resolveDevice } = await import('../src/ai/engine')
-
-    await expect(resolveDevice('auto')).resolves.toEqual({
-      device: 'wasm',
-      fellBack: false,
-    })
-    // Asked for outright, it still falls back — but says it had to.
-    await expect(resolveDevice('webgpu')).resolves.toEqual({
-      device: 'wasm',
-      fellBack: true,
-    })
-    undo()
-  })
-
-  it('falls back when asking for an adapter throws outright', async () => {
-    const nav = navigator as unknown as Record<string, unknown>
-    nav.gpu = {
-      requestAdapter: async () => {
-        throw new Error('driver blocklisted')
-      },
-    }
-    const { resolveDevice } = await import('../src/ai/engine')
-    await expect(resolveDevice('webgpu')).resolves.toEqual({
-      device: 'wasm',
-      fellBack: true,
-    })
-    delete nav.gpu
-  })
-
-  // Choosing the CPU is never a disappointment, and never asks the driver.
-  it('takes the CPU at its word', async () => {
-    const undo = withGpu({})
-    const { resolveDevice } = await import('../src/ai/engine')
-    await expect(resolveDevice('wasm')).resolves.toEqual({
-      device: 'wasm',
-      fellBack: false,
-    })
-    undo()
+    expect(FEATURE_FLAG_DEFAULTS.localChat.enabled).toBe(false)
   })
 })

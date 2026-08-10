@@ -16,7 +16,7 @@
     "@fortawesome/fontawesome-svg-core": "1.2.25",
     "@fortawesome/free-solid-svg-icons": "5.11.2",
     "@huggingface/transformers": "^4.2.0",
-    "@thatcatdev/browser-ai": "github:ThatCatDev/browser-ai#v1.1.0",
+    "@thatcatdev/browser-ai": "github:ThatCatDev/browser-ai#v1.1.1",
     "date-fns": "^2.29.3",
     "dexie": "^3.2.2",
     "eventemitter3": "^4.0.7",

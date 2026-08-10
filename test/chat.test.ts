@@ -112,11 +112,13 @@ describe('the chat window', () => {
     await content.unload()
   })
 
-  it('says where it ended up running', async () => {
-    const content = new ChatContent(() => stubEngine({ device: 'webgpu' }))
+  it('says when the GPU was asked for and could not be given', async () => {
+    const content = new ChatContent(() =>
+      stubEngine({ device: 'wasm', fellBackToCpu: true }),
+    )
     await content.load(host)
 
-    await vi.waitFor(() => expect(status().textContent).toContain('GPU'))
+    await vi.waitFor(() => expect(status().textContent).toContain('no WebGPU'))
     await content.unload()
   })
 
@@ -218,16 +220,49 @@ describe('the chat window', () => {
     await content.unload()
   })
 
-  // Better said at the top than discovered at the third question.
-  it('says what it is before anybody types', async () => {
+  /*
+   * The caveats used to be a four-clause mono strip welded across the top of
+   * the window, read once and then furniture forever. They are one press away
+   * now — but they are still the first thing under the only affordance in the
+   * band, and they say more than the strip did.
+   */
+  it('keeps what it cannot do one press away, in plain sentences', async () => {
     const content = new ChatContent(() => stubEngine())
     await content.load(host)
 
-    const note = host.querySelector('.chat-note')!.textContent!
-    expect(note).toContain('0.5B')
-    expect(note).toContain('nothing is sent anywhere')
-    expect(note).toContain('cannot look anything up')
-    expect(note).toContain('makes things up')
+    const band = host.querySelector<HTMLDetailsElement>('.chat-band')!
+    expect(band.querySelector('summary')!.textContent).toContain('what is this?')
+    // Closed to begin with: the window is for a conversation.
+    expect(band.open).toBe(false)
+
+    const said = [...band.querySelectorAll('.chat-what p')].map((p) => p.textContent!)
+    expect(said).toHaveLength(3)
+    expect(said.join(' ')).toContain('nothing you type leaves this tab')
+    expect(said.join(' ')).toContain("can't look anything up")
+    expect(said.join(' ')).toContain('invents things')
+    await content.unload()
+  })
+
+  // The claim a visitor cannot check and would most like to know, as a state
+  // rather than an argument.
+  it('says it is private in the band itself', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+    expect(host.querySelector('.chat-private')!.textContent).toBe('private')
+    await content.unload()
+  })
+
+  /*
+   * The model's real name rather than "0.5B parameters" — it is searchable, and
+   * it is what somebody would tell a friend they had been using.
+   */
+  it('names the model and the device once it is ready', async () => {
+    const content = new ChatContent(() => stubEngine({ device: 'webgpu' }))
+    await content.load(host)
+
+    await vi.waitFor(() => expect(status().textContent).toContain('GPU'))
+    expect(status().textContent).toContain('Qwen2.5')
+    expect(host.querySelector('.chat-pip')!.classList.contains('is-ready')).toBe(true)
     await content.unload()
   })
 

@@ -81,6 +81,7 @@ class ChatContent extends OSElement {
   private input!: HTMLTextAreaElement;
   private send!: HTMLButtonElement;
   private status!: HTMLElement;
+  private pip!: HTMLElement;
   private models!: HTMLSelectElement;
   private devices!: HTMLSelectElement;
 
@@ -133,29 +134,88 @@ class ChatContent extends OSElement {
         color: color.ink,
         fontSize: size.bodyTight,
 
-        "& .chat-note": {
+        // ------------------------------------------------------- the band
+        /*
+         * One row saying what is true now, with everything that is always true
+         * folded behind it. The whole row is the summary, so the affordance is
+         * the band rather than a word inside it.
+         */
+        "& .chat-band": {
           flex: "0 0 auto",
-          padding: `10px ${space.windowPadX}`,
-          borderBottom: `1px solid ${color.lineSoft}`,
+          borderBottom: `1px solid ${color.lineSoft}`
+        },
+        "& .chat-band summary": {
+          display: "flex",
+          alignItems: "center",
+          gap: "9px",
+          height: "32px",
+          padding: `0 ${space.windowPadX}`,
+          cursor: "pointer",
+          listStyle: "none",
           fontFamily: font.mono,
           fontSize: size.micro,
           letterSpacing: tracking.mono,
           color: color.inkFaint,
-          display: "flex",
-          gap: "8px",
-          alignItems: "center",
-          flexWrap: "wrap"
+          transition: "background 150ms ease"
         },
-        "& .chat-note b": { color: color.inkSoft, fontWeight: weight.emphasise },
-
-        // ------------------------------------------------------- the picker
-        "& .chat-picker": {
+        "& .chat-band summary::-webkit-details-marker": { display: "none" },
+        "& .chat-band summary:hover": { background: color.hover },
+        "& .chat-band summary:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "-2px"
+        },
+        /*
+         * Unlit until the model is loaded and waiting. `--current` is the
+         * desktop's token for "this is happening now" and is not spent on
+         * anything else here.
+         */
+        "& .chat-pip": {
+          width: "6px",
+          height: "6px",
+          borderRadius: "50%",
           flex: "0 0 auto",
+          background: color.line
+        },
+        "& .chat-pip.is-ready": {
+          background: color.current,
+          boxShadow: `0 0 0 3px rgba(74,124,89,.16)`
+        },
+        "& .chat-status": {
+          margin: 0,
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          color: color.inkSoft,
+          fontVariantNumeric: "tabular-nums"
+        },
+        "& .chat-private, & .chat-more": {
+          flex: "0 0 auto",
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.pill,
+          padding: "1px 8px"
+        },
+        "& .chat-private": { marginLeft: "auto" },
+        "& .chat-band[open] .chat-more": { color: color.ink },
+
+        "& .chat-what": {
+          display: "flex",
+          flexDirection: "column",
+          gap: "7px",
+          padding: `2px ${space.windowPadX} 12px`
+        },
+        "& .chat-what p": {
+          margin: 0,
+          fontSize: size.caption,
+          lineHeight: 1.5,
+          color: color.inkSoft,
+          maxWidth: "52ch"
+        },
+        "& .chat-choices": {
           display: "flex",
           flexWrap: "wrap",
           gap: "10px",
-          padding: `9px ${space.windowPadX}`,
-          borderBottom: `1px solid ${color.lineSoft}`
+          marginTop: "3px"
         },
         "& .chat-choice": {
           display: "flex",
@@ -172,10 +232,8 @@ class ChatContent extends OSElement {
           flex: "0 0 auto"
         },
         /*
-         * A real `select`. The desktop draws its own everything else, but a
-         * native menu is the one control that behaves on a phone — and
-         * `color-scheme` is what stops the popup from coming up white on a dark
-         * desktop, which is the only reason people reach for a custom one.
+         * A real `select`: the desktop draws its own everything else, but a
+         * native menu is the one control that behaves on a phone.
          */
         "& .chat-select": {
           minWidth: 0,
@@ -289,13 +347,6 @@ class ChatContent extends OSElement {
           outlineOffset: "1px"
         },
 
-        "& .chat-status": {
-          margin: 0,
-          fontSize: size.caption,
-          color: color.inkFaint,
-          fontVariantNumeric: "tabular-nums"
-        },
-
         "& .chat-form": {
           flex: "0 0 auto",
           display: "flex",
@@ -351,19 +402,7 @@ class ChatContent extends OSElement {
   }
 
   private build() {
-    const note = document.createElement("p");
-    note.className = "chat-note";
-    const what = document.createElement("b");
-    what.appendChild(document.createTextNode("0.5B parameters, running here"));
-    note.appendChild(what);
-    note.appendChild(
-      document.createTextNode(
-        "· nothing is sent anywhere · it cannot look anything up · it writes well and makes things up"
-      )
-    );
-    this.element.appendChild(note);
-
-    this.element.appendChild(this.picker());
+    this.element.appendChild(this.band());
 
     this.log = document.createElement("div");
     this.log.className = "chat-log";
@@ -372,10 +411,6 @@ class ChatContent extends OSElement {
     this.log.setAttribute("role", "log");
     this.log.setAttribute("aria-live", "polite");
     this.element.appendChild(this.log);
-
-    this.status = document.createElement("p");
-    this.status.className = "chat-status";
-    this.log.appendChild(this.status);
 
     this.form = document.createElement("form");
     this.form.className = "chat-form";
@@ -416,9 +451,74 @@ class ChatContent extends OSElement {
    * one exists at all because "it is slow" and "it is on the CPU" are the same
    * sentence, and nobody can tell which without being told.
    */
+  /**
+   * One band, saying what is true now.
+   *
+   * It replaces a four-clause disclaimer welded together with middots and a
+   * separate row of controls — ninety-two pixels of chrome above a window whose
+   * job is a conversation. What is left is the part that actually changes:
+   * which model, where it is running, and that nothing is leaving the tab.
+   *
+   * The caveats have not gone anywhere; they are one press away, alongside the
+   * controls that change them. A warning is urgent exactly once — before the
+   * first question — and by the tenth it is furniture.
+   */
+  private band(): HTMLElement {
+    const box = document.createElement("details");
+    box.className = "chat-band";
+
+    const summary = document.createElement("summary");
+
+    this.pip = document.createElement("span");
+    this.pip.className = "chat-pip";
+    this.pip.setAttribute("aria-hidden", "true");
+    summary.appendChild(this.pip);
+
+    this.status = document.createElement("p");
+    this.status.className = "chat-status";
+    // Polite: this line changes while somebody is reading the answer above it.
+    this.status.setAttribute("role", "status");
+    summary.appendChild(this.status);
+
+    const priv = document.createElement("span");
+    priv.className = "chat-private";
+    // The one claim a visitor cannot check and would most like to know, said as
+    // a state rather than as an argument.
+    priv.appendChild(document.createTextNode("private"));
+    summary.appendChild(priv);
+
+    const more = document.createElement("span");
+    more.className = "chat-more";
+    more.appendChild(document.createTextNode("what is this?"));
+    summary.appendChild(more);
+
+    box.appendChild(summary);
+
+    const body = document.createElement("div");
+    body.className = "chat-what";
+    /*
+     * Three sentences, not one line with three middots in it. Said in the first
+     * person because it is the thing itself saying so, which is both more
+     * alarming and more honest than describing it in the third.
+     */
+    [
+      "It runs on your machine — nothing you type leaves this tab.",
+      "It can't look anything up: no internet, and no idea what today is.",
+      "It's half a billion parameters. It invents things, confidently."
+    ].forEach((line) => {
+      const p = document.createElement("p");
+      p.appendChild(document.createTextNode(line));
+      body.appendChild(p);
+    });
+    body.appendChild(this.picker());
+    box.appendChild(body);
+
+    return box;
+  }
+
   private picker(): HTMLElement {
     const row = document.createElement("div");
-    row.className = "chat-picker";
+    row.className = "chat-choices";
 
     this.models = document.createElement("select");
     this.models.className = "chat-select";
@@ -584,11 +684,17 @@ class ChatContent extends OSElement {
         );
       });
       this.phase = "ready";
-      const where = this.engine.device === "webgpu" ? "on the GPU" : "on the CPU";
+      /*
+       * The model's own name rather than "0.5B parameters": it is searchable,
+       * and it is what somebody would tell a friend they had been using.
+       */
+      const named = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
+      const where = this.engine.device === "webgpu" ? "GPU" : "CPU";
       this.say(
         this.engine.fellBackToCpu
-          ? `Ready, ${where} — this browser has no WebGPU.`
-          : `Ready, ${where}. Say something.`
+          ? `${named?.label ?? "Ready"} · CPU — no WebGPU here`
+          : `${named?.label ?? "Ready"} · ${where}`,
+        true
       );
       this.input.disabled = false;
       this.send.disabled = false;
@@ -599,15 +705,29 @@ class ChatContent extends OSElement {
     } catch (error) {
       this.phase = "failed";
       this.say(
-        "The model could not be loaded here. That is usually an old browser, or no room left to cache it."
+        "The model could not be loaded here — usually an old browser, or no room left to cache it."
       );
       this.logger.debug(`chat model failed: ${error}`);
     }
   }
 
-  private say(text: string) {
+  /**
+   * What the band says, and whether the light beside it is on.
+   *
+   * `--current` is the desktop's token for "this is happening now", and a model
+   * loaded and waiting is exactly that. Anything else — downloading, thinking,
+   * failed — leaves it unlit rather than inventing a second colour.
+   */
+  private say(text: string, ready = this.phase === "ready") {
     this.status.textContent = text;
-    this.status.hidden = !text;
+    this.pip.classList.toggle("is-ready", ready);
+  }
+
+  /** Back to naming the model, once it has finished answering. */
+  private ready() {
+    const named = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
+    const where = this.engine.device === "webgpu" ? "GPU" : "CPU";
+    this.say(`${named?.label ?? "Ready"} · ${where}`, true);
   }
 
   private turn(role: "You" | "Model", text: string): HTMLElement {
@@ -624,7 +744,7 @@ class ChatContent extends OSElement {
     said.appendChild(document.createTextNode(text));
     turn.appendChild(said);
 
-    this.log.insertBefore(turn, this.status);
+    this.log.appendChild(turn);
     this.log.scrollTop = this.log.scrollHeight;
     return said;
   }
@@ -739,7 +859,7 @@ class ChatContent extends OSElement {
     this.answering = true;
     this.input.disabled = true;
     this.send.disabled = true;
-    this.say("Thinking…");
+    this.say("Thinking…", false);
 
     const said = this.turn("Model", "");
     said.parentElement?.classList.add("is-writing");
@@ -793,11 +913,11 @@ class ChatContent extends OSElement {
       if (!said.textContent) said.textContent = answer;
       this.history.push({ role: "assistant", content: said.textContent ?? "" });
       if (found.length) said.parentElement?.appendChild(this.citation(found));
-      this.say("");
+      this.ready();
     } catch (error) {
       said.textContent = said.textContent || "It stopped partway through.";
       this.logger.debug(`chat failed: ${error}`);
-      this.say("");
+      this.ready();
     } finally {
       said.parentElement?.classList.remove("is-writing");
       this.answering = false;

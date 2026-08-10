@@ -10,6 +10,7 @@ import {
   type ChatEngine,
   type ChatModel,
   type Message,
+  type Progress,
 } from '@thatcatdev/browser-ai'
 import { FEATURE_FLAG_DEFAULTS, loadSettings } from '../src/Store'
 
@@ -33,9 +34,45 @@ const stubEngine = (over: Partial<ChatEngine> = {}): ChatEngine => ({
   ...over,
 })
 
+/**
+ * A load that can be advanced from the test, in bytes.
+ *
+ * Bytes rather than a fraction because that is what the window is given and
+ * what it has to reason about: the runtime counts only the files it has met, so
+ * the total grows underneath the download. See `chat/progress`.
+ */
+const staged = (total = 800_000_000) => {
+  let report: ((loaded: number, total: number) => void) | undefined
+  let settle: (() => void) | undefined
+  const engine = stubEngine({
+    load: vi.fn(
+      (onProgress?: Progress) =>
+        new Promise<void>((resolve) => {
+          settle = resolve
+          report = (loaded, of) => {
+            const fraction = of ? Math.min(1, loaded / of) : 0
+            onProgress?.(fraction, { loaded, total: of, fraction })
+          }
+        }),
+    ) as ChatEngine['load'],
+  })
+  return {
+    engine,
+    /** Say how many bytes have arrived, and of how many known. */
+    to: (loaded: number, of: number = total) => report!(loaded, of),
+    /** And the model is up — which is its own wait, after the last byte. */
+    ready: () => {
+      report!(total, total)
+      settle!()
+    },
+  }
+}
+
 const input = () => host.querySelector<HTMLTextAreaElement>('.chat-input')!
 const send = () => host.querySelector<HTMLButtonElement>('.chat-send')!
 const status = () => host.querySelector<HTMLElement>('.chat-status')!
+const bar = () => host.querySelector<HTMLElement>('.chat-progress')!
+const fill = () => host.querySelector<HTMLElement>('.chat-progress-fill')!
 const turns = () =>
   [...host.querySelectorAll<HTMLElement>('.chat-turn')].map((turn) => ({
     who: turn.querySelector('.chat-who')?.textContent,
@@ -82,32 +119,21 @@ describe('the chat window', () => {
     await content.unload()
   })
 
-  // A hundred megabytes is a wait somebody should be able to watch, so the
+  // Hundreds of megabytes is a wait somebody should be able to watch, so the
   // window opens straight away and says how far along it is.
   it('opens immediately and counts the download in', async () => {
-    let report: ((fraction: number) => void) | undefined
-    const engine = stubEngine({
-      load: vi.fn(
-        (onProgress?: (f: number) => void) =>
-          new Promise<void>((resolve) => {
-            report = (fraction) => {
-              onProgress?.(fraction)
-              if (fraction >= 1) resolve()
-            }
-          }),
-      ) as ChatEngine['load'],
-    })
+    const { engine, to, ready } = staged()
     const content = new ChatContent(() => engine)
     await content.load(host)
 
     await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
-    report!(0.42)
+    to(336_000_000)
     expect(status().textContent).toContain('42%')
 
     // Nothing can be typed until there is something to answer with.
     expect(input().disabled).toBe(true)
 
-    report!(1)
+    ready()
     await vi.waitFor(() => expect(input().disabled).toBe(false))
     await content.unload()
   })
@@ -119,6 +145,108 @@ describe('the chat window', () => {
     await content.load(host)
 
     await vi.waitFor(() => expect(status().textContent).toContain('no WebGPU'))
+    await content.unload()
+  })
+
+  /*
+   * A percentage is a number to read; the bar is a thing to glance at. Somebody
+   * deciding whether to sit through the better part of a gigabyte does the
+   * second.
+   */
+  it('draws the download as a bar, and takes it away when there is nothing left to wait for', async () => {
+    const { engine, to, ready } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+    // Nothing counted yet: no length is honest, so it says only that something
+    // is happening.
+    expect(bar().hidden).toBe(false)
+    expect(bar().classList.contains('is-waiting')).toBe(true)
+    expect(bar().hasAttribute('aria-valuenow')).toBe(false)
+
+    to(336_000_000)
+    expect(bar().classList.contains('is-waiting')).toBe(false)
+    expect(fill().style.width).toBe('42%')
+    expect(bar().getAttribute('aria-valuenow')).toBe('42')
+
+    ready()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    // A finished bar is just a line.
+    expect(bar().hidden).toBe(true)
+    await content.unload()
+  })
+
+  /*
+   * The one that was actually wrong. The runtime counts only the files it has
+   * met, and it meets the tokenizer first — so its own fraction reads 98%
+   * before a byte of the model has arrived, and then sits there for minutes.
+   * Measured against what the model weighs, seven megabytes is seven
+   * megabytes.
+   */
+  it('measures against the model, not against the files it has met so far', async () => {
+    const { engine, to } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    // The tokenizer, complete, and nothing else known about yet.
+    to(7_000_000, 7_000_000)
+    expect(fill().style.width).toBe('1%')
+    expect(status().textContent).not.toContain('Building')
+
+    // And now the weights are announced.
+    to(7_000_000, 800_000_000)
+    expect(fill().style.width).toBe('1%')
+    await content.unload()
+  })
+
+  // A bar of no width is indistinguishable from a broken one, and the first
+  // files of any of these downloads are too small to move it.
+  it('keeps the bar travelling until there is a percent to show', async () => {
+    const { engine, to } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    to(2_000_000)
+    expect(bar().classList.contains('is-waiting')).toBe(true)
+    expect(bar().getAttribute('aria-valuenow')).toBe('0')
+
+    to(40_000_000)
+    expect(bar().classList.contains('is-waiting')).toBe(false)
+    expect(fill().style.width).toBe('5%')
+    await content.unload()
+  })
+
+  /*
+   * Between the last byte and the first answer the graph still has to be
+   * built, and on a CPU that is seconds with nothing to report. A bar at 100%
+   * and no explanation is where somebody decides the page is broken.
+   */
+  it('says what it is doing after the last byte', async () => {
+    const { engine, to } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    to(799_000_000)
+    expect(status().textContent).toContain('Downloading')
+
+    to(800_000_000)
+    expect(status().textContent).toContain('Building the model')
+    expect(bar().classList.contains('is-preparing')).toBe(true)
+    await content.unload()
+  })
+
+  it('leaves the bar behind when the model will not load at all', async () => {
+    const content = new ChatContent(() =>
+      stubEngine({ load: vi.fn().mockRejectedValue(new Error('no')) }),
+    )
+    await content.load(host)
+
+    await vi.waitFor(() => expect(status().textContent).toContain('could not be loaded'))
+    expect(bar().hidden).toBe(true)
     await content.unload()
   })
 
@@ -280,7 +408,7 @@ describe('the chat window', () => {
 
   /*
    * Closing the window stops whatever it was writing — but the weights stay
-   * loaded, because opening it again should not fetch a hundred megabytes for
+   * loaded, because opening it again should not fetch several hundred megabytes for
    * a second time.
    */
   it('abandons the answer when the window closes, and keeps the model', async () => {
@@ -318,13 +446,37 @@ describe('choosing the model and where it runs', () => {
       'Qwen2.5 0.5B',
       'Llama 3.2 1B',
     ])
-    CHAT_MODELS.forEach((model: ChatModel) => expect(model.size).toMatch(/MB$/))
+    CHAT_MODELS.forEach((model: ChatModel) => expect(model.size).toMatch(/(MB|GB)$/))
   })
 
-  // The one that answers the question it was asked, rather than the one that
-  // arrives fastest.
-  it('defaults to the middle rung', () => {
-    expect(CHAT_MODEL).toBe(CHAT_MODELS[1].id)
+  /*
+   * The size is not decoration: it is the number somebody decides on, and the
+   * denominator the bar is drawn against. Both of these were wrong — the
+   * default was advertised at 350MB and is nearer 800 — because they were
+   * guessed from the parameter count rather than measured, and four-bit
+   * quantisation leaves a 150,000-token embedding table at full precision.
+   */
+  it('carries the size in bytes too, agreeing with what it says in words', () => {
+    CHAT_MODELS.forEach((model: ChatModel) => {
+      expect(model.bytes).toBeGreaterThan(0)
+      const said = Number(model.size.replace(/[^\d.]/g, ''))
+      const stated = model.size.endsWith('GB') ? said * 1e9 : said * 1e6
+      expect(model.bytes).toBeCloseTo(stated, -7)
+    })
+  })
+
+  /*
+   * The one that answers the question it was asked, rather than the one that
+   * arrives fastest — and named outright rather than picked out by position,
+   * so that reordering the rungs cannot quietly change what a visitor gets.
+   * It is the expensive choice and a deliberate one: 800MB, chosen because
+   * 135M parameters writes a scene instead of an answer.
+   */
+  it('defaults to Qwen2.5 0.5B', () => {
+    expect(CHAT_MODEL).toBe('onnx-community/Qwen2.5-0.5B-Instruct')
+    expect(CHAT_MODELS.find((m: ChatModel) => m.id === CHAT_MODEL)?.label).toBe(
+      'Qwen2.5 0.5B',
+    )
   })
 
   it('draws a picker, set to what is loaded', async () => {

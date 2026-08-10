@@ -23,6 +23,8 @@ import {
 } from "../../ai";
 import { loadRepos } from "../../utils/github";
 import { SEARCH_URL } from "../../utils/websearch";
+import { Download, remaining } from "./progress";
+import { prefersReducedMotion } from "../../utils/motion";
 
 /**
  * A conversation with a model that lives on this machine.
@@ -32,7 +34,7 @@ import { SEARCH_URL } from "../../utils/websearch";
  * window and opening it again resumes with the model already warm.
  *
  * The window opens immediately and fills in, rather than sitting behind the
- * usual splash. A third of a gigabyte is a wait somebody should be able to
+ * usual splash. The better part of a gigabyte is a wait somebody should be able to
  * watch and change their mind about, and a cover with a spinner says less than
  * a percentage does. That is also why the first thing in the transcript is what
  * this is: half a billion parameters, running here, which writes fluent
@@ -82,6 +84,8 @@ class ChatContent extends OSElement {
   private send!: HTMLButtonElement;
   private status!: HTMLElement;
   private pip!: HTMLElement;
+  private bar!: HTMLElement;
+  private fill!: HTMLElement;
   private models!: HTMLSelectElement;
   private devices!: HTMLSelectElement;
 
@@ -125,6 +129,18 @@ class ChatContent extends OSElement {
     this.engine = makeEngine(this.choice.model, this.choice.device);
 
     this.style = () => ({
+      // The segment that travels while a download has started but has not yet
+      // reported a byte. See `.chat-progress.is-waiting`.
+      "@keyframes chat-waiting": {
+        from: { transform: "translateX(-40%)" },
+        to: { transform: "translateX(340%)" }
+      },
+      // Full width, breathing: everything has arrived and the model is being
+      // built out of it. See `.chat-progress.is-preparing`.
+      "@keyframes chat-preparing": {
+        "0%, 100%": { opacity: 1 },
+        "50%": { opacity: 0.35 }
+      },
       [this.id]: {
         display: "flex",
         flexDirection: "column",
@@ -139,10 +155,19 @@ class ChatContent extends OSElement {
          * One row saying what is true now, with everything that is always true
          * folded behind it. The whole row is the summary, so the affordance is
          * the band rather than a word inside it.
+         *
+         * The band and the download bar share a container so the bar can be
+         * drawn *on* the band's bottom edge rather than under it — one line that
+         * fills, instead of a second line that appears and shoves the
+         * conversation down a few pixels.
          */
-        "& .chat-band": {
+        "& .chat-head": {
           flex: "0 0 auto",
+          position: "relative",
           borderBottom: `1px solid ${color.lineSoft}`
+        },
+        "& .chat-band": {
+          flex: "0 0 auto"
         },
         "& .chat-band summary": {
           display: "flex",
@@ -197,6 +222,77 @@ class ChatContent extends OSElement {
         },
         "& .chat-private": { marginLeft: "auto" },
         "& .chat-band[open] .chat-more": { color: color.ink },
+
+        // -------------------------------------------------- the download
+        /*
+         * Two pixels along the bottom edge, and only while something is
+         * arriving. A percentage in a line of text is a number to read; this is
+         * a thing to glance at, which is what somebody deciding whether to wait
+         * actually does.
+         */
+        "& .chat-progress": {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          // Over the container's own hairline, not below it: the edge becomes
+          // the bar rather than gaining a second one.
+          bottom: "-1px",
+          height: "2px",
+          overflow: "hidden",
+          background: color.lineSoft
+        },
+        "& .chat-progress[hidden]": { display: "none" },
+        "& .chat-progress-fill": {
+          display: "block",
+          width: 0,
+          height: "100%",
+          background: color.accent,
+          transition: "width 240ms linear"
+        },
+        /*
+         * Before the first byte is counted there is nothing honest to fill to —
+         * the connection is still opening. A segment that travels says that
+         * much and no more; the moment there is a real number it stops.
+         */
+        "& .chat-progress.is-waiting .chat-progress-fill": {
+          width: "30%",
+          transition: "none",
+          animation: "$chat-waiting 1.4s ease-in-out infinite"
+        },
+        /*
+         * Full, and still working. The last byte is not the last of the wait —
+         * the graph still has to be built — so the bar breathes rather than
+         * standing at 100% looking hung.
+         */
+        "& .chat-progress.is-preparing .chat-progress-fill": {
+          animation: "$chat-preparing 1.6s ease-in-out infinite"
+        },
+        /*
+         * Nothing travels for somebody who asked for less movement. The track
+         * fills faintly instead, which still separates "fetching" from
+         * "nothing is happening" — the only thing this state has to say.
+         */
+        "& .chat-progress.is-waiting.is-still .chat-progress-fill": {
+          animation: "none",
+          width: "100%",
+          opacity: 0.3
+        },
+        "& .chat-progress.is-preparing.is-still .chat-progress-fill": {
+          animation: "none",
+          opacity: 0.55
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          "& .chat-progress-fill": { transition: "none" },
+          "& .chat-progress.is-waiting .chat-progress-fill": {
+            animation: "none",
+            width: "100%",
+            opacity: 0.3
+          },
+          "& .chat-progress.is-preparing .chat-progress-fill": {
+            animation: "none",
+            opacity: 0.55
+          }
+        },
 
         "& .chat-what": {
           display: "flex",
@@ -402,7 +498,10 @@ class ChatContent extends OSElement {
   }
 
   private build() {
-    this.element.appendChild(this.band());
+    const head = document.createElement("div");
+    head.className = "chat-head";
+    head.append(this.band(), this.progress());
+    this.element.appendChild(head);
 
     this.log = document.createElement("div");
     this.log.className = "chat-log";
@@ -514,6 +613,61 @@ class ChatContent extends OSElement {
     box.appendChild(body);
 
     return box;
+  }
+
+  /**
+   * The download, as a line rather than as a number.
+   *
+   * It is a `progressbar` and not a decoration: the percentage is in the status
+   * text above it, but that text is one line in a band somebody may never look
+   * at twice, and a screen reader should be able to ask how far along this is
+   * rather than wait to be told.
+   */
+  private progress(): HTMLElement {
+    this.bar = document.createElement("div");
+    this.bar.className = "chat-progress";
+    this.bar.setAttribute("role", "progressbar");
+    this.bar.setAttribute("aria-label", "Downloading the model");
+    this.bar.setAttribute("aria-valuemin", "0");
+    this.bar.setAttribute("aria-valuemax", "100");
+
+    this.fill = document.createElement("span");
+    this.fill.className = "chat-progress-fill";
+    this.bar.appendChild(this.fill);
+
+    return this.bar;
+  }
+
+  /**
+   * Show the bar at a fraction, or hide it entirely.
+   *
+   * `undefined` is not zero: before anything has been counted there is no
+   * honest length to draw, so the bar says "something is happening" instead of
+   * claiming nought per cent. Hidden once there is nothing left to wait for —
+   * a finished bar is just a line.
+   */
+  private drawProgress(fraction?: number, preparing = false) {
+    this.bar.classList.toggle("is-still", prefersReducedMotion());
+    if (fraction === undefined) {
+      this.bar.classList.add("is-waiting");
+      this.bar.classList.remove("is-preparing");
+      this.bar.removeAttribute("aria-valuenow");
+      this.fill.style.width = "";
+      return;
+    }
+
+    const percent = Math.round(fraction * 100);
+    this.bar.setAttribute("aria-valuenow", String(percent));
+    /*
+     * A bar of no width is indistinguishable from a broken one, and the first
+     * seconds of any of these downloads are spent on files too small to move
+     * it. So it keeps travelling until there is a percent to show.
+     */
+    this.bar.classList.toggle("is-waiting", percent < 1);
+    // Full, and still working: the bytes are all in and the model is being
+    // built out of them. A static full bar is where somebody gives up.
+    this.bar.classList.toggle("is-preparing", preparing);
+    if (percent >= 1) this.fill.style.width = `${percent}%`;
   }
 
   private picker(): HTMLElement {
@@ -673,17 +827,57 @@ class ChatContent extends OSElement {
   private async warm() {
     const chosen = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
     const size = chosen ? chosen.size : "a few hundred MB";
+    /*
+     * The whole price, said before any of it has been paid: the size, and that
+     * it is paid once. Everything after this is arithmetic on top of it, so it
+     * gets said while somebody is still deciding whether to wait.
+     */
     this.say(`Downloading the model… ${size}, once, then it is cached.`);
+    // Back from the start, since this also runs when somebody changes model
+    // halfway through a conversation.
+    this.bar.hidden = false;
+    this.drawProgress();
+    /*
+     * Measured against what this model actually weighs, not against the bytes
+     * the runtime has admitted to so far — which, for the first seconds, is a
+     * tokenizer. See `Download`.
+     */
+    const download = new Download(chosen?.bytes);
     try {
-      await this.engine.load((fraction) => {
+      await this.engine.load((_fraction, detail) => {
+        const { fraction, eta, preparing } = download.record(
+          detail.loaded,
+          detail.total
+        );
         const percent = Math.round(fraction * 100);
+        this.drawProgress(fraction, preparing);
+        /*
+         * Between the last byte and the first answer there is a real wait —
+         * the weights are read, the graph is built, and on a CPU that is
+         * seconds of arithmetic with nothing to report. Said plainly, because
+         * a bar sitting at 100% with no explanation is the moment somebody
+         * decides the page is broken.
+         */
+        if (preparing) {
+          this.say("Downloaded. Building the model — this takes a few seconds…");
+          return;
+        }
+        /*
+         * The estimate is left off until it is worth trusting — see
+         * `Download` — and the size goes when it arrives. The band is one line
+         * in a window somebody may have made narrow; the size was already said
+         * in full before any of this, and between "of ~185MB" and "about 20s
+         * left" the second is what a person waiting actually wants.
+         */
         this.say(
-          percent >= 100
-            ? "Starting it up…"
-            : `Downloading the model… ${percent}% of ${size}, once, then cached.`
+          eta === undefined
+            ? `Downloading… ${percent}% of ${size}, then cached`
+            : `Downloading… ${percent}% · ${remaining(eta)}`
         );
       });
       this.phase = "ready";
+      this.bar.hidden = true;
+      this.bar.classList.remove("is-waiting", "is-preparing");
       /*
        * The model's own name rather than "0.5B parameters": it is searchable,
        * and it is what somebody would tell a friend they had been using.
@@ -704,6 +898,7 @@ class ChatContent extends OSElement {
       void this.learn();
     } catch (error) {
       this.phase = "failed";
+      this.bar.hidden = true;
       this.say(
         "The model could not be loaded here — usually an old browser, or no room left to cache it."
       );
@@ -932,7 +1127,8 @@ class ChatContent extends OSElement {
 
   async beforeUnload() {
     // Whatever it was writing is for a window that has gone. The weights stay
-    // loaded: opening this again should not fetch a third of a gigabyte twice.
+    // loaded: opening this again should not fetch the better part of a
+    // gigabyte twice.
     this.stop?.abort();
   }
 }

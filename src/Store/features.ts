@@ -25,7 +25,8 @@ export const FEATURE_FLAG_DEFAULTS: Record<string, FeatureFlagDefault> = {
   /*
    * A chat window backed by a model on the visitor's own machine.
    *
-   * Off for the same reason and more so: about 100MB, fetched the first time
+   * Off for the same reason and more so: the better part of a gigabyte,
+   * fetched the first time
    * the window is opened and never before. Nothing else on the desktop touches
    * it, so a visitor who leaves this alone never downloads a byte of it.
    */

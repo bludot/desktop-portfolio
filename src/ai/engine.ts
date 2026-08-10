@@ -29,6 +29,35 @@
 export type Device = "webgpu" | "wasm";
 
 /**
+ * What was *asked* for, which is not always what is possible.
+ *
+ * "auto" is the honest default — the GPU when the browser has one — but both
+ * ends are worth being able to force. A visitor on a flaky driver may want the
+ * CPU, and somebody comparing the two wants to be able to say which they are
+ * looking at rather than guessing from the speed.
+ */
+export type DevicePreference = "auto" | Device;
+
+/**
+ * The device to actually use, and whether the answer disappointed anybody.
+ *
+ * Asking for the GPU on a browser without WebGPU has to fall back rather than
+ * fail — but silently falling back leaves somebody wondering why "GPU" is slow,
+ * so the caller is told the request could not be met.
+ */
+export function resolveDevice(preference: DevicePreference): {
+  device: Device;
+  fellBack: boolean;
+} {
+  const best = bestDevice();
+  if (preference === "auto") return { device: best, fellBack: false };
+  if (preference === "webgpu" && best !== "webgpu") {
+    return { device: "wasm", fellBack: true };
+  }
+  return { device: preference, fellBack: false };
+}
+
+/**
  * The one model this loads, and why it is small enough to be worth loading.
  *
  * MiniLM at eight-bit is about 23MB — a fifth of a photograph on most sites,

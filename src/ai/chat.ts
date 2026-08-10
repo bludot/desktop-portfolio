@@ -1,26 +1,76 @@
-import { bestDevice, type Device, type Progress } from "./engine";
+import {
+  resolveDevice,
+  type Device,
+  type DevicePreference,
+  type Progress
+} from "./engine";
 
 /**
  * A model small enough to arrive over the wire, answering in the window.
  *
- * 135 million parameters at four bits is about 100MB — a large image, and the
- * only thing on this desktop that costs a visitor anything to look at. In
- * exchange nothing leaves the machine: there is no key to leak, no endpoint to
- * pay for, and the conversation is not somebody else's training data.
- *
- * Be clear about what that buys. At this size the model writes fluent English
- * and invents facts with total confidence — it is good at rephrasing what it
- * has been handed and bad at recalling anything it has not. The window says so
- * out loud rather than letting somebody discover it by asking about James's
- * career and being told something plausible and wrong.
+ * Nothing leaves the machine: there is no key to leak, no endpoint to pay for,
+ * and the conversation is not somebody else's training data. The price is that
+ * the weights arrive over the wire once, and that a model this size invents
+ * facts with total confidence — it is good at rephrasing what it has been
+ * handed and bad at recalling anything it has not. The window says so out loud
+ * rather than letting somebody discover it by asking about James's career and
+ * being told something plausible and wrong.
  *
  * Same two backends as the embedder next door: WebGPU where it exists, WASM
  * where it does not, one set of ONNX weights either way, and threads left off
  * so the app windows keep working. See `engine.ts` for why.
  */
 
-/** Instruction-tuned, and the smallest one worth talking to. */
-export const CHAT_MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct";
+export interface ChatModel {
+  id: string;
+  /** What it is called in the window. */
+  label: string;
+  /** Roughly what it costs to fetch, in the words somebody would use. */
+  size: string;
+  /** What it is actually like to talk to. No marketing. */
+  note: string;
+}
+
+/**
+ * What is on offer, smallest first.
+ *
+ * Three rungs rather than a catalogue: the smallest because it is what a slow
+ * connection can bear, the largest because somebody on a desktop with a GPU
+ * should be able to see what the difference buys, and the middle one as the
+ * default because it is the first that answers the question it was asked.
+ *
+ * That middle rung is not a guess. At 135M, asked what it was up to, this
+ * window wrote a laboratory scene with invented colleagues and ran to the token
+ * limit without answering — no amount of sampling discipline fixes a model that
+ * size. Half a billion parameters is where it stops.
+ *
+ * Anything past a billion is deliberately absent. A 2B model is another
+ * gigabyte and a half, does not fit in the WASM address space at all, and would
+ * mean offering a window that cannot work to every visitor without WebGPU.
+ */
+export const CHAT_MODELS: ChatModel[] = [
+  {
+    id: "HuggingFaceTB/SmolLM2-135M-Instruct",
+    label: "SmolLM2 135M",
+    size: "~100MB",
+    note: "Fastest to arrive. Writes fluently and wanders off the question."
+  },
+  {
+    id: "onnx-community/Qwen2.5-0.5B-Instruct",
+    label: "Qwen2.5 0.5B",
+    size: "~350MB",
+    note: "The default. Answers what was asked, briefly."
+  },
+  {
+    id: "onnx-community/Llama-3.2-1B-Instruct-ONNX",
+    label: "Llama 3.2 1B",
+    size: "~900MB",
+    note: "Conversational. Worth it on a GPU, painful without one."
+  }
+];
+
+/** What a window gets when nobody has chosen. */
+export const CHAT_MODEL = CHAT_MODELS[1].id;
 
 export interface Message {
   role: "system" | "user" | "assistant";
@@ -29,6 +79,10 @@ export interface Message {
 
 export interface ChatEngine {
   readonly device: Device | undefined;
+  /** Which of `CHAT_MODELS` this one is. */
+  readonly model: string;
+  /** True when the GPU was asked for and this browser could not give it. */
+  readonly fellBackToCpu: boolean;
   load(onProgress?: Progress): Promise<void>;
   /**
    * Answer, a token at a time.
@@ -49,12 +103,15 @@ export interface ChatEngine {
  * How much it may say before it is cut off.
  *
  * A small model left to its own devices will happily continue for pages,
- * repeating itself with growing confidence. This is about a paragraph.
+ * repeating itself with growing confidence — and a cap that is too generous is
+ * an invitation to drift rather than a safety net. This is a short paragraph,
+ * which is all anybody wants from a window like this.
  */
-const MAX_TOKENS = 220;
+const MAX_TOKENS = 160;
 
 class TransformersChat implements ChatEngine {
   device: Device | undefined;
+  fellBackToCpu = false;
   private generate?: (
     input: unknown,
     options: Record<string, unknown>
@@ -62,7 +119,10 @@ class TransformersChat implements ChatEngine {
   private tokenizer?: unknown;
   private loading?: Promise<void>;
 
-  constructor(private readonly model: string = CHAT_MODEL) {}
+  constructor(
+    readonly model: string = CHAT_MODEL,
+    private readonly preference: DevicePreference = "auto"
+  ) {}
 
   load(onProgress?: Progress): Promise<void> {
     if (!this.loading) this.loading = this.bring(onProgress);
@@ -76,7 +136,8 @@ class TransformersChat implements ChatEngine {
     env.allowLocalModels = false;
     if (env.backends?.onnx?.wasm) env.backends.onnx.wasm.numThreads = 1;
 
-    const device = bestDevice();
+    const { device, fellBack } = resolveDevice(this.preference);
+    this.fellBackToCpu = fellBack;
     const pipe = await pipeline("text-generation", this.model, {
       device,
       /*
@@ -132,14 +193,32 @@ class TransformersChat implements ChatEngine {
       }
     });
 
+    /*
+     * Cool, and narrow.
+     *
+     * The first version ran at 0.7 with nothing but nucleus sampling, and a
+     * small model given that much room does not get more creative — it gets
+     * further from the question. It answered "hey what\'s up" with a laboratory
+     * scene, quotation marks and a character called Sarah, because at every
+     * token there was a long tail of plausible-enough words and it kept picking
+     * from it.
+     *
+     * So: a temperature low enough that the likely word usually wins, `top_k`
+     * to cut the tail off outright rather than trusting the mass to be small,
+     * and a mild repetition penalty — mild, because a heavy one at this size
+     * pushes it off the topic to avoid saying a word twice.
+     */
     const output = await this.generate(messages, {
       max_new_tokens: MAX_TOKENS,
-      // Warm enough to be worth reading, cool enough to stay on the question.
-      temperature: 0.7,
+      temperature: 0.3,
+      top_k: 40,
       top_p: 0.9,
       do_sample: true,
-      // Small models loop; this is what stops "I can help with that." forever.
-      repetition_penalty: 1.15,
+      repetition_penalty: 1.1,
+      // It is a chat: it should stop when its turn ends, not when it runs out
+      // of budget. Without this the streamer prints straight through the end
+      // of the turn and into an imagined reply.
+      return_full_text: false,
       streamer
     });
 
@@ -158,19 +237,39 @@ class TransformersChat implements ChatEngine {
     return typeof generated === "string" ? generated.trim() : "";
   }
 
+  /** Whether this engine was built for the device somebody is now asking for. */
+  matches(preference: DevicePreference): boolean {
+    return this.preference === preference;
+  }
+
   dispose(): void {
     this.generate = undefined;
     this.tokenizer = undefined;
     this.loading = undefined;
     this.device = undefined;
+    this.fellBackToCpu = false;
   }
 }
 
 let shared: ChatEngine | undefined;
 
-/** The one chat model on the page. Loading two would be 200MB of the same idea. */
-export function chatEngine(): ChatEngine {
-  if (!shared) shared = new TransformersChat();
+/**
+ * The chat model on the page, for whatever has been chosen.
+ *
+ * One at a time: two of these is a gigabyte of the same idea held in memory, so
+ * changing either the model or the device lets go of the last one before the
+ * next is brought in. The weights themselves stay in the browser's cache, so
+ * going back to a model already used is a load rather than a download.
+ */
+export function chatEngine(
+  model: string = CHAT_MODEL,
+  preference: DevicePreference = "auto"
+): ChatEngine {
+  const current = shared as TransformersChat | undefined;
+  if (current?.model === model && current.matches(preference)) return current;
+
+  shared?.dispose();
+  shared = new TransformersChat(model, preference);
   return shared;
 }
 

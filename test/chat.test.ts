@@ -3,8 +3,14 @@ import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
 import ChatContent from '../src/contents/chat'
-import { setChatEngine, type ChatEngine, type Message } from '../src/ai/chat'
-import { FEATURE_FLAG_DEFAULTS } from '../src/Store'
+import {
+  CHAT_MODEL,
+  CHAT_MODELS,
+  setChatEngine,
+  type ChatEngine,
+  type Message,
+} from '../src/ai/chat'
+import { FEATURE_FLAG_DEFAULTS, loadSettings } from '../src/Store'
 
 jss.setup(preset())
 jss.use(nested())
@@ -14,6 +20,8 @@ let host: HTMLElement
 /** A model that answers instantly, in pieces, without fetching anything. */
 const stubEngine = (over: Partial<ChatEngine> = {}): ChatEngine => ({
   device: 'wasm',
+  model: 'stub/model',
+  fellBackToCpu: false,
   load: vi.fn().mockResolvedValue(undefined),
   reply: vi.fn(async (_messages: Message[], onToken: (t: string) => void) => {
     onToken('Hel')
@@ -63,7 +71,7 @@ describe('the chat window', () => {
 
   it('loads the model only once it is opened', async () => {
     const engine = stubEngine()
-    const content = new ChatContent(engine)
+    const content = new ChatContent(() => engine)
 
     // Built, but not mounted: nothing has been asked of the model yet.
     expect(engine.load).not.toHaveBeenCalled()
@@ -88,7 +96,7 @@ describe('the chat window', () => {
           }),
       ) as ChatEngine['load'],
     })
-    const content = new ChatContent(engine)
+    const content = new ChatContent(() => engine)
     await content.load(host)
 
     await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
@@ -104,7 +112,7 @@ describe('the chat window', () => {
   })
 
   it('says where it ended up running', async () => {
-    const content = new ChatContent(stubEngine({ device: 'webgpu' }))
+    const content = new ChatContent(() => stubEngine({ device: 'webgpu' }))
     await content.load(host)
 
     await vi.waitFor(() => expect(status().textContent).toContain('GPU'))
@@ -113,7 +121,7 @@ describe('the chat window', () => {
 
   it('answers, a token at a time', async () => {
     const engine = stubEngine()
-    const content = new ChatContent(engine)
+    const content = new ChatContent(() => engine)
     await content.load(host)
     await vi.waitFor(() => expect(input().disabled).toBe(false))
 
@@ -128,7 +136,7 @@ describe('the chat window', () => {
 
   it('keeps the conversation, so the second question has the first for context', async () => {
     const engine = stubEngine()
-    const content = new ChatContent(engine)
+    const content = new ChatContent(() => engine)
     await content.load(host)
     await vi.waitFor(() => expect(input().disabled).toBe(false))
 
@@ -145,7 +153,7 @@ describe('the chat window', () => {
 
   it('will not send an empty message', async () => {
     const engine = stubEngine()
-    const content = new ChatContent(engine)
+    const content = new ChatContent(() => engine)
     await content.load(host)
     await vi.waitFor(() => expect(input().disabled).toBe(false))
 
@@ -171,7 +179,7 @@ describe('the chat window', () => {
           }),
       ) as ChatEngine['reply'],
     })
-    const content = new ChatContent(engine)
+    const content = new ChatContent(() => engine)
     await content.load(host)
     await vi.waitFor(() => expect(input().disabled).toBe(false))
 
@@ -190,20 +198,18 @@ describe('the chat window', () => {
 
   // Better said at the top than discovered at the third question.
   it('says what it is before anybody types', async () => {
-    const content = new ChatContent(stubEngine())
+    const content = new ChatContent(() => stubEngine())
     await content.load(host)
 
     const note = host.querySelector('.chat-note')!.textContent!
-    expect(note).toContain('135M')
+    expect(note).toContain('0.5B')
     expect(note).toContain('nothing is sent anywhere')
     expect(note).toContain('makes things up')
     await content.unload()
   })
 
   it('explains itself when the model will not load at all', async () => {
-    const content = new ChatContent(
-      stubEngine({ load: vi.fn().mockRejectedValue(new Error('no')) }),
-    )
+    const content = new ChatContent(() => stubEngine({ load: vi.fn().mockRejectedValue(new Error('no')) }))
     await content.load(host)
 
     await vi.waitFor(() =>
@@ -228,7 +234,7 @@ describe('the chat window', () => {
           }),
       ) as ChatEngine['reply'],
     })
-    const content = new ChatContent(engine)
+    const content = new ChatContent(() => engine)
     await content.load(host)
     await vi.waitFor(() => expect(input().disabled).toBe(false))
 
@@ -240,5 +246,105 @@ describe('the chat window', () => {
 
     await content.unload()
     expect(engine.dispose).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * Two choices on the window rather than in Settings, because both are things
+ * somebody wants to change while looking at the answers.
+ */
+describe('choosing the model and where it runs', () => {
+  it('offers three rungs, smallest first, each with its price on it', () => {
+    expect(CHAT_MODELS.map((m) => m.label)).toEqual([
+      'SmolLM2 135M',
+      'Qwen2.5 0.5B',
+      'Llama 3.2 1B',
+    ])
+    CHAT_MODELS.forEach((model) => expect(model.size).toMatch(/MB$/))
+  })
+
+  // The one that answers the question it was asked, rather than the one that
+  // arrives fastest.
+  it('defaults to the middle rung', () => {
+    expect(CHAT_MODEL).toBe(CHAT_MODELS[1].id)
+  })
+
+  it('draws a picker, set to what is loaded', async () => {
+    const content = new ChatContent()
+    await content.load(host)
+
+    const models = host.querySelector<HTMLSelectElement>('[aria-label="Model"]')!
+    const devices = host.querySelector<HTMLSelectElement>('[aria-label="Runs on"]')!
+    expect(models.value).toBe(CHAT_MODEL)
+    expect(devices.value).toBe('auto')
+    expect([...models.options].map((o) => o.value)).toEqual(
+      CHAT_MODELS.map((m) => m.id),
+    )
+    await content.unload()
+  })
+
+  /*
+   * Offered but not selectable, rather than left out: saying why beats letting
+   * somebody wonder whether their machine could have done it.
+   */
+  it('shows the GPU as unavailable rather than hiding it', async () => {
+    const content = new ChatContent()
+    await content.load(host)
+
+    const gpu = host.querySelector<HTMLOptionElement>('option[value="webgpu"]')!
+    expect(gpu.disabled).toBe(true)
+    expect(gpu.text).toContain('not available')
+    await content.unload()
+  })
+
+  it('says when the GPU was asked for and could not be given', async () => {
+    const content = new ChatContent(() =>
+      stubEngine({ device: 'wasm', fellBackToCpu: true }),
+    )
+    await content.load(host)
+
+    await vi.waitFor(() =>
+      expect(status().textContent).toContain('no WebGPU'),
+    )
+    await content.unload()
+  })
+
+  // The point of switching model is usually to ask the same thing of a better
+  // one; throwing the transcript away to prove a point about state is the wrong
+  // answer to that.
+  it('builds a new engine for the chosen model, keeping the conversation', async () => {
+    const built: string[] = []
+    const content = new ChatContent((model) => {
+      built.push(model)
+      return stubEngine({ model })
+    })
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    await ask(content.getElement(), 'still here?')
+
+    const models = host.querySelector<HTMLSelectElement>('[aria-label="Model"]')!
+    models.value = CHAT_MODELS[0].id
+    models.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(built).toContain(CHAT_MODELS[0].id))
+
+    // The transcript survives the swap: the point of changing model is usually
+    // to ask the same thing of a better one.
+    expect(turns().map((t) => t.said)).toContain('still here?')
+    await content.unload()
+  })
+
+  it('remembers the choice for next time', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+
+    const devices = host.querySelector<HTMLSelectElement>('[aria-label="Runs on"]')!
+    devices.value = 'wasm'
+    devices.dispatchEvent(new Event('change'))
+
+    await vi.waitFor(async () => {
+      const saved = await loadSettings()
+      expect(saved.chatDevice).toBe('wasm')
+    })
+    await content.unload()
   })
 })

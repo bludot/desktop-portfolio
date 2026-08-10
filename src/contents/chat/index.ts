@@ -1,6 +1,16 @@
 import OSElement from "../../utils/OSElement";
 import { color, font, radius, size, space, tracking, weight } from "../../theme";
-import { chatEngine, type ChatEngine, type Message } from "../../ai/chat";
+import {
+  CHAT_MODEL,
+  CHAT_MODELS,
+  chatEngine,
+  type ChatEngine,
+  type ChatModel,
+  type Message
+} from "../../ai/chat";
+import type { DevicePreference } from "../../ai/engine";
+import { bestDevice } from "../../ai/engine";
+import { loadSettings, saveSettings } from "../../Store";
 
 /**
  * A conversation with a model that lives on this machine.
@@ -10,40 +20,72 @@ import { chatEngine, type ChatEngine, type Message } from "../../ai/chat";
  * window and opening it again resumes with the model already warm.
  *
  * The window opens immediately and fills in, rather than sitting behind the
- * usual splash. A hundred megabytes is a wait somebody should be able to watch
- * and change their mind about, and a cover with a spinner says less than a
- * percentage does. That is also why the first thing in the transcript is what
- * this is: a 135M-parameter model, running here, which writes fluent sentences
- * and invents facts. Better said at the top than discovered at the third
- * question.
+ * usual splash. A third of a gigabyte is a wait somebody should be able to
+ * watch and change their mind about, and a cover with a spinner says less than
+ * a percentage does. That is also why the first thing in the transcript is what
+ * this is: half a billion parameters, running here, which writes fluent
+ * sentences and invents facts. Better said at the top than discovered at the
+ * third question.
  */
 
-/** What the model is told it is, before anybody types. */
+/**
+ * What the model is told it is, before anybody types.
+ *
+ * Short, and mostly prohibitions. A small model reads a long preamble as a
+ * writing prompt — the first version of this window answered a greeting with a
+ * scene, complete with invented colleagues — so the instructions that earn
+ * their place are the ones that rule that out: answer, do not narrate, stop.
+ */
 const SYSTEM: Message = {
   role: "system",
-  content:
-    "You are a small assistant running locally in a web browser, inside James's portfolio desktop. Answer briefly and plainly. If you do not know something, say so rather than guessing."
+  content: [
+    "You are a helpful assistant running locally in James's portfolio desktop.",
+    "Answer the user's question directly, in one or two short sentences.",
+    "Never invent dialogue, characters, or stage directions.",
+    "If you do not know something, say so plainly."
+  ].join(" ")
 };
 
 type Phase = "loading" | "ready" | "failed";
 
+/** What is remembered between visits. Not the conversation — just the choices. */
+interface ChatChoice {
+  model: string;
+  device: DevicePreference;
+}
+
 class ChatContent extends OSElement {
-  private readonly engine: ChatEngine;
+  private engine: ChatEngine;
   private history: Message[] = [SYSTEM];
+  private choice: ChatChoice = { model: CHAT_MODEL, device: "auto" };
 
   private log!: HTMLElement;
   private form!: HTMLFormElement;
   private input!: HTMLTextAreaElement;
   private send!: HTMLButtonElement;
   private status!: HTMLElement;
+  private models!: HTMLSelectElement;
+  private devices!: HTMLSelectElement;
 
   private phase: Phase = "loading";
   private answering = false;
   private stop?: AbortController;
 
-  constructor(engine: ChatEngine = chatEngine()) {
+  /**
+   * How an engine is got, rather than the engine itself.
+   *
+   * The picker builds a new one whenever the model or the device changes, so
+   * what this window needs is the factory — which is also what makes it
+   * testable without a gigabyte of weights.
+   */
+  private readonly makeEngine: (model: string, device: DevicePreference) => ChatEngine;
+
+  constructor(
+    makeEngine: (model: string, device: DevicePreference) => ChatEngine = chatEngine
+  ) {
     super("chatcontent", "chat-content");
-    this.engine = engine;
+    this.makeEngine = makeEngine;
+    this.engine = makeEngine(this.choice.model, this.choice.device);
 
     this.style = () => ({
       [this.id]: {
@@ -69,6 +111,54 @@ class ChatContent extends OSElement {
           flexWrap: "wrap"
         },
         "& .chat-note b": { color: color.inkSoft, fontWeight: weight.emphasise },
+
+        // ------------------------------------------------------- the picker
+        "& .chat-picker": {
+          flex: "0 0 auto",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "10px",
+          padding: `9px ${space.windowPadX}`,
+          borderBottom: `1px solid ${color.lineSoft}`
+        },
+        "& .chat-choice": {
+          display: "flex",
+          alignItems: "center",
+          gap: "7px",
+          minWidth: 0
+        },
+        "& .chat-choice > span": {
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.caps,
+          textTransform: "uppercase",
+          color: color.inkFaint,
+          flex: "0 0 auto"
+        },
+        /*
+         * A real `select`. The desktop draws its own everything else, but a
+         * native menu is the one control that behaves on a phone — and
+         * `color-scheme` is what stops the popup from coming up white on a dark
+         * desktop, which is the only reason people reach for a custom one.
+         */
+        "& .chat-select": {
+          minWidth: 0,
+          maxWidth: "100%",
+          height: "28px",
+          padding: "0 8px",
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.control,
+          background: color.chromeRaised,
+          color: color.ink,
+          font: "inherit",
+          fontSize: size.caption,
+          cursor: "pointer"
+        },
+        "& .chat-select:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "1px"
+        },
+        "& .chat-select:disabled": { opacity: 0.55, cursor: "default" },
 
         "& .chat-log": {
           flex: "1 1 auto",
@@ -174,7 +264,7 @@ class ChatContent extends OSElement {
     const note = document.createElement("p");
     note.className = "chat-note";
     const what = document.createElement("b");
-    what.appendChild(document.createTextNode("135M parameters, running here"));
+    what.appendChild(document.createTextNode("0.5B parameters, running here"));
     note.appendChild(what);
     note.appendChild(
       document.createTextNode(
@@ -182,6 +272,8 @@ class ChatContent extends OSElement {
       )
     );
     this.element.appendChild(note);
+
+    this.element.appendChild(this.picker());
 
     this.log = document.createElement("div");
     this.log.className = "chat-log";
@@ -226,8 +318,123 @@ class ChatContent extends OSElement {
     this.element.appendChild(this.form);
   }
 
+  /**
+   * The two choices: which model, and what runs it.
+   *
+   * Both are on the window rather than in Settings, because both are things
+   * somebody wants to change *while looking at the answers* — and the second
+   * one exists at all because "it is slow" and "it is on the CPU" are the same
+   * sentence, and nobody can tell which without being told.
+   */
+  private picker(): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "chat-picker";
+
+    this.models = document.createElement("select");
+    this.models.className = "chat-select";
+    this.models.setAttribute("aria-label", "Model");
+    CHAT_MODELS.forEach((model: ChatModel) => {
+      const option = document.createElement("option");
+      option.value = model.id;
+      // The size is the part somebody is deciding on, so it is in the label
+      // rather than in a tooltip nobody opens.
+      option.text = `${model.label} · ${model.size}`;
+      option.title = model.note;
+      this.models.appendChild(option);
+    });
+    this.models.value = this.choice.model;
+    this.models.addEventListener("change", () => {
+      void this.choose({ model: this.models.value });
+    });
+
+    this.devices = document.createElement("select");
+    this.devices.className = "chat-select";
+    this.devices.setAttribute("aria-label", "Runs on");
+    const gpu = bestDevice() === "webgpu";
+    (
+      [
+        ["auto", gpu ? "Automatic (GPU)" : "Automatic (CPU)"],
+        ["webgpu", gpu ? "GPU" : "GPU — not available here"],
+        ["wasm", "CPU"]
+      ] as const
+    ).forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.text = label;
+      // Offered but not selectable: saying why beats leaving it out and
+      // letting somebody wonder whether their machine could have done it.
+      option.disabled = value === "webgpu" && !gpu;
+      this.devices.appendChild(option);
+    });
+    this.devices.value = this.choice.device;
+    this.devices.addEventListener("change", () => {
+      void this.choose({ device: this.devices.value as DevicePreference });
+    });
+
+    const modelLabel = document.createElement("label");
+    modelLabel.className = "chat-choice";
+    const modelText = document.createElement("span");
+    modelText.appendChild(document.createTextNode("Model"));
+    modelLabel.append(modelText, this.models);
+
+    const deviceLabel = document.createElement("label");
+    deviceLabel.className = "chat-choice";
+    const deviceText = document.createElement("span");
+    deviceText.appendChild(document.createTextNode("Runs on"));
+    deviceLabel.append(deviceText, this.devices);
+
+    row.append(modelLabel, deviceLabel);
+    return row;
+  }
+
+  /**
+   * Change one of the two, and start again with the other unchanged.
+   *
+   * The conversation is kept: the point of switching model is usually to ask
+   * the same thing of a better one, and throwing the transcript away to prove
+   * a point about state would be the wrong answer to that.
+   */
+  private async choose(change: Partial<ChatChoice>) {
+    const next = { ...this.choice, ...change };
+    if (next.model === this.choice.model && next.device === this.choice.device) {
+      return;
+    }
+    this.choice = next;
+    void saveSettings({ chatModel: next.model, chatDevice: next.device });
+
+    this.stop?.abort();
+    this.phase = "loading";
+    this.input.disabled = true;
+    this.send.disabled = true;
+    this.engine = this.makeEngine(next.model, next.device);
+    await this.warm();
+  }
+
   async load(element: HTMLElement) {
     await super.load(element);
+
+    /*
+     * Read before the model is asked for, so a remembered choice is honoured
+     * rather than corrected a moment later — switching models mid-download is
+     * two downloads.
+     */
+    {
+      try {
+        const saved = await loadSettings();
+        const model = CHAT_MODELS.find((m: ChatModel) => m.id === saved.chatModel);
+        const device = saved.chatDevice as DevicePreference | undefined;
+        if (model) this.choice.model = model.id;
+        if (device === "auto" || device === "webgpu" || device === "wasm") {
+          this.choice.device = device;
+        }
+      } catch {
+        // The defaults are already in force.
+      }
+      this.models.value = this.choice.model;
+      this.devices.value = this.choice.device;
+      this.engine = this.makeEngine(this.choice.model, this.choice.device);
+    }
+
     void this.warm();
   }
 
@@ -239,19 +446,24 @@ class ChatContent extends OSElement {
    * paid for one.
    */
   private async warm() {
-    this.say("Downloading the model… this happens once, then it is cached.");
+    const chosen = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
+    const size = chosen ? chosen.size : "a few hundred MB";
+    this.say(`Downloading the model… ${size}, once, then it is cached.`);
     try {
       await this.engine.load((fraction) => {
         const percent = Math.round(fraction * 100);
         this.say(
           percent >= 100
             ? "Starting it up…"
-            : `Downloading the model… ${percent}% · this happens once, then it is cached.`
+            : `Downloading the model… ${percent}% of ${size}, once, then cached.`
         );
       });
       this.phase = "ready";
+      const where = this.engine.device === "webgpu" ? "on the GPU" : "on the CPU";
       this.say(
-        `Ready${this.engine.device === "webgpu" ? ", on the GPU" : ", on the CPU"}. Say something.`
+        this.engine.fellBackToCpu
+          ? `Ready, ${where} — this browser has no WebGPU.`
+          : `Ready, ${where}. Say something.`
       );
       this.input.disabled = false;
       this.send.disabled = false;
@@ -337,7 +549,7 @@ class ChatContent extends OSElement {
 
   async beforeUnload() {
     // Whatever it was writing is for a window that has gone. The weights stay
-    // loaded: opening this again should not fetch a hundred megabytes twice.
+    // loaded: opening this again should not fetch a third of a gigabyte twice.
     this.stop?.abort();
   }
 }

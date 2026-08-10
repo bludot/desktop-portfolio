@@ -74,15 +74,35 @@ class OSElement {
     this.logger.debug(`afterUnload hook`);
   }
 
+  /**
+   * Take it off the screen — whatever else goes wrong.
+   *
+   * Two things here are deliberate, and both come from the same failure: a
+   * component that is torn down halfway can never be shown again, because
+   * `load()` sees a `parent` still set, decides it is already mounted, and
+   * quietly does nothing for the rest of the session. That is the shape of the
+   * start menu bug that kept returning — a press that appeared to do nothing,
+   * and a second press that worked.
+   *
+   *   - The detach runs in a `finally`, so a `beforeUnload` hook that rejects —
+   *     a subscription that has already gone, a scrollbar pointed at a node
+   *     that was rebuilt — cannot skip it. The error still reaches the caller;
+   *     it just cannot stop the element leaving.
+   *   - `remove()` rather than `parent.removeChild()`, which throws when the
+   *     element is not where the parent believes it is. `remove()` on something
+   *     already detached is a no-op, so the pointer and the DOM always agree.
+   */
   async unload() {
-    await this.beforeUnload();
-    this.logger.debug(`Finished beforeUnload hook`);
+    try {
+      await this.beforeUnload();
+      this.logger.debug(`Finished beforeUnload hook`);
+    } finally {
+      this.element.remove();
+      this.parent = null;
 
-    this.parent?.removeChild(this.element);
-    this.parent = null;
-
-    this.unloadStyle();
-    this.logger.debug(`Finished unloadStyle hook`);
+      this.unloadStyle();
+      this.logger.debug(`Finished unloadStyle hook`);
+    }
 
     await this.afterUnload();
     this.logger.debug(`Finished afterUnload hook`);

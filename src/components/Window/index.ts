@@ -10,6 +10,8 @@ import { isNarrow } from "../../utils/utils";
 // `blur` is aliased: the constructor already has a WindowBlur named blur.
 import { blur as blurFx, color, radius, shadow } from "../../theme";
 import ScrollBar from "../Scrollbar";
+import Splash, { resolveSplash } from "../Splash";
+import type { SplashfulContent } from "../Splash";
 import { motion } from "../../utils/motion";
 import { bindContextMenu } from "../ContextMenu";
 import type { MenuItem } from "../ContextMenu";
@@ -17,6 +19,8 @@ import { windowMenuItems } from "../ContextMenu/menus";
 
 class OSWindow extends OSElement {
   private scrollbar: ScrollBar;
+  /** Over the content while it gets ready, when the content asked for one. */
+  private splash?: Splash;
   isDialog: boolean = false;
   windowPosition: any;
   className: string = "window";
@@ -395,6 +399,11 @@ class OSWindow extends OSElement {
     `;
     // overflow: hidden;
 
+    // Before the content is asked to load, not after: a content that takes a
+    // moment to mount is part of what there is to wait for, and a cover that
+    // arrives once it has finished has missed the wait it was there for.
+    await this.raiseSplash(main);
+
     if (typeof this.content.load === "function") {
 
       await this.content.load(main);
@@ -468,6 +477,52 @@ class OSWindow extends OSElement {
     }
 
     motion.windowIn(this.element);
+  }
+
+  /**
+   * Cover the content area until the content says it has something to show.
+   *
+   * The window mounts this rather than each content drawing its own, so every
+   * window waits the same way — see `components/Splash`. The default is built
+   * from this window's own title, and content that wants something else says
+   * only that much; content that says nothing about being ready is taken to be
+   * ready, which is true of a page of prose and was true of every window here
+   * until apps arrived.
+   */
+  private async raiseSplash(main: HTMLElement): Promise<void> {
+    const content = this.content as SplashfulContent | undefined;
+    const spec = resolveSplash(content, this.title);
+    const ready = content?.ready;
+    if (!spec || !ready) return;
+
+    this.splash = new Splash(spec);
+    await this.splash.load(main);
+
+    // Settled either way: a content that gave up has as much to show as one
+    // that succeeded — its own account of what went wrong — and either is
+    // better than the cover it is under.
+    void Promise.resolve(ready)
+      .catch(() => undefined)
+      .then(() => this.splash?.reveal());
+  }
+
+  /**
+   * Take the content down with the window.
+   *
+   * Nothing did this before, so a window closed on an app left its frame
+   * fetching a page into an element nobody could see, and a Projects window
+   * left an observer watching a node that had gone. The content's own
+   * `beforeUnload` is where each of those is already handled — it simply was
+   * never called.
+   */
+  public async beforeUnload(): Promise<void> {
+    await super.beforeUnload();
+
+    await this.splash?.dismiss();
+    this.splash = undefined;
+
+    const content = this.content as { unload?: () => unknown } | undefined;
+    if (typeof content?.unload === "function") await content.unload();
   }
 
   makeResizable() {

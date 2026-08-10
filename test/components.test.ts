@@ -12,10 +12,6 @@ import Taskbar from '../src/components/Taskbar'
 import TaskbarButtons from '../src/components/Taskbar/button'
 import Desktop from '../src/components/Desktop'
 import StartMenu from '../src/components/StartMenu'
-import MenuGrid from '../src/components/StartMenu/menuGrid'
-import MenuItem from '../src/components/StartMenu/menuItem'
-import ProfileImg from '../src/components/StartMenu/profileImg'
-import User from '../src/components/StartMenu/user'
 import TitleBar from '../src/components/Window/titlebar'
 import TopBar from '../src/components/Window/topbar'
 import WindowBlur from '../src/components/Window/blur'
@@ -477,46 +473,13 @@ describe('Desktop', () => {
   })
 })
 
-describe('StartMenu pieces', () => {
-  it('MenuGrid loads', async () => {
-    const grid = new MenuGrid()
-    await grid.load(host)
-    expect(host.contains(grid.getElement())).toBe(true)
-  })
-
-  it('ProfileImg loads', async () => {
-    const img = new ProfileImg()
-    await img.load(host)
-    expect(host.contains(img.getElement())).toBe(true)
-  })
-
-  it('User renders the name and role', async () => {
-    const user = new User()
-    await user.load(host)
-    expect(user.getElement().textContent).toContain('James')
-    expect(user.getElement().textContent).toContain('Software Engineer')
-  })
-
-  it('MenuItem renders its label and fires its action on click', async () => {
-    const action = vi.fn()
-    const item = new MenuItem({
-      icon: document.createElement('i'),
-      text: 'Experience',
-      action,
-    })
-    await item.load(host)
-    expect(item.getElement().textContent).toContain('Experience')
-    item.getElement().click()
-    expect(action).toHaveBeenCalled()
-  })
-})
-
 describe('StartMenu', () => {
-  it('builds its menu items and loads', async () => {
+  it('builds its board and loads', async () => {
     const menu = new StartMenu(makeDesktop())
     await menu.load(host)
     expect(host.contains(menu.getElement())).toBe(true)
     expect(menu.getElement().textContent).toContain('James')
+    await menu.unload()
   })
 })
 

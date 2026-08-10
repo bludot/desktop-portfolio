@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
@@ -48,17 +48,6 @@ describe('the external apps list', () => {
 })
 
 describe('AppContent', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  /** The cover leaves on a microtask, after the fade nothing renders resolves. */
-  const settle = () => vi.waitFor(() => expect(host.querySelector('.app-cover')).toBeNull())
-
   it('frames the app', async () => {
     const content = new AppContent(app())
     await content.load(host)
@@ -75,70 +64,61 @@ describe('AppContent', () => {
     await content.unload()
   })
 
-  // The frame is transparent until the app paints into it, so without a cover
-  // the window opens onto its own empty chrome and says nothing.
-  it('covers the frame until it loads, naming what is coming', async () => {
+  /*
+   * The frame is transparent until the app paints into it, so the window covers
+   * it — see the splash tests for the cover itself. All this content owes it is
+   * a promise that settles when the frame stops being pending.
+   */
+  it('is ready once the frame answers', async () => {
     const content = new AppContent(app())
     await content.load(host)
 
-    expect(host.querySelector('.app-cover')?.textContent).toContain('thing.example')
-    expect(host.querySelector('.app-spinner')).toBeTruthy()
+    let ready = false
+    void content.ready.then(() => {
+      ready = true
+    })
+    await Promise.resolve()
+    expect(ready).toBe(false)
 
     host.querySelector('iframe')!.dispatchEvent(new Event('load'))
-    await settle()
+    await content.ready
+    expect(ready).toBe(true)
 
-    expect(host.querySelector('iframe')).toBeTruthy()
     await content.unload()
   })
 
   /*
-   * The one failure that can be seen from in here: a frame that never answers.
-   * A frame that is *refused* fires `load` almost at once — the browser's error
-   * page loads — so it is indistinguishable from a fast app and no timer
-   * catches it. This covers the silence, which is all it claims to.
+   * `load` fires for a page that arrived and for one the browser replaced with
+   * an error page, and frames rarely fire `error` at all — so the cover comes
+   * off for either. It is in the way of whatever is underneath, and once
+   * anything is underneath it should go.
    */
-  it('explains itself when the frame stays silent', async () => {
+  it('is ready when the frame errors, rather than waiting forever', async () => {
     const content = new AppContent(app())
     await content.load(host)
 
-    expect(host.querySelector('.app-notice')).toBeNull()
-    vi.advanceTimersByTime(10_000)
-
-    expect(host.querySelector('.app-notice')?.textContent).toContain('thing.example')
-    expect(host.querySelector('.app-cover')).toBeNull()
-    // The frame is left alone underneath; it may still be on its way.
-    expect(host.querySelector('iframe')).toBeTruthy()
-    await content.unload()
-  })
-
-  it('takes the notice away when dismissed, leaving the frame', async () => {
-    const content = new AppContent(app())
-    await content.load(host)
-    vi.advanceTimersByTime(10_000)
-
-    host.querySelector<HTMLButtonElement>('.app-notice-close')!.click()
-
-    expect(host.querySelector('.app-notice')).toBeNull()
-    expect(host.querySelector('iframe')).toBeTruthy()
-    await content.unload()
-  })
-
-  // Leaving it up would hide a working app behind a paragraph about how it
-  // might not work.
-  it('drops the notice if the frame answers after the wait ran out', async () => {
-    const content = new AppContent(app())
-    await content.load(host)
-    vi.advanceTimersByTime(10_000)
-    expect(host.querySelector('.app-notice')).toBeTruthy()
-
-    host.querySelector('iframe')!.dispatchEvent(new Event('load'))
-    await vi.waitFor(() => expect(host.querySelector('.app-notice')).toBeNull())
+    host.querySelector('iframe')!.dispatchEvent(new Event('error'))
+    await expect(content.ready).resolves.toBeUndefined()
 
     await content.unload()
   })
 
-  // A page still loading into a window that has gone would carry on fetching,
-  // and a window that has gone should not still be counting down to a notice.
+  // What the default cover cannot know: which host is being waited on, what the
+  // app looks like, and what its silence would mean.
+  it('overrides the cover with the app it is waiting for', async () => {
+    const content = new AppContent(app())
+    const splash = content.splash as Exclude<typeof content.splash, false>
+
+    expect(splash.label).toContain('thing.example')
+    expect(splash.icon).toBe('/apps/thing.svg')
+    expect(splash.patience).toBe(10_000)
+
+    const notice = splash.notice!()
+    expect(notice.title).toContain('Thing')
+    expect(notice.actions?.[0].href).toBe('https://thing.example')
+  })
+
+  // A page still loading into a window that has gone would carry on fetching.
   it('stops the frame loading when the window closes', async () => {
     const content = new AppContent(app())
     await content.load(host)
@@ -147,7 +127,6 @@ describe('AppContent', () => {
     await content.unload()
 
     expect(frame.getAttribute('src')).toBe('about:blank')
-    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

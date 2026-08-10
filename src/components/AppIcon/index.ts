@@ -10,7 +10,7 @@ import type { App } from "../../apps/external";
  * initial in a tinted square takes its place — which is a real mark, not an
  * apology for a missing one.
  */
-export function appIcon(app: App, size = 20): HTMLElement {
+export function appMark(app: App, size = 20): HTMLElement {
   const box = document.createElement("span");
   box.className = "app-icon";
   box.setAttribute("aria-hidden", "true");
@@ -21,16 +21,7 @@ export function appIcon(app: App, size = 20): HTMLElement {
     "display:inline-grid",
     "place-items:center",
     "overflow:hidden",
-    "border-radius:5px",
-    /*
-     * The same gutter the menu's other icons set on themselves.
-     *
-     * Every icon in the start menu is an inline SVG carrying `margin: 0 10px`,
-     * so a favicon without it sat hard against the panel edge and its label
-     * started 10px left of every other label — one row visibly out of line with
-     * the eight around it.
-     */
-    "margin:0 10px"
+    "border-radius:5px"
   ].join(";");
 
   const img = document.createElement("img");
@@ -67,6 +58,21 @@ export function appIcon(app: App, size = 20): HTMLElement {
   );
 
   box.appendChild(img);
+  return box;
+}
+
+/**
+ * The same mark, with the gutter a menu row wants.
+ *
+ * Every icon in the start menu is an inline SVG carrying `margin: 0 10px`, so a
+ * favicon without it sits hard against the panel edge and its label starts
+ * 10px left of every other label — one row visibly out of line with the rest.
+ * Surfaces that do their own spacing — a taskbar chip, a springboard tile —
+ * want `appMark` instead.
+ */
+export function appIcon(app: App, size = 20): HTMLElement {
+  const box = appMark(app, size);
+  box.style.margin = "0 10px";
   return box;
 }
 

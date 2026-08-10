@@ -7,6 +7,7 @@ import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
 import { bindContextMenu } from "../ContextMenu";
+import { icon as glyph, markFor } from "../Icon";
 import Logger from "../../Logger";
 
 /*
@@ -70,15 +71,6 @@ class TaskbarButton extends OSElement {
     });
   }
 }
-/** Chip glyphs, matching the ones the launcher uses. */
-const GLYPHS: Record<string, string> = {
-  About: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></svg>`,
-  Experience: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="7.5" width="18" height="12.5" rx="1.6"/><path d="M8.5 7.5V6A1.5 1.5 0 0 1 10 4.5h4A1.5 1.5 0 0 1 15.5 6v1.5"/></svg>`,
-  Debugger: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5.5 8.5 4 3.5-4 3.5M12.5 16h6"/></svg>`
-};
-
-const glyphFor = (title: string): string | undefined => GLYPHS[title];
-
 class TaskbarButtons extends OSElement {
   buttons: TaskbarButton[];
   private openList!: HTMLElement;
@@ -96,143 +88,18 @@ class TaskbarButtons extends OSElement {
   constructor(desktop: Desktop) {
     super("taskbar-buttons", "taskbar-buttons");
     this.desktop = desktop;
+    /*
+     * The board owns whether it is up.
+     *
+     * This used to be a `menuOpen` boolean out here, flipped the instant a
+     * transition started, with the mounting and the animation happening after —
+     * so for the length of every open and close the taskbar believed something
+     * that was not yet true, and any failure in between left the two disagreeing
+     * for good. That is the bug that kept coming back: a button toggling a menu
+     * that was not there, one press appearing to do nothing and the next one
+     * working. Nothing out here tracks it now; see `StartMenu.toggle`.
+     */
     const startMenu = new StartMenu(desktop);
-
-    /*
-     * The launcher is a toggle, so its state lives here rather than being
-     * inferred. Previously each open registered a fresh pair of window click
-     * listeners and there was no record of whether the menu was already up, so
-     * pressing the button twice raced an open against a close.
-     */
-    let menuOpen = false;
-    let startButton: HTMLElement | null = null;
-
-    /*
-     * Opens and closes run one at a time, never interleaved.
-     *
-     * Both of them await — loading the menu, then animating it — and a close
-     * landing inside an open's await was enough to break the launcher for good:
-     * the close would unload before the load had appended anything, so nothing
-     * was removed, and then the load finished and appended the menu anyway. The
-     * menu was on screen with the state saying it was shut, and the next click
-     * called load() a second time, which throws.
-     *
-     * The rejection handler is the same task, so one failure retries rather
-     * than wedging the queue for the rest of the session.
-     */
-    let pending: Promise<void> = Promise.resolve();
-    const queue = (task: () => Promise<void>): Promise<void> => {
-      pending = pending.then(task, task);
-      return pending;
-    };
-
-    const onDocumentClick = (e: MouseEvent) => {
-      // The button toggles itself; anything else dismisses. A click aimed
-      // straight at window has window as its target, and Node.contains throws
-      // on anything that is not a Node.
-      const target = e.target instanceof Node ? e.target : null;
-      const inside = !!(target && startButton && startButton.contains(target));
-      logger.debug(
-        `dismiss: inside=${inside} open=${menuOpen} target=${
-          target instanceof Element ? target.tagName.toLowerCase() : "window"
-        }`
-      );
-      if (inside) return;
-      void queue(closeMenu);
-    };
-
-    // Read inside the queued task, not when it is queued: by the time this
-    // runs, an earlier click may already have changed the answer.
-    const toggleMenu = () =>
-      queue(async () => {
-        if (menuOpen) {
-          await closeMenu();
-        } else {
-          await openMenu();
-        }
-      });
-
-    const openMenu = async () => {
-      logger.debug(`open: alreadyOpen=${menuOpen}`);
-      if (menuOpen) return;
-      menuOpen = true;
-
-      const el = startMenu.getElement();
-
-      /*
-       * Attached now rather than after the await. Capture on window runs before
-       * the event reaches the button, so this click is already past that phase
-       * and cannot re-enter here — whereas deferring registration left a gap in
-       * which a click landed with the menu open and nothing listening.
-       */
-      window.addEventListener("click", onDocumentClick, true);
-
-      /*
-       * Whatever happens in between, the menu must not be left hidden.
-       *
-       * It is hidden here and shown again three lines down, and anything that
-       * threw between the two — a load that found the element still mounted,
-       * an animation that rejected — left it in the page at zero opacity with
-       * the state insisting it was open. Nothing appeared, and the next press
-       * closed the invisible menu rather than opening a visible one, so it took
-       * two presses to see anything.
-       */
-      try {
-        await startMenu.load(document.querySelector("#app") as HTMLElement);
-        // `enter` owns the hide and the reveal. Doing it here by hand is what
-        // made the menu blink as it finished opening: the entrance fills
-        // backwards, so on its last frame the element fell back to the inline
-        // `opacity: 0` that was only cleared after the await.
-        await motion.enter(el, motion.popIn);
-      } catch (error) {
-        /*
-         * An open that failed is not an open. Leaving the state saying it was
-         * is what made the launcher need two presses afterwards: the next one
-         * closed a menu that had never appeared, and only the one after it
-         * opened anything.
-         */
-        logger.debug(`open failed: ${error}`);
-        menuOpen = false;
-        window.removeEventListener("click", onDocumentClick, true);
-        try {
-          await startMenu.unload();
-        } catch {
-          // Never loaded, so there is nothing to take down.
-        }
-      } finally {
-        // Belt and braces for the failure path: `enter` clears this itself on
-        // the way through, and a menu that threw must not be left invisible.
-        el.style.opacity = "";
-      }
-
-      logger.debug(
-        `open done: mounted=${!!el.parentElement} opacity=${
-          el.isConnected ? getComputedStyle(el).opacity : "n/a"
-        } held=${el.getAnimations?.().length ?? 0}`
-      );
-    };
-
-    const closeMenu = async () => {
-      logger.debug(`close: wasOpen=${menuOpen}`);
-      if (!menuOpen) return;
-      menuOpen = false;
-      window.removeEventListener("click", onDocumentClick, true);
-      /*
-       * The same, in reverse: a failure here must still unload, or the element
-       * stays mounted and the next load() throws because it already has a
-       * parent.
-       */
-      try {
-        await motion.popOut(startMenu.getElement());
-      } catch (error) {
-        logger.debug(`close animation failed: ${error}`);
-      }
-      try {
-        await startMenu.unload();
-      } catch (error) {
-        logger.debug(`close failed: ${error}`);
-      }
-    };
 
     this.buttons = [
       new TaskbarButton({
@@ -271,9 +138,13 @@ class TaskbarButtons extends OSElement {
           return container;
         })(),
         action: (element: HTMLElement) => {
-          logger.debug(`pressed: open=${menuOpen}`);
-          startButton = element;
-          void toggleMenu();
+          logger.debug(`pressed: open=${startMenu.isOpen}`);
+          // The button is handed over as the anchor: a press on it is a toggle,
+          // not a dismissal, and only the board can tell those apart.
+          void startMenu.toggle(
+            document.querySelector("#app") as HTMLElement,
+            element
+          );
         }
       })
     ];
@@ -299,16 +170,7 @@ class TaskbarButtons extends OSElement {
     this.search.className = "taskbar-search";
     this.search.type = "button";
     this.search.setAttribute("aria-label", "Search apps, windows and projects");
-    this.search.appendChild(
-      new DOMParser().parseFromString(
-        // The namespace is not decoration: parsed as XML without it, the tag is
-        // an element called "svg" in no namespace at all, which the browser
-        // sizes from the stylesheet and then draws nothing inside. The chip has
-        // been showing a 13px hole where the magnifier should be.
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
-        "image/svg+xml"
-      ).documentElement
-    );
+    this.search.appendChild(glyph("search"));
     const shortcut = document.createElement("span");
     shortcut.className = "taskbar-search-key";
     shortcut.setAttribute("aria-hidden", "true");
@@ -508,12 +370,15 @@ class TaskbarButtons extends OSElement {
         (open.active ? " is-active" : "") +
         (open.minimized ? " is-minimized" : "");
       chip.type = "button";
-      const glyph = glyphFor(open.title);
-      if (glyph) {
-        chip.appendChild(
-          new DOMParser().parseFromString(glyph, "image/svg+xml").documentElement
-        );
-      }
+      /*
+       * Whatever this window is drawn as everywhere else.
+       *
+       * The chips used to keep their own three-entry table of glyphs, so
+       * Projects and every app had a label and no mark — the same window with
+       * an icon in the menu and none here. `markFor` is now the one answer.
+       */
+      const mark = markFor(open.title);
+      if (mark) chip.appendChild(mark);
       const label = document.createElement("span");
       label.appendChild(document.createTextNode(open.title));
       chip.appendChild(label);
@@ -573,11 +438,7 @@ class TaskbarButtons extends OSElement {
     const open = windowManager.list();
     this.switcher.textContent = "";
 
-    const icon = new DOMParser().parseFromString(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="8" height="7" rx="1.4"/><rect x="13" y="4" width="8" height="7" rx="1.4"/><rect x="3" y="13" width="8" height="7" rx="1.4"/><rect x="13" y="13" width="8" height="7" rx="1.4"/></svg>`,
-      "image/svg+xml"
-    ).documentElement;
-    this.switcher.appendChild(icon);
+    this.switcher.appendChild(glyph("windows"));
 
     const count = document.createElement("span");
     count.appendChild(document.createTextNode(String(open.length)));

@@ -19,10 +19,14 @@ import {
   knowledgeIndex,
   personal,
   refuse,
+  today,
   type Document
 } from "../../ai";
 import { loadRepos } from "../../utils/github";
 import { SEARCH_URL } from "../../utils/websearch";
+import { Download, remaining } from "./progress";
+import { MADE_UP, SHOWN, parseQuestions, suggest } from "./suggestions";
+import { prefersReducedMotion } from "../../utils/motion";
 
 /**
  * A conversation with a model that lives on this machine.
@@ -32,7 +36,7 @@ import { SEARCH_URL } from "../../utils/websearch";
  * window and opening it again resumes with the model already warm.
  *
  * The window opens immediately and fills in, rather than sitting behind the
- * usual splash. A third of a gigabyte is a wait somebody should be able to
+ * usual splash. The better part of a gigabyte is a wait somebody should be able to
  * watch and change their mind about, and a cover with a spinner says less than
  * a percentage does. That is also why the first thing in the transcript is what
  * this is: half a billion parameters, running here, which writes fluent
@@ -47,18 +51,35 @@ import { SEARCH_URL } from "../../utils/websearch";
  * writing prompt — the first version of this window answered a greeting with a
  * scene, complete with invented colleagues — so the instructions that earn
  * their place are the ones that rule that out: answer, do not narrate, stop.
+ *
+ * The date is the exception, and it is handed over rather than known. The model
+ * has no clock; the page it is running in has one, and a window that can read
+ * it and refuses to is being precious rather than honest. What it still does
+ * not have is the news — knowing that it is August 2026 is not knowing anything
+ * that happened in it — so the line below gives the one without implying the
+ * other.
  */
-const SYSTEM: Message = {
+const system = (now: Date): Message => ({
   role: "system",
   content: [
     "You are a small language model running offline in James's portfolio desktop, inside the visitor's own browser.",
-    "You cannot browse the web, search, open programs, or see the screen, and you know nothing about today: not the date, the news, prices, or what is currently airing or released.",
+    `Today is ${today(now)} — the desktop read that off the visitor's machine and told you; you may state it.`,
+    "You cannot browse the web, search, open programs, or see the screen, and knowing the date tells you nothing about the news, prices, or what is currently airing or released.",
     "If you are asked to look something up or for anything current, say in one sentence that you cannot — never offer to search.",
+    /*
+     * Two rules rather than one, because the old single "one or two short
+     * sentences" outranked the grounded instruction underneath it: handed four
+     * sentences of notes about this desktop, it answered "This desktop is
+     * written in TypeScript." and stopped. Brevity is still the default — it is
+     * what keeps a small model from wandering — but notes in the window are the
+     * one case where there is something to be longer about.
+     */
+    "When notes are given, answer from them in two or three sentences, using their specifics.",
     "Otherwise answer directly, in one or two short sentences.",
     "Never invent dialogue, characters, or stage directions.",
     "If you do not know something, say so plainly."
   ].join(" ")
-};
+});
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -73,7 +94,9 @@ interface ChatChoice {
 
 class ChatContent extends OSElement {
   private engine: ChatEngine;
-  private history: Message[] = [SYSTEM];
+  // Stamped when the window opens, not when the module loads: a desktop left
+  // open overnight should not tell the model it is still yesterday.
+  private history: Message[] = [system(new Date())];
   private choice: ChatChoice = { model: CHAT_MODEL, device: "auto" };
 
   private log!: HTMLElement;
@@ -82,6 +105,10 @@ class ChatContent extends OSElement {
   private send!: HTMLButtonElement;
   private status!: HTMLElement;
   private pip!: HTMLElement;
+  private bar!: HTMLElement;
+  private fill!: HTMLElement;
+  private openings!: HTMLElement;
+  private openingRow!: HTMLElement;
   private models!: HTMLSelectElement;
   private devices!: HTMLSelectElement;
 
@@ -96,8 +123,11 @@ class ChatContent extends OSElement {
    * long pole, and the notes are 23MB the launcher may well have fetched
    * already. Nothing waits on it — a question asked before it is ready is
    * simply answered without notes.
+   *
+   * Passed in for the same reason the engine is: a test should be able to say
+   * what this window knows without a thread and a set of weights.
    */
-  private readonly knowledge = knowledgeIndex();
+  private readonly knowledge: ReturnType<typeof knowledgeIndex>;
 
   /**
    * What the last answer was built from.
@@ -109,6 +139,27 @@ class ChatContent extends OSElement {
   private sources: Document[] = [];
 
   /**
+   * Every question that has been put, however it was put.
+   *
+   * Only so the same suggestion is not offered twice: a list that keeps
+   * offering what has just been answered is the tell that it is a list rather
+   * than a conversation.
+   */
+  private readonly answered = new Set<string>();
+
+  /**
+   * Follow-ups the model wrote, after they were checked against the notes.
+   *
+   * Emptied the moment a new question is asked: they were about the previous
+   * answer, and leaving them up under a new one is how a window ends up
+   * suggesting something the conversation has moved past.
+   */
+  private made: string[] = [];
+
+  /** The follow-ups being written, so a new question can abandon them. */
+  private thinkingUp?: AbortController;
+
+  /**
    * How an engine is got, rather than the engine itself.
    *
    * The picker builds a new one whenever the model or the device changes, so
@@ -118,13 +169,27 @@ class ChatContent extends OSElement {
   private readonly makeEngine: (model: string, device: DevicePreference) => ChatEngine;
 
   constructor(
-    makeEngine: (model: string, device: DevicePreference) => ChatEngine = chat
+    makeEngine: (model: string, device: DevicePreference) => ChatEngine = chat,
+    knowledge: ReturnType<typeof knowledgeIndex> = knowledgeIndex()
   ) {
     super("chatcontent", "chat-content");
     this.makeEngine = makeEngine;
+    this.knowledge = knowledge;
     this.engine = makeEngine(this.choice.model, this.choice.device);
 
     this.style = () => ({
+      // The segment that travels while a download has started but has not yet
+      // reported a byte. See `.chat-progress.is-waiting`.
+      "@keyframes chat-waiting": {
+        from: { transform: "translateX(-40%)" },
+        to: { transform: "translateX(340%)" }
+      },
+      // Full width, breathing: everything has arrived and the model is being
+      // built out of it. See `.chat-progress.is-preparing`.
+      "@keyframes chat-preparing": {
+        "0%, 100%": { opacity: 1 },
+        "50%": { opacity: 0.35 }
+      },
       [this.id]: {
         display: "flex",
         flexDirection: "column",
@@ -139,10 +204,19 @@ class ChatContent extends OSElement {
          * One row saying what is true now, with everything that is always true
          * folded behind it. The whole row is the summary, so the affordance is
          * the band rather than a word inside it.
+         *
+         * The band and the download bar share a container so the bar can be
+         * drawn *on* the band's bottom edge rather than under it — one line that
+         * fills, instead of a second line that appears and shoves the
+         * conversation down a few pixels.
          */
-        "& .chat-band": {
+        "& .chat-head": {
           flex: "0 0 auto",
+          position: "relative",
           borderBottom: `1px solid ${color.lineSoft}`
+        },
+        "& .chat-band": {
+          flex: "0 0 auto"
         },
         "& .chat-band summary": {
           display: "flex",
@@ -197,6 +271,77 @@ class ChatContent extends OSElement {
         },
         "& .chat-private": { marginLeft: "auto" },
         "& .chat-band[open] .chat-more": { color: color.ink },
+
+        // -------------------------------------------------- the download
+        /*
+         * Two pixels along the bottom edge, and only while something is
+         * arriving. A percentage in a line of text is a number to read; this is
+         * a thing to glance at, which is what somebody deciding whether to wait
+         * actually does.
+         */
+        "& .chat-progress": {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          // Over the container's own hairline, not below it: the edge becomes
+          // the bar rather than gaining a second one.
+          bottom: "-1px",
+          height: "2px",
+          overflow: "hidden",
+          background: color.lineSoft
+        },
+        "& .chat-progress[hidden]": { display: "none" },
+        "& .chat-progress-fill": {
+          display: "block",
+          width: 0,
+          height: "100%",
+          background: color.accent,
+          transition: "width 240ms linear"
+        },
+        /*
+         * Before the first byte is counted there is nothing honest to fill to —
+         * the connection is still opening. A segment that travels says that
+         * much and no more; the moment there is a real number it stops.
+         */
+        "& .chat-progress.is-waiting .chat-progress-fill": {
+          width: "30%",
+          transition: "none",
+          animation: "$chat-waiting 1.4s ease-in-out infinite"
+        },
+        /*
+         * Full, and still working. The last byte is not the last of the wait —
+         * the graph still has to be built — so the bar breathes rather than
+         * standing at 100% looking hung.
+         */
+        "& .chat-progress.is-preparing .chat-progress-fill": {
+          animation: "$chat-preparing 1.6s ease-in-out infinite"
+        },
+        /*
+         * Nothing travels for somebody who asked for less movement. The track
+         * fills faintly instead, which still separates "fetching" from
+         * "nothing is happening" — the only thing this state has to say.
+         */
+        "& .chat-progress.is-waiting.is-still .chat-progress-fill": {
+          animation: "none",
+          width: "100%",
+          opacity: 0.3
+        },
+        "& .chat-progress.is-preparing.is-still .chat-progress-fill": {
+          animation: "none",
+          opacity: 0.55
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          "& .chat-progress-fill": { transition: "none" },
+          "& .chat-progress.is-waiting .chat-progress-fill": {
+            animation: "none",
+            width: "100%",
+            opacity: 0.3
+          },
+          "& .chat-progress.is-preparing .chat-progress-fill": {
+            animation: "none",
+            opacity: 0.55
+          }
+        },
 
         "& .chat-what": {
           display: "flex",
@@ -347,6 +492,62 @@ class ChatContent extends OSElement {
           outlineOffset: "1px"
         },
 
+        // -------------------------------------------------- the openings
+        /*
+         * Questions to click, for anybody looking at an empty box.
+         *
+         * They live in the transcript rather than above the input, so they sit
+         * where the conversation will be and leave with it. During the
+         * download they are also the only thing in the window worth reading,
+         * which is most of why they are here rather than in a strip.
+         */
+        "& .chat-openings": {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          gap: "8px",
+          paddingTop: "2px"
+        },
+        "& .chat-openings[hidden]": { display: "none" },
+        "& .chat-openings-label": {
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.caps,
+          textTransform: "uppercase",
+          color: color.inkFaint
+        },
+        "& .chat-openings-row": {
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "7px"
+        },
+        "& .chat-opening": {
+          maxWidth: "100%",
+          padding: "6px 12px",
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.pill,
+          background: "transparent",
+          color: color.inkSoft,
+          font: "inherit",
+          fontSize: size.caption,
+          textAlign: "left",
+          cursor: "pointer",
+          transition: "background 150ms ease, color 150ms ease, border-color 150ms ease"
+        },
+        "& .chat-opening:hover:not(:disabled)": {
+          background: color.hover,
+          color: color.accent,
+          borderColor: color.accent
+        },
+        "& .chat-opening:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "1px"
+        },
+        // Offered while the weights are still arriving, because reading them is
+        // something to do with the wait — but not clickable until there is
+        // something to answer with.
+        "& .chat-opening:disabled": { opacity: 0.45, cursor: "default" },
+
         "& .chat-form": {
           flex: "0 0 auto",
           display: "flex",
@@ -402,7 +603,10 @@ class ChatContent extends OSElement {
   }
 
   private build() {
-    this.element.appendChild(this.band());
+    const head = document.createElement("div");
+    head.className = "chat-head";
+    head.append(this.band(), this.progress());
+    this.element.appendChild(head);
 
     this.log = document.createElement("div");
     this.log.className = "chat-log";
@@ -411,6 +615,8 @@ class ChatContent extends OSElement {
     this.log.setAttribute("role", "log");
     this.log.setAttribute("aria-live", "polite");
     this.element.appendChild(this.log);
+    this.openings = this.buildOpenings();
+    this.offer();
 
     this.form = document.createElement("form");
     this.form.className = "chat-form";
@@ -428,6 +634,12 @@ class ChatContent extends OSElement {
         this.form.requestSubmit();
       }
     });
+    /*
+     * Somebody with a question of their own does not need three of ours in the
+     * way. They come back if the box is emptied again — deciding not to type
+     * is exactly when they are wanted.
+     */
+    this.input.addEventListener("input", () => this.offer());
 
     this.send = document.createElement("button");
     this.send.type = "submit";
@@ -514,6 +726,208 @@ class ChatContent extends OSElement {
     box.appendChild(body);
 
     return box;
+  }
+
+  /**
+   * The questions on offer, and the row they live in.
+   *
+   * One element, moved to the end of the transcript each time it is filled, so
+   * the offer always sits under the last thing said rather than at the top of a
+   * conversation that has moved on.
+   */
+  private buildOpenings(): HTMLElement {
+    const box = document.createElement("div");
+    box.className = "chat-openings";
+
+    const label = document.createElement("span");
+    label.className = "chat-openings-label";
+    label.appendChild(document.createTextNode("Try asking"));
+    box.appendChild(label);
+
+    this.openingRow = document.createElement("div");
+    this.openingRow.className = "chat-openings-row";
+    // A group rather than a list: these are controls, and a screen reader
+    // should be told what the set of them is for before reading eleven words
+    // of the first one.
+    this.openingRow.setAttribute("role", "group");
+    this.openingRow.setAttribute("aria-label", "Suggested questions");
+    box.appendChild(this.openingRow);
+
+    return box;
+  }
+
+  /**
+   * Put the next few questions up, or take them away.
+   *
+   * Away when somebody is typing — they have their own question and ours are
+   * in the way — and away for good once there is nothing left unasked.
+   */
+  private offer() {
+    const typing = this.input?.value.trim().length > 0;
+    const next = typing
+      ? []
+      : suggest(this.answered, this.sources.map((p) => p.source), SHOWN, this.made);
+
+    this.openingRow.textContent = "";
+    next.forEach((question) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chat-opening";
+      // Offered while the weights are still coming, so there is something to
+      // read during the wait; clickable only once there is an answer to give.
+      chip.disabled = this.phase !== "ready";
+      chip.appendChild(document.createTextNode(question));
+      chip.addEventListener("click", () => {
+        this.input.value = question;
+        this.form.requestSubmit();
+      });
+      this.openingRow.appendChild(chip);
+    });
+
+    this.openings.hidden = !next.length;
+    // To the end, under whatever was said last.
+    if (next.length) this.log.appendChild(this.openings);
+  }
+
+  /**
+   * Ask the model what somebody might want to know next.
+   *
+   * Better than a fixed list can be, because it has just read the passages the
+   * answer came from and a list has not — and worse than a fixed list in the
+   * one way that matters, which is that at this size it will happily invent a
+   * question about a James who does not exist. So nothing it writes is offered
+   * until retrieval has found something to answer it with: see `answerable`.
+   *
+   * In the background, after the answer. Nobody waits on a suggestion, and on
+   * a CPU this is another few seconds of generation.
+   */
+  private async imagine(found: Document[]) {
+    if (!found.length) return;
+
+    this.thinkingUp?.abort();
+    const mine = new AbortController();
+    this.thinkingUp = mine;
+
+    /*
+     * Its own exchange, not a turn in the conversation. Asked as part of the
+     * transcript, the request to write questions becomes something the model
+     * answers *again* two questions later — and the person reading it never
+     * asked for questions at all.
+     */
+    /*
+     * The rules earn their place, each one against a way this failed.
+     *
+     * Without a length, it writes "How did James contribute to the development
+     * of innovative technologies and methodologies?" — ninety characters of
+     * nothing, and no chip that size fits anywhere. Without "name something
+     * from the notes" it asks about innovation and impact rather than about
+     * Terraform. And asked for the questions with no other instruction it
+     * numbers them, so the numbers come off again on the way back.
+     */
+    const asked: Message[] = [
+      {
+        role: "user",
+        content: [
+          "Notes about James:",
+          found.map((passage) => passage.text).join("\n"),
+          "",
+          `Write ${MADE_UP} questions a reader might ask next about James, one per line.`,
+          "Rules: each under 10 words. Each must name something from the notes — a company, a tool, or a project. No numbering, no preamble."
+        ].join("\n")
+      }
+    ];
+
+    try {
+      const written = await this.engine.reply(asked, () => {}, mine.signal);
+      if (mine.signal.aborted || mine !== this.thinkingUp) return;
+
+      const kept: string[] = [];
+      for (const question of parseQuestions(written)) {
+        if (this.answered.has(question)) continue;
+        if (await this.answerable(question)) kept.push(question);
+      }
+      if (mine.signal.aborted || mine !== this.thinkingUp) return;
+
+      this.made = kept;
+      this.logger.debug(`follow-ups kept ${kept.length}: ${kept.join(" | ")}`);
+      if (!this.answering) this.offer();
+    } catch (error) {
+      // A suggestion nobody asked for is not worth reporting. The written-down
+      // questions are still there.
+      this.logger.debug(`follow-ups failed: ${error}`);
+    }
+  }
+
+  /**
+   * Whether there is anything here to answer a question with.
+   *
+   * The whole guard against a small model's inventions: it can write "What did
+   * James do at Spotify?" out of nothing, and retrieval will find nothing above
+   * the floor for it, and it is never offered. It proves only that something
+   * related exists — which is exactly the claim being made by putting it up.
+   */
+  private async answerable(question: string): Promise<boolean> {
+    if (!this.knowledge.ready) return false;
+    try {
+      return (await this.knowledge.search(question)).length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The download, as a line rather than as a number.
+   *
+   * It is a `progressbar` and not a decoration: the percentage is in the status
+   * text above it, but that text is one line in a band somebody may never look
+   * at twice, and a screen reader should be able to ask how far along this is
+   * rather than wait to be told.
+   */
+  private progress(): HTMLElement {
+    this.bar = document.createElement("div");
+    this.bar.className = "chat-progress";
+    this.bar.setAttribute("role", "progressbar");
+    this.bar.setAttribute("aria-label", "Downloading the model");
+    this.bar.setAttribute("aria-valuemin", "0");
+    this.bar.setAttribute("aria-valuemax", "100");
+
+    this.fill = document.createElement("span");
+    this.fill.className = "chat-progress-fill";
+    this.bar.appendChild(this.fill);
+
+    return this.bar;
+  }
+
+  /**
+   * Show the bar at a fraction, or hide it entirely.
+   *
+   * `undefined` is not zero: before anything has been counted there is no
+   * honest length to draw, so the bar says "something is happening" instead of
+   * claiming nought per cent. Hidden once there is nothing left to wait for —
+   * a finished bar is just a line.
+   */
+  private drawProgress(fraction?: number, preparing = false) {
+    this.bar.classList.toggle("is-still", prefersReducedMotion());
+    if (fraction === undefined) {
+      this.bar.classList.add("is-waiting");
+      this.bar.classList.remove("is-preparing");
+      this.bar.removeAttribute("aria-valuenow");
+      this.fill.style.width = "";
+      return;
+    }
+
+    const percent = Math.round(fraction * 100);
+    this.bar.setAttribute("aria-valuenow", String(percent));
+    /*
+     * A bar of no width is indistinguishable from a broken one, and the first
+     * seconds of any of these downloads are spent on files too small to move
+     * it. So it keeps travelling until there is a percent to show.
+     */
+    this.bar.classList.toggle("is-waiting", percent < 1);
+    // Full, and still working: the bytes are all in and the model is being
+    // built out of them. A static full bar is where somebody gives up.
+    this.bar.classList.toggle("is-preparing", preparing);
+    if (percent >= 1) this.fill.style.width = `${percent}%`;
   }
 
   private picker(): HTMLElement {
@@ -673,17 +1087,57 @@ class ChatContent extends OSElement {
   private async warm() {
     const chosen = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
     const size = chosen ? chosen.size : "a few hundred MB";
+    /*
+     * The whole price, said before any of it has been paid: the size, and that
+     * it is paid once. Everything after this is arithmetic on top of it, so it
+     * gets said while somebody is still deciding whether to wait.
+     */
     this.say(`Downloading the model… ${size}, once, then it is cached.`);
+    // Back from the start, since this also runs when somebody changes model
+    // halfway through a conversation.
+    this.bar.hidden = false;
+    this.drawProgress();
+    /*
+     * Measured against what this model actually weighs, not against the bytes
+     * the runtime has admitted to so far — which, for the first seconds, is a
+     * tokenizer. See `Download`.
+     */
+    const download = new Download(chosen?.bytes);
     try {
-      await this.engine.load((fraction) => {
+      await this.engine.load((_fraction, detail) => {
+        const { fraction, eta, preparing } = download.record(
+          detail.loaded,
+          detail.total
+        );
         const percent = Math.round(fraction * 100);
+        this.drawProgress(fraction, preparing);
+        /*
+         * Between the last byte and the first answer there is a real wait —
+         * the weights are read, the graph is built, and on a CPU that is
+         * seconds of arithmetic with nothing to report. Said plainly, because
+         * a bar sitting at 100% with no explanation is the moment somebody
+         * decides the page is broken.
+         */
+        if (preparing) {
+          this.say("Downloaded. Building the model — this takes a few seconds…");
+          return;
+        }
+        /*
+         * The estimate is left off until it is worth trusting — see
+         * `Download` — and the size goes when it arrives. The band is one line
+         * in a window somebody may have made narrow; the size was already said
+         * in full before any of this, and between "of ~185MB" and "about 20s
+         * left" the second is what a person waiting actually wants.
+         */
         this.say(
-          percent >= 100
-            ? "Starting it up…"
-            : `Downloading the model… ${percent}% of ${size}, once, then cached.`
+          eta === undefined
+            ? `Downloading… ${percent}% of ${size}, then cached`
+            : `Downloading… ${percent}% · ${remaining(eta)}`
         );
       });
       this.phase = "ready";
+      this.bar.hidden = true;
+      this.bar.classList.remove("is-waiting", "is-preparing");
       /*
        * The model's own name rather than "0.5B parameters": it is searchable,
        * and it is what somebody would tell a friend they had been using.
@@ -698,12 +1152,15 @@ class ChatContent extends OSElement {
       );
       this.input.disabled = false;
       this.send.disabled = false;
+      // The openings were readable through the download; now they work.
+      this.offer();
       this.input.focus();
       // In the background: a question asked before it lands is answered
       // without notes rather than made to wait.
       void this.learn();
     } catch (error) {
       this.phase = "failed";
+      this.bar.hidden = true;
       this.say(
         "The model could not be loaded here — usually an old browser, or no room left to cache it."
       );
@@ -818,6 +1275,16 @@ class ChatContent extends OSElement {
     if (!question || this.phase !== "ready" || this.answering) return;
 
     this.input.value = "";
+    this.answered.add(question);
+    /*
+     * Whatever the model was writing was about the previous answer. Abandoned
+     * rather than shown late, which is how a window ends up suggesting
+     * something the conversation has moved past.
+     */
+    this.thinkingUp?.abort();
+    this.made = [];
+    // Out of the way while this one is answered; back underneath the answer.
+    this.openings.hidden = true;
     this.turn("You", question);
     this.history.push({ role: "user", content: question });
 
@@ -843,6 +1310,7 @@ class ChatContent extends OSElement {
         : "Nothing in particular — there were no notes on that, so it was the model's own words. Treat it as unreliable.";
       this.turn("Model", answer);
       this.history.push({ role: "assistant", content: answer });
+      this.offer();
       this.input.focus();
       return;
     }
@@ -852,6 +1320,7 @@ class ChatContent extends OSElement {
       const said = this.turn("Model", refusal.answer);
       if (refusal.search) said.parentElement?.appendChild(this.webSearch(refusal.search));
       this.history.push({ role: "assistant", content: refusal.answer });
+      this.offer();
       this.input.focus();
       return;
     }
@@ -881,9 +1350,24 @@ class ChatContent extends OSElement {
       const previous = [...this.history]
         .reverse()
         .find((turn) => turn.role === "user" && turn.content !== question);
-      const found = (
-        await this.knowledge.search(contextual(question, previous?.content))
-      ).map((match) => match.document);
+
+      /*
+       * The question on its own first, and the previous one carried forward
+       * only if it turned up nothing.
+       *
+       * `contextual` carries context whenever a question is short, which is
+       * right for "what about weaknesses?" — nothing on its own — and wrong for
+       * "tell me about this os", which is short *and* changes the subject.
+       * Carried, that one scored 0.60 against the passage about James and
+       * answered a question nobody had asked; alone it finds the desktop. So
+       * the test is not length but whether the question stands up by itself.
+       */
+      let matches = await this.knowledge.search(question);
+      if (!matches.length) {
+        const carried = contextual(question, previous?.content);
+        if (carried !== question) matches = await this.knowledge.search(carried);
+      }
+      const found = matches.map((match) => match.document);
       this.sources = found;
       this.logger.debug(
         `grounded with ${found.length}: ${found.map((p) => p.source).join(" | ")}`
@@ -894,7 +1378,16 @@ class ChatContent extends OSElement {
           role: "user",
           content: ground(question, found, {
             heading: "Notes about James:",
-            instruction: "Using the notes above, answer briefly:",
+            /*
+             * Room to elaborate, but only here. A small model given room
+             * wanders — that is why the system prompt asks for one or two
+             * sentences — and the exception is the case where there is
+             * something in front of it to be long about. Asked what this
+             * desktop was written in, it answered "JavaScript" and stopped,
+             * with four sentences of notes above it going unused.
+             */
+            instruction:
+              "Using the notes above, answer in two or three sentences, with the specifics from the notes:",
             // Only when the notes were the only thing that could have answered.
             whenEmpty: personal(question) ? "say-unknown" : "ask-anyway"
           })
@@ -914,6 +1407,9 @@ class ChatContent extends OSElement {
       this.history.push({ role: "assistant", content: said.textContent ?? "" });
       if (found.length) said.parentElement?.appendChild(this.citation(found));
       this.ready();
+      // Written questions go up straight away in the `finally` below; these
+      // replace them if and when they arrive, and pass a check first.
+      void this.imagine(found);
     } catch (error) {
       said.textContent = said.textContent || "It stopped partway through.";
       this.logger.debug(`chat failed: ${error}`);
@@ -925,6 +1421,8 @@ class ChatContent extends OSElement {
       if (this.phase === "ready") {
         this.input.disabled = false;
         this.send.disabled = false;
+        // Under the answer, and about what it was about — see `suggest`.
+        this.offer();
         this.input.focus();
       }
     }
@@ -932,8 +1430,10 @@ class ChatContent extends OSElement {
 
   async beforeUnload() {
     // Whatever it was writing is for a window that has gone. The weights stay
-    // loaded: opening this again should not fetch a third of a gigabyte twice.
+    // loaded: opening this again should not fetch the better part of a
+    // gigabyte twice.
     this.stop?.abort();
+    this.thinkingUp?.abort();
   }
 }
 

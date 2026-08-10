@@ -233,3 +233,79 @@ describe('showing the working', () => {
     await content.unload()
   })
 })
+
+/*
+ * The model has no clock and no notion of "now". The page it runs in has both,
+ * and a window that can read them and refuses to is being precious rather than
+ * honest.
+ */
+describe('what the desktop knows that the model does not', () => {
+  const august = new Date('2026-08-10T12:00:00')
+
+  it('reads the date off the machine instead of refusing to', () => {
+    const said = refuse('what day is it?', august)!.answer
+    expect(said).toContain('10 August 2026')
+    // And says which of the two of them knew it.
+    expect(said).toContain('no clock of my own')
+  })
+
+  /*
+   * The one that was wrong. "Latest" is a word about the present and also how
+   * anybody asks what somebody has been working on — and his notes have dates
+   * in them, so the question is answerable and was being refused.
+   */
+  it('answers "latest" about James from his notes, and refuses it about the world', () => {
+    expect(refuse("what is James' latest project?")).toBeUndefined()
+    expect(refuse('what has he been working on recently?')).toBeUndefined()
+
+    expect(refuse('what is the latest news?')?.answer).toContain('present')
+    expect(refuse('what films are out now?')?.answer).toContain('present')
+  })
+
+  // "Can you search the web?" is a question about the model, not about James —
+  // and reading it as one about him is how an honest refusal becomes fiction.
+  it('still refuses the questions that are about itself', () => {
+    expect(refuse('can you search the web?')?.answer).toContain("can't search")
+    expect(refuse('can you look up his github for me?')?.answer).toContain("can't search")
+  })
+})
+
+/*
+ * "What is his latest project?" is a fair question about a man with ninety
+ * repositories, and it needs an ordering in the notes or the model picks a
+ * name off a list. Asked before this existed, it answered with a repository
+ * that had no date attached to it anywhere.
+ */
+describe('what he has worked on most recently', () => {
+  const at = (name: string, pushedAt: string) =>
+    repo({ name, pushedAt, description: `the ${name} thing` }) as any
+
+  it('puts the newest first, with the month it was touched', () => {
+    const docs = aboutJames([
+      at('older', '2024-01-01T00:00:00Z'),
+      at('newest', '2026-08-01T00:00:00Z'),
+      at('middle', '2025-06-01T00:00:00Z'),
+    ])
+    const recent = docs.find((d) => d.id === 'repos:recent')!
+
+    expect(recent.text).toContain('His latest project is newest')
+    expect(recent.text).toContain('August 2026')
+    // Newest first, so the order in the passage is the answer to the question.
+    expect(recent.text.indexOf('newest')).toBeLessThan(recent.text.indexOf('middle'))
+    expect(recent.text.indexOf('middle')).toBeLessThan(recent.text.indexOf('older'))
+  })
+
+  // Short on purpose: the version that listed eight repositories with their
+  // descriptions embedded as an average of everything in it and never placed.
+  it('stays short enough to be about recency rather than about eight projects', () => {
+    const many = Array.from({ length: 12 }, (_, i) =>
+      at(`project-${i}`, `2026-0${(i % 9) + 1}-01T00:00:00Z`),
+    )
+    const recent = aboutJames(many).find((d) => d.id === 'repos:recent')!
+    expect(recent.text).not.toContain('project-9')
+  })
+
+  it('says nothing at all when there are no repositories', () => {
+    expect(aboutJames([]).find((d) => d.id === 'repos:recent')).toBeUndefined()
+  })
+})

@@ -10,8 +10,11 @@ import {
   type ChatEngine,
   type ChatModel,
   type Message,
+  type Progress,
 } from '@thatcatdev/browser-ai'
 import { FEATURE_FLAG_DEFAULTS, loadSettings } from '../src/Store'
+import { knowledgeDocuments, knowledgeIndex } from '../src/ai'
+import db from '../src/Store'
 
 jss.setup(preset())
 jss.use(nested())
@@ -33,9 +36,75 @@ const stubEngine = (over: Partial<ChatEngine> = {}): ChatEngine => ({
   ...over,
 })
 
+/**
+ * A load that can be advanced from the test, in bytes.
+ *
+ * Bytes rather than a fraction because that is what the window is given and
+ * what it has to reason about: the runtime counts only the files it has met, so
+ * the total grows underneath the download. See `chat/progress`.
+ */
+const staged = (total = 800_000_000) => {
+  let report: ((loaded: number, total: number) => void) | undefined
+  let settle: (() => void) | undefined
+  const engine = stubEngine({
+    load: vi.fn(
+      (onProgress?: Progress) =>
+        new Promise<void>((resolve) => {
+          settle = resolve
+          report = (loaded, of) => {
+            const fraction = of ? Math.min(1, loaded / of) : 0
+            onProgress?.(fraction, { loaded, total: of, fraction })
+          }
+        }),
+    ) as ChatEngine['load'],
+  })
+  return {
+    engine,
+    /** Say how many bytes have arrived, and of how many known. */
+    to: (loaded: number, of: number = total) => report!(loaded, of),
+    /** And the model is up — which is its own wait, after the last byte. */
+    ready: () => {
+      report!(total, total)
+      settle!()
+    },
+  }
+}
+
+/**
+ * What the window knows about James, without a thread or a set of weights.
+ *
+ * One axis per topic, so retrieval is predictable: a question about Kafka
+ * matches the Kafka passages, and a question about Spotify matches nothing —
+ * which is the whole point when the model is allowed to write its own.
+ */
+const knowing = () => {
+  const topics: Record<string, string[]> = {
+    kafka: ['kafka', 'events', 'queue'],
+    gotu: ['gotu', 'engineering manager'],
+    stack: ['typescript', 'kubernetes', 'terraform'],
+  }
+  const axes = Object.keys(topics)
+  const vector = (text: string) => {
+    const lower = text.toLowerCase()
+    const values = axes.map((a) => (topics[a].some((w) => lower.includes(w)) ? 1 : 0))
+    const length = Math.hypot(...values) || 1
+    return Float32Array.from(values.map((v) => v / length))
+  }
+  return knowledgeIndex({
+    device: 'wasm',
+    load: vi.fn().mockResolvedValue(undefined),
+    embed: vi.fn(async (texts: string[]) => texts.map(vector)),
+    dispose: vi.fn(),
+  })
+}
+
 const input = () => host.querySelector<HTMLTextAreaElement>('.chat-input')!
 const send = () => host.querySelector<HTMLButtonElement>('.chat-send')!
 const status = () => host.querySelector<HTMLElement>('.chat-status')!
+const bar = () => host.querySelector<HTMLElement>('.chat-progress')!
+const openings = () => host.querySelector<HTMLElement>('.chat-openings')!
+const chips = () => [...host.querySelectorAll<HTMLButtonElement>('.chat-opening')]
+const fill = () => host.querySelector<HTMLElement>('.chat-progress-fill')!
 const turns = () =>
   [...host.querySelectorAll<HTMLElement>('.chat-turn')].map((turn) => ({
     who: turn.querySelector('.chat-who')?.textContent,
@@ -51,12 +120,25 @@ const ask = async (content: HTMLElement, text: string) => {
   return content
 }
 
-beforeEach(() => {
+let realFetch: typeof globalThis.fetch
+
+beforeEach(async () => {
+  // The notes are built from the repositories where they can be had. No test
+  // should be waiting on GitHub to answer: unreachable is a case this window
+  // handles, and it is the quick one.
+  realFetch = globalThis.fetch
+  globalThis.fetch = vi.fn(async () => {
+    throw new Error('offline')
+  }) as unknown as typeof globalThis.fetch
+  // Vectors are cached between visits; between tests they are somebody else's.
+  await db.cache.clear()
+
   host = document.createElement('div')
   document.body.appendChild(host)
 })
 
 afterEach(() => {
+  globalThis.fetch = realFetch
   setChatEngine(undefined)
   host.remove()
 })
@@ -82,32 +164,21 @@ describe('the chat window', () => {
     await content.unload()
   })
 
-  // A hundred megabytes is a wait somebody should be able to watch, so the
+  // Hundreds of megabytes is a wait somebody should be able to watch, so the
   // window opens straight away and says how far along it is.
   it('opens immediately and counts the download in', async () => {
-    let report: ((fraction: number) => void) | undefined
-    const engine = stubEngine({
-      load: vi.fn(
-        (onProgress?: (f: number) => void) =>
-          new Promise<void>((resolve) => {
-            report = (fraction) => {
-              onProgress?.(fraction)
-              if (fraction >= 1) resolve()
-            }
-          }),
-      ) as ChatEngine['load'],
-    })
+    const { engine, to, ready } = staged()
     const content = new ChatContent(() => engine)
     await content.load(host)
 
     await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
-    report!(0.42)
+    to(336_000_000)
     expect(status().textContent).toContain('42%')
 
     // Nothing can be typed until there is something to answer with.
     expect(input().disabled).toBe(true)
 
-    report!(1)
+    ready()
     await vi.waitFor(() => expect(input().disabled).toBe(false))
     await content.unload()
   })
@@ -119,6 +190,233 @@ describe('the chat window', () => {
     await content.load(host)
 
     await vi.waitFor(() => expect(status().textContent).toContain('no WebGPU'))
+    await content.unload()
+  })
+
+  /*
+   * A percentage is a number to read; the bar is a thing to glance at. Somebody
+   * deciding whether to sit through the better part of a gigabyte does the
+   * second.
+   */
+  it('draws the download as a bar, and takes it away when there is nothing left to wait for', async () => {
+    const { engine, to, ready } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+    // Nothing counted yet: no length is honest, so it says only that something
+    // is happening.
+    expect(bar().hidden).toBe(false)
+    expect(bar().classList.contains('is-waiting')).toBe(true)
+    expect(bar().hasAttribute('aria-valuenow')).toBe(false)
+
+    to(336_000_000)
+    expect(bar().classList.contains('is-waiting')).toBe(false)
+    expect(fill().style.width).toBe('42%')
+    expect(bar().getAttribute('aria-valuenow')).toBe('42')
+
+    ready()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    // A finished bar is just a line.
+    expect(bar().hidden).toBe(true)
+    await content.unload()
+  })
+
+  /*
+   * The one that was actually wrong. The runtime counts only the files it has
+   * met, and it meets the tokenizer first — so its own fraction reads 98%
+   * before a byte of the model has arrived, and then sits there for minutes.
+   * Measured against what the model weighs, seven megabytes is seven
+   * megabytes.
+   */
+  it('measures against the model, not against the files it has met so far', async () => {
+    const { engine, to } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    // The tokenizer, complete, and nothing else known about yet.
+    to(7_000_000, 7_000_000)
+    expect(fill().style.width).toBe('1%')
+    expect(status().textContent).not.toContain('Building')
+
+    // And now the weights are announced.
+    to(7_000_000, 800_000_000)
+    expect(fill().style.width).toBe('1%')
+    await content.unload()
+  })
+
+  // A bar of no width is indistinguishable from a broken one, and the first
+  // files of any of these downloads are too small to move it.
+  it('keeps the bar travelling until there is a percent to show', async () => {
+    const { engine, to } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    to(2_000_000)
+    expect(bar().classList.contains('is-waiting')).toBe(true)
+    expect(bar().getAttribute('aria-valuenow')).toBe('0')
+
+    to(40_000_000)
+    expect(bar().classList.contains('is-waiting')).toBe(false)
+    expect(fill().style.width).toBe('5%')
+    await content.unload()
+  })
+
+  /*
+   * Between the last byte and the first answer the graph still has to be
+   * built, and on a CPU that is seconds with nothing to report. A bar at 100%
+   * and no explanation is where somebody decides the page is broken.
+   */
+  it('says what it is doing after the last byte', async () => {
+    const { engine, to } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    to(799_000_000)
+    expect(status().textContent).toContain('Downloading')
+
+    to(800_000_000)
+    expect(status().textContent).toContain('Building the model')
+    expect(bar().classList.contains('is-preparing')).toBe(true)
+    await content.unload()
+  })
+
+  /*
+   * An empty box asks somebody to think of something, and most people type
+   * "hi", get a greeting, and close it. These are questions this model can
+   * actually answer — and during the download they are the only thing in the
+   * window worth reading, which is why they are offered before it is ready.
+   */
+  it('offers questions to click, readable while the weights are still coming', async () => {
+    const { engine, to, ready } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    to(80_000_000)
+    expect(openings().hidden).toBe(false)
+    expect(chips().length).toBeGreaterThan(1)
+    // Nothing to answer with yet, so nothing to press.
+    expect(chips().every((chip) => chip.disabled)).toBe(true)
+
+    ready()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    expect(chips().every((chip) => chip.disabled)).toBe(false)
+    await content.unload()
+  })
+
+  it('asks the one that was clicked', async () => {
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    const first = chips()[0]
+    const question = first.textContent!
+    first.click()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    expect(turns()).toEqual([
+      { who: 'You', said: question },
+      { who: 'Model', said: 'Hello.' },
+    ])
+    await content.unload()
+  })
+
+  // A list that keeps offering what it has just answered is the tell that it
+  // is a list rather than a conversation.
+  it('never offers the same question twice, and follows the answer down', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    const asked = chips()[0].textContent!
+    chips()[0].click()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    expect(chips().map((chip) => chip.textContent)).not.toContain(asked)
+    // Under the last thing said, rather than stranded at the top.
+    expect(host.querySelector('.chat-log')!.lastElementChild).toBe(openings())
+    await content.unload()
+  })
+
+  /*
+   * The model writes its own follow-ups, because it has read the passages the
+   * answer came from and a fixed list has not. At this size it will also
+   * happily ask about a job James never had, so nothing it writes goes up
+   * until retrieval has found something to answer it with.
+   */
+  it('asks the model for follow-ups, and drops the ones nothing can answer', async () => {
+    const engine = stubEngine({
+      reply: vi.fn(async (messages: Message[], onToken: (t: string) => void) => {
+        // The last call is the window asking for follow-ups; the first is the
+        // question somebody actually put. One it can answer, one it invented.
+        const asked = messages[messages.length - 1].content
+        if (asked.includes('questions a reader might ask next about James')) {
+          return 'Who was on the Kafka work?\nWhat did he do at Spotify?'
+        }
+        onToken('Hello.')
+        return 'Hello.'
+      }) as ChatEngine['reply'],
+    })
+    // Built before the window opens, because a question asked before the notes
+    // land is answered without them — and a follow-up cannot be checked
+    // against notes that do not exist yet.
+    const knowledge = knowing()
+    await knowledge.build(knowledgeDocuments([]))
+
+    const content = new ChatContent(() => engine, knowledge)
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    await ask(content.getElement(), 'what has he done with kafka?')
+
+    // Written by the model, and offered because a passage answers it. The
+    // wait is for the notes: they are built in the background while the model
+    // comes up, and a follow-up cannot be checked before they exist.
+    await vi.waitFor(
+      () =>
+        expect(chips().map((c) => c.textContent)).toContain(
+          'Who was on the Kafka work?',
+        ),
+      { timeout: 2000 },
+    )
+    // Also written by the model. Nothing in James's notes is about Spotify,
+    // so it never reaches anybody.
+    expect(chips().map((c) => c.textContent)).not.toContain(
+      'What did he do at Spotify?',
+    )
+    await content.unload()
+  })
+
+  // Somebody with a question of their own does not need three of ours in the
+  // way — and deciding not to type is exactly when they are wanted back.
+  it('gets out of the way while somebody is typing', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    input().value = 'what about'
+    input().dispatchEvent(new Event('input'))
+    expect(openings().hidden).toBe(true)
+
+    input().value = ''
+    input().dispatchEvent(new Event('input'))
+    expect(openings().hidden).toBe(false)
+    await content.unload()
+  })
+
+  it('leaves the bar behind when the model will not load at all', async () => {
+    const content = new ChatContent(() =>
+      stubEngine({ load: vi.fn().mockRejectedValue(new Error('no')) }),
+    )
+    await content.load(host)
+
+    await vi.waitFor(() => expect(status().textContent).toContain('could not be loaded'))
+    expect(bar().hidden).toBe(true)
     await content.unload()
   })
 
@@ -280,7 +578,7 @@ describe('the chat window', () => {
 
   /*
    * Closing the window stops whatever it was writing — but the weights stay
-   * loaded, because opening it again should not fetch a hundred megabytes for
+   * loaded, because opening it again should not fetch several hundred megabytes for
    * a second time.
    */
   it('abandons the answer when the window closes, and keeps the model', async () => {
@@ -318,13 +616,37 @@ describe('choosing the model and where it runs', () => {
       'Qwen2.5 0.5B',
       'Llama 3.2 1B',
     ])
-    CHAT_MODELS.forEach((model: ChatModel) => expect(model.size).toMatch(/MB$/))
+    CHAT_MODELS.forEach((model: ChatModel) => expect(model.size).toMatch(/(MB|GB)$/))
   })
 
-  // The one that answers the question it was asked, rather than the one that
-  // arrives fastest.
-  it('defaults to the middle rung', () => {
-    expect(CHAT_MODEL).toBe(CHAT_MODELS[1].id)
+  /*
+   * The size is not decoration: it is the number somebody decides on, and the
+   * denominator the bar is drawn against. Both of these were wrong — the
+   * default was advertised at 350MB and is nearer 800 — because they were
+   * guessed from the parameter count rather than measured, and four-bit
+   * quantisation leaves a 150,000-token embedding table at full precision.
+   */
+  it('carries the size in bytes too, agreeing with what it says in words', () => {
+    CHAT_MODELS.forEach((model: ChatModel) => {
+      expect(model.bytes).toBeGreaterThan(0)
+      const said = Number(model.size.replace(/[^\d.]/g, ''))
+      const stated = model.size.endsWith('GB') ? said * 1e9 : said * 1e6
+      expect(model.bytes).toBeCloseTo(stated, -7)
+    })
+  })
+
+  /*
+   * The one that answers the question it was asked, rather than the one that
+   * arrives fastest — and named outright rather than picked out by position,
+   * so that reordering the rungs cannot quietly change what a visitor gets.
+   * It is the expensive choice and a deliberate one: 800MB, chosen because
+   * 135M parameters writes a scene instead of an answer.
+   */
+  it('defaults to Qwen2.5 0.5B', () => {
+    expect(CHAT_MODEL).toBe('onnx-community/Qwen2.5-0.5B-Instruct')
+    expect(CHAT_MODELS.find((m: ChatModel) => m.id === CHAT_MODEL)?.label).toBe(
+      'Qwen2.5 0.5B',
+    )
   })
 
   it('draws a picker, set to what is loaded', async () => {

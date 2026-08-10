@@ -7,6 +7,7 @@ import { motion } from "../../utils/motion";
 import { color, font, radius, size, tracking, weight } from "../../theme";
 import type Desktop from "../Desktop";
 import { bindContextMenu } from "../ContextMenu";
+import { icon as glyph, markFor } from "../Icon";
 import Logger from "../../Logger";
 
 /*
@@ -70,15 +71,6 @@ class TaskbarButton extends OSElement {
     });
   }
 }
-/** Chip glyphs, matching the ones the launcher uses. */
-const GLYPHS: Record<string, string> = {
-  About: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></svg>`,
-  Experience: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="7.5" width="18" height="12.5" rx="1.6"/><path d="M8.5 7.5V6A1.5 1.5 0 0 1 10 4.5h4A1.5 1.5 0 0 1 15.5 6v1.5"/></svg>`,
-  Debugger: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m5.5 8.5 4 3.5-4 3.5M12.5 16h6"/></svg>`
-};
-
-const glyphFor = (title: string): string | undefined => GLYPHS[title];
-
 class TaskbarButtons extends OSElement {
   buttons: TaskbarButton[];
   private openList!: HTMLElement;
@@ -96,7 +88,13 @@ class TaskbarButtons extends OSElement {
   constructor(desktop: Desktop) {
     super("taskbar-buttons", "taskbar-buttons");
     this.desktop = desktop;
-    const startMenu = new StartMenu(desktop);
+    /*
+     * The menu can put itself away, but it does not decide whether it is up —
+     * that state lives here, with the button that toggles it. Pressing anything
+     * on the board goes through this, so opening a window closes the menu
+     * rather than leaving it over the thing it just opened.
+     */
+    const startMenu = new StartMenu(desktop, () => void queue(closeMenu));
 
     /*
      * The launcher is a toggle, so its state lives here rather than being
@@ -299,16 +297,7 @@ class TaskbarButtons extends OSElement {
     this.search.className = "taskbar-search";
     this.search.type = "button";
     this.search.setAttribute("aria-label", "Search apps, windows and projects");
-    this.search.appendChild(
-      new DOMParser().parseFromString(
-        // The namespace is not decoration: parsed as XML without it, the tag is
-        // an element called "svg" in no namespace at all, which the browser
-        // sizes from the stylesheet and then draws nothing inside. The chip has
-        // been showing a 13px hole where the magnifier should be.
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>`,
-        "image/svg+xml"
-      ).documentElement
-    );
+    this.search.appendChild(glyph("search"));
     const shortcut = document.createElement("span");
     shortcut.className = "taskbar-search-key";
     shortcut.setAttribute("aria-hidden", "true");
@@ -508,12 +497,15 @@ class TaskbarButtons extends OSElement {
         (open.active ? " is-active" : "") +
         (open.minimized ? " is-minimized" : "");
       chip.type = "button";
-      const glyph = glyphFor(open.title);
-      if (glyph) {
-        chip.appendChild(
-          new DOMParser().parseFromString(glyph, "image/svg+xml").documentElement
-        );
-      }
+      /*
+       * Whatever this window is drawn as everywhere else.
+       *
+       * The chips used to keep their own three-entry table of glyphs, so
+       * Projects and every app had a label and no mark — the same window with
+       * an icon in the menu and none here. `markFor` is now the one answer.
+       */
+      const mark = markFor(open.title);
+      if (mark) chip.appendChild(mark);
       const label = document.createElement("span");
       label.appendChild(document.createTextNode(open.title));
       chip.appendChild(label);
@@ -573,11 +565,7 @@ class TaskbarButtons extends OSElement {
     const open = windowManager.list();
     this.switcher.textContent = "";
 
-    const icon = new DOMParser().parseFromString(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="8" height="7" rx="1.4"/><rect x="13" y="4" width="8" height="7" rx="1.4"/><rect x="3" y="13" width="8" height="7" rx="1.4"/><rect x="13" y="13" width="8" height="7" rx="1.4"/></svg>`,
-      "image/svg+xml"
-    ).documentElement;
-    this.switcher.appendChild(icon);
+    this.switcher.appendChild(glyph("windows"));
 
     const count = document.createElement("span");
     count.appendChild(document.createTextNode(String(open.length)));

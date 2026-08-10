@@ -26,7 +26,7 @@ const makeDesktop = (over: Record<string, unknown> = {}) => {
 
 const cells = () => [...host.querySelectorAll<HTMLElement>('.start-cell')]
 const cell = (label: string) =>
-  cells().find((c) => c.getAttribute('aria-label')?.startsWith(label))!
+  cells().find((c) => c.querySelector('.start-label')?.textContent === label)!
 const pill = (label: string) =>
   [...host.querySelectorAll<HTMLElement>('.start-pill')].find(
     (p) => p.textContent === label,
@@ -112,20 +112,22 @@ describe('StartMenu', () => {
     await menu.unload()
   })
 
-  it('marks what is already open, in words as well as in colour', async () => {
-    const desktop = makeDesktop()
-    const menu = new StartMenu(desktop)
+  /*
+   * A dot in the corner of an icon is the notification affordance. Spending it
+   * on "this window is already open" would leave nothing to say with when
+   * something actually wants attention — and the taskbar already lists what is
+   * running, which is the surface for that.
+   */
+  it('puts no badge on a tile, open or not', async () => {
+    const menu = new StartMenu(makeDesktop())
     await menu.load(host)
 
     cell('About').click()
     await menu.unload()
     await menu.load(host)
 
-    expect(cell('About').getAttribute('aria-label')).toBe('About, already open')
-    expect(cell('About').querySelector('.start-open')).toBeTruthy()
-    expect(cell('About').querySelector('.start-meta')?.textContent).toBe('open')
-    // Nothing else claims to be running.
-    expect(cell('Experience').querySelector('.start-open')).toBeNull()
+    expect(host.querySelector('.start-open')).toBeNull()
+    expect(cell('About').querySelector('.start-meta')).toBeNull()
     await menu.unload()
   })
 
@@ -196,10 +198,11 @@ describe('StartMenu', () => {
     await menu.unload()
   })
 
-  it('says how many windows are open, beside the availability pip', async () => {
+  // What James is, not what the desktop is doing — the taskbar answers that.
+  it('says the same thing about availability however much is open', async () => {
     const menu = new StartMenu(makeDesktop())
     await menu.load(host)
-    expect(host.querySelector('.start-status')?.textContent).toContain(
+    expect(host.querySelector('.start-status')?.textContent).toBe(
       'available for work',
     )
 
@@ -207,8 +210,43 @@ describe('StartMenu', () => {
     await menu.unload()
     await menu.load(host)
 
-    expect(host.querySelector('.start-status')?.textContent).toContain('1 open')
+    expect(host.querySelector('.start-status')?.textContent).toBe(
+      'available for work',
+    )
     expect(host.querySelector('.start-pip')).toBeTruthy()
+    await menu.unload()
+  })
+
+  /*
+   * Regression: the panel was pinned 58px up, which is the bar's height plus a
+   * gap — but the bar floats on a 15px margin at this width, so the board ran
+   * seven pixels underneath it and the taskbar's higher z-index drew over the
+   * corner. The room the bar takes is measured, never assumed.
+   */
+  it('sits above the taskbar, wherever the taskbar actually is', async () => {
+    const taskbar = document.createElement('div')
+    document.body.appendChild(taskbar)
+    // 50px tall, floating on a 15px margin: its top edge is 65px off the floor.
+    vi.spyOn(taskbar, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight - 65,
+      height: 50,
+    } as DOMRect)
+
+    const menu = new StartMenu(
+      makeDesktop({ getTaskbar: () => ({ getElement: () => taskbar }) }),
+    )
+    await menu.load(host)
+
+    expect(menu.getElement().style.getPropertyValue('--taskbar-floor')).toBe('65px')
+    await menu.unload()
+    taskbar.remove()
+  })
+
+  it('falls back to the bar at its full size when it cannot be measured', async () => {
+    const menu = new StartMenu(makeDesktop())
+    await menu.load(host)
+    // jsdom reports zeros for a detached element; guessing 50 would overlap.
+    expect(menu.getElement().style.getPropertyValue('--taskbar-floor')).toBe('65px')
     await menu.unload()
   })
 

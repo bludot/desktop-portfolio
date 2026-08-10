@@ -55,8 +55,19 @@ import { NARROW_PX } from "../../utils/utils";
 /** Where the panel stops floating and takes the screen. Shared with `isNarrow`. */
 const FULLSCREEN_PX = NARROW_PX;
 
-/** The taskbar's own height. The board sits on it rather than under it. */
+/**
+ * What to assume the taskbar takes when it cannot be measured.
+ *
+ * It is measured on every open — see `floor()` — because the real answer is not
+ * its height. The bar floats: 50px tall with a 15px margin on a desktop, and
+ * flush with no margin on a phone. Hardcoding the height alone put this panel
+ * seven pixels underneath it, where the bar's own z-index drew over the corner.
+ */
 const TASKBAR_PX = 50;
+const TASKBAR_MARGIN_PX = 15;
+
+/** The breath between the board and the bar it sits above. */
+const GAP_PX = 8;
 
 interface Destination {
   /** The window title, which is also how an open one is recognised. */
@@ -89,7 +100,12 @@ class StartMenu extends OSElement {
       [this.id]: {
         position: "fixed",
         left: "15px",
-        bottom: `${TASKBAR_PX + 8}px`,
+        /*
+         * Measured, not assumed — `--taskbar-floor` is written on the element
+         * every time the board opens, and is how much room the bar actually
+         * takes including the margin it floats on.
+         */
+        bottom: `calc(var(--taskbar-floor, ${TASKBAR_PX + TASKBAR_MARGIN_PX}px) + ${GAP_PX}px)`,
         width: "344px",
         /*
          * A ceiling, in `dvh` rather than `vh`.
@@ -100,7 +116,7 @@ class StartMenu extends OSElement {
          * This should never engage now that the board fits; it is here so the
          * old bug cannot come back by way of a fourth destination.
          */
-        maxHeight: `calc(100dvh - ${TASKBAR_PX + 24}px)`,
+        maxHeight: `calc(100dvh - var(--taskbar-floor, ${TASKBAR_PX + TASKBAR_MARGIN_PX}px) - 32px)`,
         boxSizing: "border-box",
         display: "flex",
         flexFlow: "column nowrap",
@@ -266,24 +282,15 @@ class StartMenu extends OSElement {
         "& .start-plate .app-icon img": { width: "26px", height: "26px" },
 
         /*
-         * "This one is already open."
+         * There is deliberately no badge on a tile.
          *
-         * `--current` rather than the accent, on the token's own terms: it is
-         * reserved for what is happening now and never for decoration, and a
-         * running window is exactly that. Pressing the tile raises that window
-         * instead of building a second one.
+         * A dot in the corner of an icon is the notification affordance, and
+         * spending it on "this window is already open" would leave nothing to
+         * say with when something actually wants attention. The taskbar lists
+         * what is running, which is the surface for that; pressing a tile still
+         * goes back to an open window rather than building a second one, it
+         * simply does not announce it beforehand.
          */
-        "& .start-open": {
-          position: "absolute",
-          top: "-2px",
-          right: "-2px",
-          width: "8px",
-          height: "8px",
-          borderRadius: "50%",
-          background: color.current,
-          boxShadow: `0 0 0 2px ${color.chrome}`
-        },
-
         "& .start-label": {
           fontSize: size.caption,
           fontWeight: weight.emphasise,
@@ -356,7 +363,9 @@ class StartMenu extends OSElement {
           left: "0",
           right: "0",
           top: "0",
-          bottom: `${TASKBAR_PX}px`,
+          // Flush with the bar rather than floating above it: the bar loses its
+          // margin at this width, and the board takes everything over it.
+          bottom: `var(--taskbar-floor, ${TASKBAR_PX}px)`,
           width: "auto",
           maxHeight: "none",
           borderRadius: "0",
@@ -502,7 +511,7 @@ class StartMenu extends OSElement {
     this.dismiss();
   }
 
-  private cell(destination: Destination, isOpen: boolean): HTMLElement {
+  private cell(destination: Destination): HTMLElement {
     const cell = document.createElement("button");
     cell.type = "button";
     cell.className = "start-cell";
@@ -514,13 +523,6 @@ class StartMenu extends OSElement {
     } else if (destination.glyph) {
       plate.appendChild(icon(destination.glyph));
     }
-
-    if (isOpen) {
-      const mark = document.createElement("span");
-      mark.className = "start-open";
-      mark.setAttribute("aria-hidden", "true");
-      plate.appendChild(mark);
-    }
     cell.appendChild(plate);
 
     const label = document.createElement("span");
@@ -528,23 +530,13 @@ class StartMenu extends OSElement {
     label.appendChild(document.createTextNode(destination.label));
     cell.appendChild(label);
 
-    /*
-     * The open state is said in words as well as in colour, and it replaces
-     * whatever the meta line would have been: "open" is the more useful fact,
-     * and a green dot on its own is not readable by anyone who cannot see it.
-     */
-    const meta = isOpen ? "open" : destination.meta;
-    if (meta) {
+    if (destination.meta) {
       const line = document.createElement("span");
       line.className = "start-meta";
-      line.appendChild(document.createTextNode(meta));
+      line.appendChild(document.createTextNode(destination.meta));
       cell.appendChild(line);
     }
 
-    cell.setAttribute(
-      "aria-label",
-      isOpen ? `${destination.label}, already open` : destination.label
-    );
     cell.addEventListener("click", () => this.choose(destination));
     return cell;
   }
@@ -562,11 +554,11 @@ class StartMenu extends OSElement {
     return head;
   }
 
-  private grid(destinations: Destination[], open: Set<string>): HTMLElement {
+  private grid(destinations: Destination[]): HTMLElement {
     const grid = document.createElement("div");
     grid.className = "start-grid";
     destinations.forEach((destination) =>
-      grid.appendChild(this.cell(destination, open.has(destination.title)))
+      grid.appendChild(this.cell(destination))
     );
     return grid;
   }
@@ -591,12 +583,10 @@ class StartMenu extends OSElement {
   /**
    * Draw the board.
    *
-   * Rebuilt on every open rather than kept in sync: which windows are open is
-   * the only thing in here that changes, the menu is short-lived, and a fresh
-   * build is cheaper to reason about than a diff.
+   * Rebuilt on every open rather than kept in sync: the menu is short-lived,
+   * and a fresh build is cheaper to reason about than a diff.
    */
   private render() {
-    const open = new Set(windowManager.list().map((entry) => entry.title));
     this.element.textContent = "";
 
     // ------------------------------------------------------------- who
@@ -622,13 +612,12 @@ class StartMenu extends OSElement {
     pip.className = "start-pip";
     pip.setAttribute("aria-hidden", "true");
     status.appendChild(pip);
-    status.appendChild(
-      document.createTextNode(
-        open.size
-          ? `available · ${open.size} open`
-          : "available for work"
-      )
-    );
+    /*
+     * What James is, not what the desktop is doing. The taskbar is where what
+     * is running belongs, and it already says it — a count here was a second
+     * answer to a question this panel was not being asked.
+     */
+    status.appendChild(document.createTextNode("available for work"));
     who.appendChild(status);
     id.appendChild(who);
 
@@ -661,10 +650,10 @@ class StartMenu extends OSElement {
 
     const destinations = this.destinations();
     body.appendChild(this.group("Windows", `· ${destinations.length}`));
-    body.appendChild(this.grid(destinations, open));
+    body.appendChild(this.grid(destinations));
 
     body.appendChild(this.group("Apps", "· elsewhere"));
-    body.appendChild(this.grid(this.apps(), open));
+    body.appendChild(this.grid(this.apps()));
 
     this.element.appendChild(body);
     this.body = body;
@@ -705,8 +694,29 @@ class StartMenu extends OSElement {
    * is why it took two presses to get one: the next press closed the menu that
    * was not there.
    */
+  /**
+   * How much room the taskbar takes at the bottom of the screen.
+   *
+   * Not its height: the bar floats on a 15px margin at desktop widths and sits
+   * flush on a phone, so "50px" is wrong by exactly the margin — which is how
+   * this panel came to sit seven pixels underneath it, behind a bar whose
+   * z-index is higher. Measured on every open, since it is a different answer
+   * at different widths and the board is built fresh each time anyway.
+   */
+  private floor(): number {
+    const bar = this.desktop.getTaskbar?.().getElement();
+    const rect = bar?.getBoundingClientRect();
+    // Nothing to measure — detached, or no layout yet. Fall back to the bar at
+    // its desktop size rather than to a number that would overlap something.
+    if (!rect?.height) return TASKBAR_PX + TASKBAR_MARGIN_PX;
+    return Math.max(0, window.innerHeight - rect.top);
+  }
+
   async load(element: HTMLElement) {
     this.render();
+    // Before the first paint, so the board never appears in the wrong place and
+    // then corrects itself.
+    this.element.style.setProperty("--taskbar-floor", `${this.floor()}px`);
     if (!this.parent) {
       await super.load(element);
     }

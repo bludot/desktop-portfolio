@@ -9,7 +9,7 @@ import {
   type Message
 } from "../../ai/chat";
 import type { DevicePreference } from "../../ai/engine";
-import { bestDevice } from "../../ai/engine";
+import { gpuAvailable } from "../../ai/engine";
 import { loadSettings, saveSettings } from "../../Store";
 
 /**
@@ -350,21 +350,37 @@ class ChatContent extends OSElement {
     this.devices = document.createElement("select");
     this.devices.className = "chat-select";
     this.devices.setAttribute("aria-label", "Runs on");
-    const gpu = bestDevice() === "webgpu";
     (
       [
-        ["auto", gpu ? "Automatic (GPU)" : "Automatic (CPU)"],
-        ["webgpu", gpu ? "GPU" : "GPU — not available here"],
+        ["auto", "Automatic"],
+        ["webgpu", "GPU"],
         ["wasm", "CPU"]
       ] as const
     ).forEach(([value, label]) => {
       const option = document.createElement("option");
       option.value = value;
       option.text = label;
-      // Offered but not selectable: saying why beats leaving it out and
-      // letting somebody wonder whether their machine could have done it.
-      option.disabled = value === "webgpu" && !gpu;
       this.devices.appendChild(option);
+    });
+
+    /*
+     * Whether the GPU is really on offer takes a round trip to the driver, so
+     * the menu is drawn first and corrected a moment later.
+     *
+     * It has to be the adapter and not `navigator.gpu`: Chrome ships the API
+     * and then refuses an adapter on a range of older Intel parts and Linux
+     * drivers, which is how somebody selects "GPU" and is told the model could
+     * not be loaded at all. Offered-but-disabled, with the reason on it, beats
+     * both hiding it and letting it fail.
+     */
+    void gpuAvailable().then((available) => {
+      const auto = this.devices.options[0];
+      const gpu = this.devices.options[1];
+      auto.text = available ? "Automatic (GPU)" : "Automatic (CPU)";
+      if (!available) {
+        gpu.text = "GPU — not available here";
+        gpu.disabled = true;
+      }
     });
     this.devices.value = this.choice.device;
     this.devices.addEventListener("change", () => {

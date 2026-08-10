@@ -136,39 +136,64 @@ class TransformersChat implements ChatEngine {
     env.allowLocalModels = false;
     if (env.backends?.onnx?.wasm) env.backends.onnx.wasm.numThreads = 1;
 
-    const { device, fellBack } = resolveDevice(this.preference);
+    const { device, fellBack } = await resolveDevice(this.preference);
     this.fellBackToCpu = fellBack;
-    const pipe = await pipeline("text-generation", this.model, {
-      device,
-      /*
-       * Four bits here where the embedder takes eight. The trade runs the other
-       * way for generation: the file is the thing a visitor waits for, and a
-       * chat that is a little more repetitive is a smaller cost than one that
-       * takes twice as long to arrive.
-       */
-      dtype: "q4",
-      progress_callback: (event: {
-        status: string;
-        file?: string;
-        loaded?: number;
-        total?: number;
-      }) => {
-        if (!onProgress) return;
-        if (event.status === "progress" && event.file && event.total) {
-          files.set(event.file, { at: event.loaded ?? 0, of: event.total });
-          let at = 0;
-          let of = 0;
-          files.forEach((f) => {
-            at += f.at;
-            of += f.of;
-          });
-          if (of) onProgress(Math.min(1, at / of));
-        }
-        if (event.status === "ready") onProgress(1);
-      }
-    });
 
-    this.device = device;
+    /*
+     * One retry, on the CPU.
+     *
+     * An adapter that exists is not a promise that a model will run on it:
+     * shaders fail to compile, buffers are refused, and an integrated GPU
+     * sharing system memory is where a large model runs out of room. All of
+     * those surface here rather than at `requestAdapter`, and the honest answer
+     * to any of them is the slower path — not a window that says it cannot
+     * work when it plainly could.
+     */
+    const build = (on: Device) =>
+      pipeline("text-generation", this.model, {
+        device: on,
+        /*
+         * Four bits here where the embedder takes eight. The trade runs the
+         * other way for generation: the file is the thing a visitor waits for,
+         * and a chat that is a little more repetitive is a smaller cost than
+         * one that takes twice as long to arrive.
+         */
+        dtype: "q4",
+        progress_callback: (event: {
+          status: string;
+          file?: string;
+          loaded?: number;
+          total?: number;
+        }) => {
+          if (!onProgress) return;
+          if (event.status === "progress" && event.file && event.total) {
+            files.set(event.file, { at: event.loaded ?? 0, of: event.total });
+            let at = 0;
+            let of = 0;
+            files.forEach((f) => {
+              at += f.at;
+              of += f.of;
+            });
+            if (of) onProgress(Math.min(1, at / of));
+          }
+          if (event.status === "ready") onProgress(1);
+        }
+      });
+
+    let pipe;
+    let ran = device;
+    try {
+      pipe = await build(device);
+    } catch (error) {
+      // The CPU is the floor. If that fails too, there is nothing left to try
+      // and the window should say so rather than pretend.
+      if (device !== "webgpu") throw error;
+      ran = "wasm";
+      this.fellBackToCpu = true;
+      pipe = await build("wasm");
+    }
+
+    this.device = ran;
     this.tokenizer = (pipe as unknown as { tokenizer: unknown }).tokenizer;
     this.generate = pipe as unknown as typeof this.generate;
   }

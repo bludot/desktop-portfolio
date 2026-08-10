@@ -45,16 +45,19 @@ export type DevicePreference = "auto" | Device;
  * fail — but silently falling back leaves somebody wondering why "GPU" is slow,
  * so the caller is told the request could not be met.
  */
-export function resolveDevice(preference: DevicePreference): {
+export async function resolveDevice(preference: DevicePreference): Promise<{
   device: Device;
   fellBack: boolean;
-} {
-  const best = bestDevice();
-  if (preference === "auto") return { device: best, fellBack: false };
-  if (preference === "webgpu" && best !== "webgpu") {
-    return { device: "wasm", fellBack: true };
-  }
-  return { device: preference, fellBack: false };
+}> {
+  if (preference === "wasm") return { device: "wasm", fellBack: false };
+
+  const gpu = await gpuAvailable();
+  if (gpu) return { device: "webgpu", fellBack: false };
+
+  // Asked for, and not available. "auto" is not a disappointment; asking for
+  // the GPU outright and being handed the CPU is, and somebody wondering why
+  // "GPU" is slow deserves to be told.
+  return { device: "wasm", fellBack: preference === "webgpu" };
 }
 
 /**
@@ -91,10 +94,44 @@ export interface Embedder {
 }
 
 /**
- * The fastest backend this browser can offer.
+ * Whether this browser can *actually* run on the GPU.
  *
- * Asked at load rather than remembered: a page can be open across a driver
- * change, and the answer costs a property lookup.
+ * Not the same question as whether `navigator.gpu` exists, which is the trap
+ * this used to fall into. Chrome ships the API and then refuses to give out an
+ * adapter on a long list of older Intel parts and Linux/Mesa setups — so the
+ * object is there, the answer is "webgpu", the pipeline fails on its way up,
+ * and the visitor is told the model could not be loaded at all. On an
+ * integrated GPU that is exactly the machine most likely to be affected.
+ *
+ * So the adapter is requested, once, and the answer kept: it is a real
+ * negotiation with the driver rather than a property lookup, and it does not
+ * change while the page is open.
+ */
+let adapter: Promise<boolean> | undefined;
+
+export function gpuAvailable(): Promise<boolean> {
+  if (!adapter) {
+    adapter = (async () => {
+      const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } })
+        .gpu;
+      if (typeof gpu?.requestAdapter !== "function") return false;
+      try {
+        return !!(await gpu.requestAdapter());
+      } catch {
+        // A driver that refuses is a driver that refuses.
+        return false;
+      }
+    })();
+  }
+  return adapter;
+}
+
+/**
+ * The fastest backend this browser claims to offer.
+ *
+ * Cheap and synchronous, for anything that needs an answer before it can draw —
+ * but only ever a claim. Anything about to *load* a model asks
+ * `resolveDevice`, which waits for the adapter.
  */
 export function bestDevice(): Device {
   const gpu = (navigator as Navigator & { gpu?: unknown }).gpu;
@@ -161,7 +198,7 @@ class TransformersEmbedder implements Embedder {
     // See the note at the top: threads would cost this desktop its app windows.
     if (env.backends?.onnx?.wasm) env.backends.onnx.wasm.numThreads = 1;
 
-    const device = bestDevice();
+    const { device } = await resolveDevice("auto");
     const extractor = await pipeline("feature-extraction", this.model, {
       device,
       /*

@@ -260,3 +260,77 @@ describe('the flag', () => {
     expect(FEATURE_FLAG_DEFAULTS.semanticSearch.enabled).toBe(false)
   })
 })
+
+/*
+ * The failure this exists to prevent: somebody picks GPU, Chrome has shipped
+ * `navigator.gpu` but refuses an adapter — a long list of older Intel parts and
+ * Linux drivers — and the window announces that the model cannot be loaded at
+ * all, on a machine where the CPU path would have worked.
+ */
+describe('deciding where to run', () => {
+  const withGpu = (adapter: unknown) => {
+    const nav = navigator as unknown as Record<string, unknown>
+    nav.gpu = { requestAdapter: async () => adapter }
+    return () => {
+      delete nav.gpu
+    }
+  }
+
+  beforeEach(async () => {
+    // The probe is cached for the life of the page; each case needs its own.
+    vi.resetModules()
+  })
+
+  it('uses the GPU when the driver actually hands one over', async () => {
+    const undo = withGpu({})
+    const { resolveDevice } = await import('../src/ai/engine')
+    await expect(resolveDevice('auto')).resolves.toEqual({
+      device: 'webgpu',
+      fellBack: false,
+    })
+    undo()
+  })
+
+  // The API present and the adapter refused: the case that produced the bug.
+  it('falls back to the CPU when the adapter is refused', async () => {
+    const undo = withGpu(null)
+    const { resolveDevice } = await import('../src/ai/engine')
+
+    await expect(resolveDevice('auto')).resolves.toEqual({
+      device: 'wasm',
+      fellBack: false,
+    })
+    // Asked for outright, it still falls back — but says it had to.
+    await expect(resolveDevice('webgpu')).resolves.toEqual({
+      device: 'wasm',
+      fellBack: true,
+    })
+    undo()
+  })
+
+  it('falls back when asking for an adapter throws outright', async () => {
+    const nav = navigator as unknown as Record<string, unknown>
+    nav.gpu = {
+      requestAdapter: async () => {
+        throw new Error('driver blocklisted')
+      },
+    }
+    const { resolveDevice } = await import('../src/ai/engine')
+    await expect(resolveDevice('webgpu')).resolves.toEqual({
+      device: 'wasm',
+      fellBack: true,
+    })
+    delete nav.gpu
+  })
+
+  // Choosing the CPU is never a disappointment, and never asks the driver.
+  it('takes the CPU at its word', async () => {
+    const undo = withGpu({})
+    const { resolveDevice } = await import('../src/ai/engine')
+    await expect(resolveDevice('wasm')).resolves.toEqual({
+      device: 'wasm',
+      fellBack: false,
+    })
+    undo()
+  })
+})

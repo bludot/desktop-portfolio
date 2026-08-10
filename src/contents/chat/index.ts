@@ -19,6 +19,7 @@ import {
   knowledgeIndex,
   personal,
   refuse,
+  today,
   type Document
 } from "../../ai";
 import { loadRepos } from "../../utils/github";
@@ -50,18 +51,35 @@ import { prefersReducedMotion } from "../../utils/motion";
  * writing prompt — the first version of this window answered a greeting with a
  * scene, complete with invented colleagues — so the instructions that earn
  * their place are the ones that rule that out: answer, do not narrate, stop.
+ *
+ * The date is the exception, and it is handed over rather than known. The model
+ * has no clock; the page it is running in has one, and a window that can read
+ * it and refuses to is being precious rather than honest. What it still does
+ * not have is the news — knowing that it is August 2026 is not knowing anything
+ * that happened in it — so the line below gives the one without implying the
+ * other.
  */
-const SYSTEM: Message = {
+const system = (now: Date): Message => ({
   role: "system",
   content: [
     "You are a small language model running offline in James's portfolio desktop, inside the visitor's own browser.",
-    "You cannot browse the web, search, open programs, or see the screen, and you know nothing about today: not the date, the news, prices, or what is currently airing or released.",
+    `Today is ${today(now)} — the desktop read that off the visitor's machine and told you; you may state it.`,
+    "You cannot browse the web, search, open programs, or see the screen, and knowing the date tells you nothing about the news, prices, or what is currently airing or released.",
     "If you are asked to look something up or for anything current, say in one sentence that you cannot — never offer to search.",
+    /*
+     * Two rules rather than one, because the old single "one or two short
+     * sentences" outranked the grounded instruction underneath it: handed four
+     * sentences of notes about this desktop, it answered "This desktop is
+     * written in TypeScript." and stopped. Brevity is still the default — it is
+     * what keeps a small model from wandering — but notes in the window are the
+     * one case where there is something to be longer about.
+     */
+    "When notes are given, answer from them in two or three sentences, using their specifics.",
     "Otherwise answer directly, in one or two short sentences.",
     "Never invent dialogue, characters, or stage directions.",
     "If you do not know something, say so plainly."
   ].join(" ")
-};
+});
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -76,7 +94,9 @@ interface ChatChoice {
 
 class ChatContent extends OSElement {
   private engine: ChatEngine;
-  private history: Message[] = [SYSTEM];
+  // Stamped when the window opens, not when the module loads: a desktop left
+  // open overnight should not tell the model it is still yesterday.
+  private history: Message[] = [system(new Date())];
   private choice: ChatChoice = { model: CHAT_MODEL, device: "auto" };
 
   private log!: HTMLElement;
@@ -1343,7 +1363,16 @@ class ChatContent extends OSElement {
           role: "user",
           content: ground(question, found, {
             heading: "Notes about James:",
-            instruction: "Using the notes above, answer briefly:",
+            /*
+             * Room to elaborate, but only here. A small model given room
+             * wanders — that is why the system prompt asks for one or two
+             * sentences — and the exception is the case where there is
+             * something in front of it to be long about. Asked what this
+             * desktop was written in, it answered "JavaScript" and stopped,
+             * with four sentences of notes above it going unused.
+             */
+            instruction:
+              "Using the notes above, answer in two or three sentences, with the specifics from the notes:",
             // Only when the notes were the only thing that could have answered.
             whenEmpty: personal(question) ? "say-unknown" : "ask-anyway"
           })

@@ -121,6 +121,18 @@ export function personal(question: string): boolean {
 }
 
 /**
+ * Whether the question is about James, rather than *to* the model.
+ *
+ * `personal` counts "you", because somebody asking what it knows about him
+ * addresses it in the second person. This one must not: "can you search the
+ * web?" is a question about the model's own limits, and reading it as a
+ * question about James is how an honest refusal turns into an invention.
+ */
+function aboutHim(question: string): boolean {
+  return /\b(james|he|his|him|himself)\b/i.test(question);
+}
+
+/**
  * Things a CV cannot record, however well retrieval works.
  *
  * Asked for weaknesses, retrieval returns the *strengths* passages — they are
@@ -138,12 +150,28 @@ export interface Refusal {
 }
 
 /**
+ * Today, in words, from the machine reading the page.
+ *
+ * The model has no clock and never will; the page it is running in has one.
+ * Passing it across is not the model knowing something — it is being told,
+ * which is worth saying out loud wherever the answer uses it.
+ */
+export function today(now: Date = new Date()): string {
+  return now.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+}
+
+/**
  * What the desktop says instead of asking the model.
  *
  * The library decides *whether* to refuse and why; the words are this
  * desktop's. A portfolio should sound like its owner, not like a library.
  */
-export function refuse(question: string): Refusal | undefined {
+export function refuse(question: string, now: Date = new Date()): Refusal | undefined {
   const q = question.trim();
   if (!q) return undefined;
 
@@ -157,10 +185,27 @@ export function refuse(question: string): Refusal | undefined {
   const reason: Limit | undefined = limit(q);
   if (!reason || reason === "asks-for-sources") return undefined;
 
+  /*
+   * "Latest" is a word about the present, and it is also how anybody asks what
+   * somebody has been working on. The library is right to flag it and wrong to
+   * be the one deciding: his notes have dates in them, so "his latest project"
+   * is a question about a corpus rather than about the world, and refusing it
+   * was refusing to read.
+   *
+   * Only that reason, though. Asked to *search* for something about him it
+   * still cannot, and it must still say so — whose github it is does not give a
+   * model in a tab a network connection.
+   */
+  if (reason === "no-present" && aboutHim(q)) return undefined;
+
   if (reason === "no-clock") {
+    /*
+     * It has no clock. The desktop does — the same one in the taskbar — so the
+     * honest answer is to read it out rather than to refuse, and to be plain
+     * about which of the two of us knew.
+     */
     return {
-      answer:
-        "I have no clock and no calendar — the taskbar has the time, and I only see what you type."
+      answer: `It's ${today(now)}. I have no clock of my own — the desktop read that off your machine and passed it to me.`
     };
   }
   if (reason === "no-internet") {

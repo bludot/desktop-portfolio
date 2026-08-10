@@ -13,7 +13,13 @@ import {
   contextual,
   ground,
   limit,
+  workerChat,
+  workerEmbedder,
+  type ChatEngine,
+  type ChatOptions,
+  type DevicePreference,
   type Document,
+  type Embedder,
   type Limit
 } from "@thatcatdev/browser-ai";
 import { desktopStore } from "./store";
@@ -22,6 +28,44 @@ import type { Repo } from "../utils/github";
 
 export { contextual, ground };
 export type { Document };
+
+/**
+ * The thread everything on this page runs its models on.
+ *
+ * One worker, shared: the chat model and the embedder are different weights but
+ * there is no reason to pay for two threads, and the embedder is idle whenever
+ * the chat model is busy. Made on first use, so a visitor who opens neither
+ * never starts one.
+ *
+ * It exists because bringing a model up costs about five seconds of solid
+ * arithmetic, and on the main thread that is five seconds in which this desktop
+ * does not respond — no menu opens, no window drags. The press that appears to
+ * do nothing gets pressed again, and both arrive at once when it thaws.
+ */
+let thread: Worker | undefined;
+
+function models(): Worker {
+  if (!thread) {
+    thread = new Worker(new URL("./model.worker.ts", import.meta.url), {
+      type: "module"
+    });
+  }
+  return thread;
+}
+
+/** The chat model, on that thread. */
+export function chat(
+  model: string,
+  device: DevicePreference,
+  options?: ChatOptions
+): ChatEngine {
+  return workerChat(models(), model, device, options);
+}
+
+/** The embedder, on the same one. */
+export function vectors(): Embedder {
+  return workerEmbedder(models());
+}
 
 /**
  * How alike is alike enough, for each of the two things this desktop searches.
@@ -33,9 +77,16 @@ export type { Document };
 const LAUNCHER_FLOOR = 0.28;
 const PROMPT_FLOOR = 0.32;
 
+/*
+ * Both take an embedder rather than reaching for one, so a test can hand over
+ * something that does not need a thread. The default is evaluated at the call,
+ * which is what keeps a visitor who opens neither surface from starting one.
+ */
+
 /** The repositories, searchable by what they are rather than what they spell. */
-export function repoIndex() {
+export function repoIndex(model: Embedder = vectors()) {
   return new VectorIndex({
+    model,
     store: desktopStore,
     cacheKey: "repo-embeddings",
     floor: LAUNCHER_FLOOR,
@@ -45,8 +96,9 @@ export function repoIndex() {
 }
 
 /** Everything the chat window is allowed to know about James. */
-export function knowledgeIndex() {
+export function knowledgeIndex(model: Embedder = vectors()) {
   return new VectorIndex({
+    model,
     store: desktopStore,
     cacheKey: "knowledge-embeddings",
     floor: PROMPT_FLOOR,

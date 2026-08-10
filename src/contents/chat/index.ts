@@ -3,7 +3,6 @@ import { color, font, radius, size, space, tracking, weight } from "../../theme"
 import {
   CHAT_MODEL,
   CHAT_MODELS,
-  chatEngine,
   gpuAvailable,
   type ChatEngine,
   type ChatModel,
@@ -13,6 +12,7 @@ import {
 import { loadSettings, saveSettings } from "../../Store";
 import {
   asksForSources,
+  chat,
   contextual,
   ground,
   knowledgeDocuments,
@@ -117,7 +117,7 @@ class ChatContent extends OSElement {
   private readonly makeEngine: (model: string, device: DevicePreference) => ChatEngine;
 
   constructor(
-    makeEngine: (model: string, device: DevicePreference) => ChatEngine = chatEngine
+    makeEngine: (model: string, device: DevicePreference) => ChatEngine = chat
   ) {
     super("chatcontent", "chat-content");
     this.makeEngine = makeEngine;

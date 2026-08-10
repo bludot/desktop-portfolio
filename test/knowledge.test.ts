@@ -10,7 +10,7 @@ import {
   personal,
   refuse,
 } from '../src/ai'
-import { contextual, ground, setEmbedder, type Embedder } from '@thatcatdev/browser-ai'
+import { contextual, ground, type Embedder } from '@thatcatdev/browser-ai'
 import ChatContent from '../src/contents/chat'
 import type { ChatEngine, Message } from '@thatcatdev/browser-ai'
 import db from '../src/Store'
@@ -53,7 +53,6 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  setEmbedder(undefined)
   host.remove()
 })
 
@@ -112,8 +111,7 @@ describe('retrieving them', () => {
     })
 
   it('finds the passage a question is about', async () => {
-    setEmbedder(model())
-    const index = knowledgeIndex()
+    const index = knowledgeIndex(model())
     await index.build(aboutJames())
 
     const found = await index.search('what has he done with kafka')
@@ -127,8 +125,7 @@ describe('retrieving them', () => {
    * employer scored no better against that employer than against any other.
    */
   it('prefers the employer that was actually named', async () => {
-    setEmbedder(model())
-    const index = knowledgeIndex()
+    const index = knowledgeIndex(model())
     await index.build(aboutJames())
 
     const found = await index.search('what did James do at GoTu?')
@@ -136,8 +133,7 @@ describe('retrieving them', () => {
   })
 
   it('offers nothing for a question it has no notes on', async () => {
-    setEmbedder(model())
-    const index = knowledgeIndex()
+    const index = knowledgeIndex(model())
     await index.build(aboutJames())
     expect(await index.search('what is the capital of Peru')).toEqual([])
   })

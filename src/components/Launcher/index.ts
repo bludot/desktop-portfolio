@@ -4,6 +4,8 @@ import windowManager from "../../utils/windowManager";
 import { APPS, openAppWindow, type App } from "../../apps/external";
 import appIcon from "../AppIcon";
 import { loadRepos, type Repo } from "../../utils/github";
+import { isFeatureEnabled } from "../../Store";
+import type { Match } from "@thatcatdev/browser-ai";
 import { GROUP_ORDER, SEARCH_URL, search, type Group, type Result } from "./results";
 import { overlayScroll } from "../Scrollbar";
 import type ScrollBar from "../Scrollbar";
@@ -55,6 +57,19 @@ class Launcher extends OSElement {
    */
   private repos: Repo[] = [];
   private askedForRepos = false;
+
+  /**
+   * Searching the repositories by meaning, when it has been asked for.
+   *
+   * Behind `semanticSearch`, and behind a dynamic import inside that: a visitor
+   * with the flag off never fetches the library, let alone the 23MB of weights.
+   * Everything about it is additive — the literal matching is untouched — so
+   * every failure here is silent by design.
+   */
+  private index?: { search(query: string, limit?: number): Promise<Match[]> };
+  private related = new Map<string, number>();
+  /** The query the matches in `related` were computed for. */
+  private relatedFor = "";
 
   constructor(desktop: Desktop, actions: LauncherActions) {
     super("Launcher", "launcher");
@@ -469,6 +484,7 @@ class Launcher extends OSElement {
       this.repos = result.repos;
       // Only redraw if it is still up; the answer is kept either way.
       if (this.open) this.render();
+      void this.buildIndex();
     } catch {
       // Searching projects is a bonus. Everything else still works without it,
       // and an error here would be a dialog over a search box.
@@ -513,11 +529,63 @@ class Launcher extends OSElement {
     result.run();
   }
 
+  /**
+   * Bring the index up, once, if the flag says so.
+   *
+   * Everything is deferred to here rather than to module scope: the check, the
+   * import of the index, the import of the library inside that, and the
+   * download of the weights. A launcher that never gets opened costs nothing,
+   * and one opened with the flag off costs a single IndexedDB read.
+   */
+  private async buildIndex() {
+    if (this.index || !this.repos.length) return;
+    try {
+      if (!(await isFeatureEnabled("semanticSearch"))) return;
+      const { repoIndex, fromRepos } = await import("../../ai");
+      const index = repoIndex();
+      await index.build(fromRepos(this.repos));
+      this.index = index;
+      // Whatever is in the box now may already have an answer waiting.
+      if (this.open) void this.findRelated(this.input.value);
+    } catch {
+      // An improvement that did not arrive. The launcher is unchanged.
+    }
+  }
+
+  /**
+   * Ask the index about the current query, then redraw if it had anything.
+   *
+   * Fire-and-forget on purpose: `render` stays synchronous, so typing never
+   * waits on arithmetic. The matches land in `related` and the next render — or
+   * the one this schedules — picks them up.
+   */
+  private async findRelated(query: string) {
+    if (!this.index) return;
+    const q = query.trim();
+    if (q === this.relatedFor) return;
+    this.relatedFor = q;
+
+    const matches = await this.index.search(q);
+    // The box has moved on; whatever this found is about an older query.
+    if (this.relatedFor !== q) return;
+
+    const next = new Map(
+      matches.map((match) => [match.document.id, match.score])
+    );
+    const changed =
+      next.size !== this.related.size ||
+      [...next.keys()].some((key) => !this.related.has(key));
+    this.related = next;
+    if (changed && this.open) this.render();
+  }
+
   private render() {
+    void this.findRelated(this.input.value);
     this.results = search(this.input.value, {
       apps: APPS,
       windows: windowManager.list(),
       repos: this.repos,
+      related: this.related,
       actions: this.buildActions(),
       openApp: (app: App) => openAppWindow(app, this.desktop),
       showWindow: (open) => {

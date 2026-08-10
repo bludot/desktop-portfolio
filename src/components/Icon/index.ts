@@ -32,6 +32,7 @@ export type IconName =
   | "flags"
   | "search"
   | "logout"
+  | "chat"
   | "windows";
 
 interface Mark {
@@ -81,6 +82,10 @@ const MARKS: Record<IconName, Mark> = {
     viewBox: "0 0 24 24",
     body: `<path d="M13 3v9"/><path d="M7.5 6.4a8 8 0 1 0 9 0"/>`
   },
+  chat: {
+    viewBox: "0 0 24 24",
+    body: `<path d="M20.5 12.4c0 3.9-3.8 7-8.5 7a10 10 0 0 1-2.4-.3L4.5 21l1.2-3.5A6.6 6.6 0 0 1 3.5 12.4c0-3.9 3.8-7 8.5-7s8.5 3.1 8.5 7Z"/>`
+  },
   windows: {
     viewBox: "0 0 24 24",
     body: `<rect x="3" y="4" width="8" height="7" rx="1.4"/><rect x="13" y="4" width="8" height="7" rx="1.4"/><rect x="3" y="13" width="8" height="7" rx="1.4"/><rect x="13" y="13" width="8" height="7" rx="1.4"/>`
@@ -121,6 +126,7 @@ const BY_TITLE: Record<string, IconName> = {
   Projects: "projects",
   Settings: "settings",
   Debugger: "debugger",
+  Chat: "chat",
   FeatureFlagsApp: "flags"
 };
 

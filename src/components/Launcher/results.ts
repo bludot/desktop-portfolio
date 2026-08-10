@@ -73,6 +73,14 @@ export interface Sources {
   apps: App[];
   windows: OpenWindow[];
   repos: Repo[];
+  /**
+   * Repositories the query is *about*, best first, when that is known.
+   *
+   * Keys rather than repositories, and a plain map rather than a promise: the
+   * ranking here has to stay synchronous and testable, so whatever computed
+   * these — a model, a stub, nothing at all — is somebody else's problem.
+   */
+  related?: Map<string, number>;
   actions: { id: string; name: string; sub?: string; run: () => void }[];
   openApp: (app: App) => void;
   showWindow: (open: OpenWindow) => void;
@@ -81,16 +89,10 @@ export interface Sources {
   searchWeb: (query: string) => void;
 }
 
-/**
- * Where a web search goes.
- *
- * DuckDuckGo rather than Google because it does not need to know who asked, and
- * this is a portfolio rather than somebody's daily browser. One constant to
- * change if that is the wrong call — `https://www.google.com/search?q=` is the
- * whole of the alternative.
- */
-export const SEARCH_URL = "https://duckduckgo.com/?q=";
-export const SEARCH_NAME = "DuckDuckGo";
+// Shared with the chat window, which offers the same search when it is asked
+// something it cannot answer.
+export { SEARCH_URL, SEARCH_NAME } from "../../utils/websearch";
+import { SEARCH_URL, SEARCH_NAME } from "../../utils/websearch";
 
 /** How many repositories a query may contribute, before it is a wall of them. */
 const REPO_LIMIT = 6;
@@ -144,22 +146,46 @@ export function search(query: string, sources: Sources): Result[] {
     })
   );
 
+  const asResult = (repo: Repo, badge?: string): Result => ({
+    id: `repo:${repo.owner}/${repo.name}`,
+    group: "Projects" as const,
+    name: repo.name,
+    sub: [repo.owner, repo.language].filter(Boolean).join(" · "),
+    badge: badge ?? (repo.homepage ? "live" : undefined),
+    run: () => sources.openRepo(repo)
+  });
+
   // Only ever on request: the resting list is about what is open, not about
   // everything that has ever been written.
-  const repos = q
+  const literal = q
     ? ranked(
         sources.repos,
         (repo) => ({ name: repo.name, sub: `${repo.owner} ${repo.description}` }),
-        (repo) => ({
-          id: `repo:${repo.owner}/${repo.name}`,
-          group: "Projects" as const,
-          name: repo.name,
-          sub: [repo.owner, repo.language].filter(Boolean).join(" · "),
-          badge: repo.homepage ? "live" : undefined,
-          run: () => sources.openRepo(repo)
-        })
+        (repo) => asResult(repo)
       ).slice(0, REPO_LIMIT)
     : [];
+
+  /*
+   * What the query is about, after what it spells.
+   *
+   * Never in place of a literal match — somebody typing "weeb" wants weeb-vip,
+   * and no similarity score improves on that — and never repeating one. These
+   * are the ones with no letters in common with the query at all: "message
+   * queue" finding the repository whose description says Kafka. Marked, because
+   * a result that matches nothing you typed looks like a bug unless it says why
+   * it is there.
+   */
+  const already = new Set(literal.map((result) => result.id));
+  const related = q && sources.related?.size
+    ? [...sources.related.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([key]) => sources.repos.find((repo) => `${repo.owner}/${repo.name}` === key))
+        .filter((repo): repo is Repo => !!repo)
+        .map((repo) => asResult(repo, "related"))
+        .filter((result) => !already.has(result.id))
+    : [];
+
+  const repos = [...literal, ...related].slice(0, REPO_LIMIT);
 
   const actions = ranked(
     sources.actions,

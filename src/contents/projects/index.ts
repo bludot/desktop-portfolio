@@ -16,6 +16,7 @@ import { motion } from "../../utils/motion";
 import highlight from "../../utils/highlight";
 import {
   ACCOUNTS,
+  forgetGithubFailure,
   classify,
   countInside,
   fetchFile,
@@ -825,6 +826,10 @@ class ProjectsContent extends OSElement {
   // ------------------------------------------------------------- fetching
 
   private async fetch(force = false) {
+    // Pressing "Try again" is somebody saying they know it failed. The back-off
+    // exists to stop three windows drumming on a refused API, not to make a
+    // person wait out a minute they can see.
+    if (force) forgetGithubFailure();
     this.phase = "loading";
     this.render();
     try {

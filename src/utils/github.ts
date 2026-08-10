@@ -156,6 +156,29 @@ export async function fetchRepos(): Promise<RepoIndex> {
  * this morning is far better than an error page — and only reports failure
  * when there is nothing to fall back to.
  */
+/**
+ * The read that is already happening, if one is.
+ *
+ * Three things on this desktop want the repositories now — the Projects
+ * window, the launcher's search and the chat window's notes — and each used to
+ * ask for its own. Three consumers arriving together is three sets of requests
+ * for the same answer, against an API that allows sixty an hour to an address
+ * that is not signed in. Sharing the promise makes it one.
+ */
+let reading: Promise<RepoResult> | undefined;
+
+/**
+ * When the last attempt failed, and how long to leave it alone afterwards.
+ *
+ * Rate limiting arrives as a 403 on every request, and without this each
+ * consumer answers it by trying again — which is how a desktop that has run out
+ * of quota spends the rest of the hour asking for more of it. A minute is long
+ * enough to stop the drumming and short enough that a passing failure is not
+ * remembered as an outage.
+ */
+let failedAt = 0;
+const BACK_OFF_MS = 60_000;
+
 export async function loadRepos(
   options: { force?: boolean; now?: number } = {}
 ): Promise<RepoResult> {
@@ -166,16 +189,43 @@ export async function loadRepos(
     return { ...cached.value, fetchedAt: cached.fetchedAt, cached: true };
   }
 
-  try {
-    const fresh = await fetchRepos();
-    await writeCache(CACHE_KEY, fresh, now);
-    return { ...fresh, fetchedAt: now, cached: false };
-  } catch (error) {
-    if (cached) {
-      return { ...cached.value, fetchedAt: cached.fetchedAt, cached: true };
-    }
-    throw error;
+  /*
+   * Nothing to fall back on and no point asking yet: whatever is cached is
+   * better than a request that is going to be refused, and a stale answer is
+   * better than none.
+   */
+  if (!options.force && failedAt && now - failedAt < BACK_OFF_MS) {
+    if (cached) return { ...cached.value, fetchedAt: cached.fetchedAt, cached: true };
+    throw new Error("GitHub was refusing requests a moment ago");
   }
+
+  // A request already in flight is the answer everybody is waiting for.
+  if (!options.force && reading) return reading;
+
+  reading = (async () => {
+    try {
+      const fresh = await fetchRepos();
+      failedAt = 0;
+      await writeCache(CACHE_KEY, fresh, now);
+      return { ...fresh, fetchedAt: now, cached: false };
+    } catch (error) {
+      failedAt = now;
+      if (cached) {
+        return { ...cached.value, fetchedAt: cached.fetchedAt, cached: true };
+      }
+      throw error;
+    } finally {
+      reading = undefined;
+    }
+  })();
+
+  return reading;
+}
+
+/** Forget that anything went wrong. For tests, and for "Try again". */
+export function forgetGithubFailure(): void {
+  failedAt = 0;
+  reading = undefined;
 }
 
 const year = (iso: string) => (iso ? iso.slice(0, 4) : "");

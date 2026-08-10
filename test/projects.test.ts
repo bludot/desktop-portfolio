@@ -5,6 +5,7 @@ import nested from 'jss-plugin-nested'
 import ProjectsContent, { metaLine, statsLine } from '../src/contents/projects'
 import {
   fetchRepos,
+  forgetGithubFailure,
   loadRepos,
   summarise,
   CACHE_TTL_MS,
@@ -56,6 +57,9 @@ const serve = (
 
 beforeEach(async () => {
   await db.cache.clear()
+  // Module-level state: without this, one test's refusal is remembered by the
+  // next, which is the same trap the back-off exists to spring on GitHub.
+  forgetGithubFailure()
 })
 
 afterEach(() => {
@@ -838,5 +842,81 @@ describe('Projects window', () => {
     await open()
 
     expect(host.querySelector('.projects-note')?.textContent).toBe('Nothing here.')
+  })
+})
+
+/*
+ * Three things want the repositories at once — the Projects window, the
+ * launcher's search and the chat window's notes — against an API that allows
+ * sixty requests an hour to an address that is not signed in. Asking three
+ * times for one answer, and then asking again the moment it is refused, is how
+ * a desktop spends the rest of the hour rate-limited.
+ */
+describe('asking GitHub once', () => {
+  beforeEach(async () => {
+    await db.cache.clear()
+    forgetGithubFailure()
+  })
+
+  afterEach(() => {
+    forgetGithubFailure()
+  })
+
+  it('shares one request between everything that asks together', async () => {
+    const fetchMock = serve({ thatcatdev: [repo()], 'weeb-vip': [], bludot: [] })
+
+    const [a, b, c] = await Promise.all([loadRepos(), loadRepos(), loadRepos()])
+
+    // Three accounts, once — not three times each.
+    expect(fetchMock.mock.calls).toHaveLength(ACCOUNTS.length)
+    expect(a.repos).toEqual(b.repos)
+    expect(b.repos).toEqual(c.repos)
+  })
+
+  it('leaves a refused API alone for a while afterwards', async () => {
+    const offline = new Error('403 rate limited')
+    const fetchMock = serve({
+      thatcatdev: offline,
+      'weeb-vip': offline,
+      bludot: offline,
+    })
+
+    await expect(loadRepos({ now: 1_000 })).rejects.toThrow()
+    const first = fetchMock.mock.calls.length
+
+    // A second consumer arriving straight after does not try again.
+    await expect(loadRepos({ now: 2_000 })).rejects.toThrow()
+    expect(fetchMock.mock.calls).toHaveLength(first)
+
+    // A minute later it is worth another go.
+    await expect(loadRepos({ now: 90_000 })).rejects.toThrow()
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(first)
+  })
+
+  // "Try again" is somebody saying they know it failed.
+  it('tries anyway when asked outright', async () => {
+    const offline = new Error('403')
+    const fetchMock = serve({ thatcatdev: offline, 'weeb-vip': offline, bludot: offline })
+    await expect(loadRepos({ now: 1_000 })).rejects.toThrow()
+    const first = fetchMock.mock.calls.length
+
+    await expect(loadRepos({ force: true, now: 2_000 })).rejects.toThrow()
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(first)
+  })
+
+  // A stale answer beats a request that is going to be refused.
+  it('serves whatever is cached rather than asking again', async () => {
+    serve({ thatcatdev: [repo({ name: 'stored' })], 'weeb-vip': [], bludot: [] })
+    await loadRepos({ now: 1_000 })
+
+    const offline = new Error('403')
+    const fetchMock = serve({ thatcatdev: offline, 'weeb-vip': offline, bludot: offline })
+    // Past the TTL, so it tries, fails, and falls back to what it had.
+    const stale = await loadRepos({ now: 1_000 + CACHE_TTL_MS + 1 })
+    expect(stale.repos[0].name).toBe('stored')
+
+    const after = fetchMock.mock.calls.length
+    await loadRepos({ now: 1_000 + CACHE_TTL_MS + 2 })
+    expect(fetchMock.mock.calls).toHaveLength(after)
   })
 })

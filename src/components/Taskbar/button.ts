@@ -89,148 +89,17 @@ class TaskbarButtons extends OSElement {
     super("taskbar-buttons", "taskbar-buttons");
     this.desktop = desktop;
     /*
-     * The menu can put itself away, but it does not decide whether it is up —
-     * that state lives here, with the button that toggles it. Pressing anything
-     * on the board goes through this, so opening a window closes the menu
-     * rather than leaving it over the thing it just opened.
-     */
-    const startMenu = new StartMenu(desktop, () => void queue(closeMenu));
-
-    /*
-     * The launcher is a toggle, so its state lives here rather than being
-     * inferred. Previously each open registered a fresh pair of window click
-     * listeners and there was no record of whether the menu was already up, so
-     * pressing the button twice raced an open against a close.
-     */
-    let menuOpen = false;
-    let startButton: HTMLElement | null = null;
-
-    /*
-     * Opens and closes run one at a time, never interleaved.
+     * The board owns whether it is up.
      *
-     * Both of them await — loading the menu, then animating it — and a close
-     * landing inside an open's await was enough to break the launcher for good:
-     * the close would unload before the load had appended anything, so nothing
-     * was removed, and then the load finished and appended the menu anyway. The
-     * menu was on screen with the state saying it was shut, and the next click
-     * called load() a second time, which throws.
-     *
-     * The rejection handler is the same task, so one failure retries rather
-     * than wedging the queue for the rest of the session.
+     * This used to be a `menuOpen` boolean out here, flipped the instant a
+     * transition started, with the mounting and the animation happening after —
+     * so for the length of every open and close the taskbar believed something
+     * that was not yet true, and any failure in between left the two disagreeing
+     * for good. That is the bug that kept coming back: a button toggling a menu
+     * that was not there, one press appearing to do nothing and the next one
+     * working. Nothing out here tracks it now; see `StartMenu.toggle`.
      */
-    let pending: Promise<void> = Promise.resolve();
-    const queue = (task: () => Promise<void>): Promise<void> => {
-      pending = pending.then(task, task);
-      return pending;
-    };
-
-    const onDocumentClick = (e: MouseEvent) => {
-      // The button toggles itself; anything else dismisses. A click aimed
-      // straight at window has window as its target, and Node.contains throws
-      // on anything that is not a Node.
-      const target = e.target instanceof Node ? e.target : null;
-      const inside = !!(target && startButton && startButton.contains(target));
-      logger.debug(
-        `dismiss: inside=${inside} open=${menuOpen} target=${
-          target instanceof Element ? target.tagName.toLowerCase() : "window"
-        }`
-      );
-      if (inside) return;
-      void queue(closeMenu);
-    };
-
-    // Read inside the queued task, not when it is queued: by the time this
-    // runs, an earlier click may already have changed the answer.
-    const toggleMenu = () =>
-      queue(async () => {
-        if (menuOpen) {
-          await closeMenu();
-        } else {
-          await openMenu();
-        }
-      });
-
-    const openMenu = async () => {
-      logger.debug(`open: alreadyOpen=${menuOpen}`);
-      if (menuOpen) return;
-      menuOpen = true;
-
-      const el = startMenu.getElement();
-
-      /*
-       * Attached now rather than after the await. Capture on window runs before
-       * the event reaches the button, so this click is already past that phase
-       * and cannot re-enter here — whereas deferring registration left a gap in
-       * which a click landed with the menu open and nothing listening.
-       */
-      window.addEventListener("click", onDocumentClick, true);
-
-      /*
-       * Whatever happens in between, the menu must not be left hidden.
-       *
-       * It is hidden here and shown again three lines down, and anything that
-       * threw between the two — a load that found the element still mounted,
-       * an animation that rejected — left it in the page at zero opacity with
-       * the state insisting it was open. Nothing appeared, and the next press
-       * closed the invisible menu rather than opening a visible one, so it took
-       * two presses to see anything.
-       */
-      try {
-        await startMenu.load(document.querySelector("#app") as HTMLElement);
-        // `enter` owns the hide and the reveal. Doing it here by hand is what
-        // made the menu blink as it finished opening: the entrance fills
-        // backwards, so on its last frame the element fell back to the inline
-        // `opacity: 0` that was only cleared after the await.
-        await motion.enter(el, motion.popIn);
-      } catch (error) {
-        /*
-         * An open that failed is not an open. Leaving the state saying it was
-         * is what made the launcher need two presses afterwards: the next one
-         * closed a menu that had never appeared, and only the one after it
-         * opened anything.
-         */
-        logger.debug(`open failed: ${error}`);
-        menuOpen = false;
-        window.removeEventListener("click", onDocumentClick, true);
-        try {
-          await startMenu.unload();
-        } catch {
-          // Never loaded, so there is nothing to take down.
-        }
-      } finally {
-        // Belt and braces for the failure path: `enter` clears this itself on
-        // the way through, and a menu that threw must not be left invisible.
-        el.style.opacity = "";
-      }
-
-      logger.debug(
-        `open done: mounted=${!!el.parentElement} opacity=${
-          el.isConnected ? getComputedStyle(el).opacity : "n/a"
-        } held=${el.getAnimations?.().length ?? 0}`
-      );
-    };
-
-    const closeMenu = async () => {
-      logger.debug(`close: wasOpen=${menuOpen}`);
-      if (!menuOpen) return;
-      menuOpen = false;
-      window.removeEventListener("click", onDocumentClick, true);
-      /*
-       * The same, in reverse: a failure here must still unload, or the element
-       * stays mounted and the next load() throws because it already has a
-       * parent.
-       */
-      try {
-        await motion.popOut(startMenu.getElement());
-      } catch (error) {
-        logger.debug(`close animation failed: ${error}`);
-      }
-      try {
-        await startMenu.unload();
-      } catch (error) {
-        logger.debug(`close failed: ${error}`);
-      }
-    };
+    const startMenu = new StartMenu(desktop);
 
     this.buttons = [
       new TaskbarButton({
@@ -269,9 +138,13 @@ class TaskbarButtons extends OSElement {
           return container;
         })(),
         action: (element: HTMLElement) => {
-          logger.debug(`pressed: open=${menuOpen}`);
-          startButton = element;
-          void toggleMenu();
+          logger.debug(`pressed: open=${startMenu.isOpen}`);
+          // The button is handed over as the anchor: a press on it is a toggle,
+          // not a dismissal, and only the board can tell those apart.
+          void startMenu.toggle(
+            document.querySelector("#app") as HTMLElement,
+            element
+          );
         }
       })
     ];

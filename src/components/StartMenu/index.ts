@@ -13,6 +13,7 @@ import {
   weight
 } from "../../theme";
 import { overlayScroll } from "../Scrollbar";
+import { motion } from "../../utils/motion";
 import windowManager from "../../utils/windowManager";
 import Desktop from "../Desktop";
 import AboutContent from "./../../contents/about";
@@ -80,17 +81,51 @@ interface Destination {
   open: () => void;
 }
 
+/**
+ * Where the board is between one press and the next.
+ *
+ * Four, not two, because opening and closing take time — an entrance is 220ms
+ * and an exit 140ms — and something pressed during either has to be answered
+ * with the truth rather than with what will be true shortly.
+ */
+type Phase = "closed" | "opening" | "open" | "closing";
+
 class StartMenu extends OSElement {
   isMobile: boolean;
-  /** Told to put the menu away, since the menu does not own whether it is up. */
-  private readonly dismiss: () => void;
   private body!: HTMLElement;
   private scrollbar?: { unload: () => Promise<void> | void };
   private subscription?: { unsubscribe: () => void };
 
-  constructor(private readonly desktop: Desktop, dismiss: () => void = () => undefined) {
+  /**
+   * Whether the board is up, and the only record of it.
+   *
+   * This used to be a boolean in the taskbar's closure, set the instant a
+   * transition *started* — so for the length of every animation the desktop
+   * believed something that was not yet true, and any failure in between left
+   * the two disagreeing for good. What followed is the bug that kept coming
+   * back: the button toggling a menu that was not there, so one press appeared
+   * to do nothing and the next one worked.
+   *
+   * The menu owns it now, it changes only when the DOM has caught up, and
+   * `settleClosed` reconciles the two whatever happens in between.
+   */
+  private phase: Phase = "closed";
+
+  /**
+   * Transitions run one at a time.
+   *
+   * An open landing inside a close's await is what made the two disagree in the
+   * first place: the close would unload the element the open had just mounted.
+   * Chained rather than guarded, so a failure retries rather than wedging every
+   * press that follows.
+   */
+  private work: Promise<void> = Promise.resolve();
+
+  /** The button this was opened from. Pressing it again is not a dismissal. */
+  private anchor?: HTMLElement;
+
+  constructor(private readonly desktop: Desktop) {
     super("startmenu", "start-menu");
-    this.dismiss = dismiss;
     this.isMobile = false;
     // Reset on every load, so reopening does not keep appending the generated
     // class to a className that only ever grows.
@@ -403,6 +438,115 @@ class StartMenu extends OSElement {
     });
   }
 
+  // ------------------------------------------------------- open and shut
+
+  /** Up, or on its way up. Both answer "pressing the button should close it". */
+  get isOpen(): boolean {
+    return this.phase === "opening" || this.phase === "open";
+  }
+
+  /**
+   * The one thing the start button does.
+   *
+   * `anchor` is that button: a press on it is a toggle rather than a dismissal,
+   * and the board has to be able to tell the two apart from inside its own
+   * document-click handler.
+   */
+  toggle(host: HTMLElement, anchor?: HTMLElement): Promise<void> {
+    return this.run(() => (this.isOpen ? this.hide() : this.show(host, anchor)));
+  }
+
+  open(host: HTMLElement, anchor?: HTMLElement): Promise<void> {
+    return this.run(() => this.show(host, anchor));
+  }
+
+  close(): Promise<void> {
+    return this.run(() => this.hide());
+  }
+
+  private run(task: () => Promise<void>): Promise<void> {
+    this.work = this.work.then(task, task);
+    return this.work;
+  }
+
+  private async show(host: HTMLElement, anchor?: HTMLElement): Promise<void> {
+    if (this.isOpen) return;
+    this.anchor = anchor;
+    this.phase = "opening";
+
+    try {
+      // Registered before the mount, not after: a click during the entrance
+      // must dismiss, and a gap here is a gap where nothing is listening.
+      window.addEventListener("click", this.onDocumentClick, true);
+      await this.load(host);
+      await motion.enter(this.element, motion.popIn);
+      this.phase = "open";
+    } catch (error) {
+      this.logger.debug(`open failed: ${error}`);
+      await this.settleClosed();
+      return;
+    }
+
+    /*
+     * The last word on it is the DOM's.
+     *
+     * An open that ends with nothing mounted is not an open, whatever the
+     * phase says — and saying otherwise is precisely how the button ended up
+     * toggling something that was not there.
+     */
+    if (!this.element.isConnected) await this.settleClosed();
+  }
+
+  private async hide(): Promise<void> {
+    if (this.phase === "closed") return;
+    this.phase = "closing";
+    window.removeEventListener("click", this.onDocumentClick, true);
+
+    try {
+      await motion.popOut(this.element);
+    } catch (error) {
+      this.logger.debug(`close animation failed: ${error}`);
+    }
+    await this.settleClosed();
+  }
+
+  /**
+   * Off the screen, and the state agreeing with it.
+   *
+   * Every failure path ends here. Nothing in it can throw past the end: the
+   * unload is caught, and `remove()` on an element that is already gone is a
+   * no-op — so there is no way to leave the board half-open, which is the only
+   * state the desktop cannot recover from on its own.
+   */
+  private async settleClosed(): Promise<void> {
+    window.removeEventListener("click", this.onDocumentClick, true);
+    try {
+      await this.unload();
+    } catch (error) {
+      this.logger.debug(`close failed: ${error}`);
+    }
+    this.element.remove();
+    // The exit fills forwards, so the element would come back invisible.
+    this.element.style.opacity = "";
+    this.phase = "closed";
+  }
+
+  /**
+   * A press anywhere else puts the board away.
+   *
+   * "Anywhere else" means outside the board *and* outside the button that
+   * opened it — the button toggles itself, and the board's own background is
+   * part of the board. Testing only against the button, as this once did, made
+   * a press on the panel's own padding close it.
+   */
+  private readonly onDocumentClick = (event: MouseEvent) => {
+    const target = event.target instanceof Node ? event.target : null;
+    if (target && (this.element.contains(target) || this.anchor?.contains(target))) {
+      return;
+    }
+    void this.close();
+  };
+
   /** Everything with a window behind it, in the order they are worth reading. */
   private destinations(): Destination[] {
     return [
@@ -507,8 +651,8 @@ class StartMenu extends OSElement {
       destination.open();
     }
 
-    // Whatever was pressed, the menu has done its job.
-    this.dismiss();
+    // Whatever was pressed, the board has done its job.
+    void this.close();
   }
 
   private cell(destination: Destination): HTMLElement {
@@ -575,7 +719,7 @@ class StartMenu extends OSElement {
     pill.appendChild(document.createTextNode(label));
     pill.addEventListener("click", () => {
       action();
-      this.dismiss();
+      void this.close();
     });
     return pill;
   }
@@ -633,7 +777,7 @@ class StartMenu extends OSElement {
     search.appendChild(key);
     // The launcher is the search surface; this menu never grows a second field.
     search.addEventListener("click", () => {
-      this.dismiss();
+      void this.close();
       void this.desktop.launcher?.toggle();
     });
     id.appendChild(search);
@@ -754,8 +898,22 @@ class StartMenu extends OSElement {
   async unload() {
     this.subscription?.unsubscribe();
     this.subscription = undefined;
-    await this.scrollbar?.unload();
+
+    /*
+     * Caught, because the bar is not worth the board.
+     *
+     * A render throws its scrolling box away, and a bar pointed at a node that
+     * has gone throws when it is taken down. Letting that escape would abort
+     * the unload underneath it and leave the panel mounted for good — the
+     * failure this whole file is now arranged to make impossible.
+     */
+    try {
+      await this.scrollbar?.unload();
+    } catch (error) {
+      this.logger.debug(`scrollbar unload failed: ${error}`);
+    }
     this.scrollbar = undefined;
+
     if (this.parent) await super.unload();
   }
 }

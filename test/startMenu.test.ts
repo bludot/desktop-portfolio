@@ -169,16 +169,17 @@ describe('StartMenu', () => {
   })
 
   it('puts itself away whatever was pressed', async () => {
-    const dismiss = vi.fn()
-    const menu = new StartMenu(makeDesktop(), dismiss)
-    await menu.load(host)
+    const menu = new StartMenu(makeDesktop())
+    await menu.open(host)
+    expect(menu.isOpen).toBe(true)
 
     cell('Experience').click()
-    expect(dismiss).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(menu.isOpen).toBe(false))
+    expect(host.querySelector('.start-menu')).toBeNull()
 
+    await menu.open(host)
     pill('Settings').click()
-    expect(dismiss).toHaveBeenCalledTimes(2)
-    await menu.unload()
+    await vi.waitFor(() => expect(menu.isOpen).toBe(false))
   })
 
   /*
@@ -187,15 +188,13 @@ describe('StartMenu', () => {
    */
   it('hands search to the launcher', async () => {
     const desktop = makeDesktop()
-    const dismiss = vi.fn()
-    const menu = new StartMenu(desktop, dismiss)
-    await menu.load(host)
+    const menu = new StartMenu(desktop)
+    await menu.open(host)
 
     host.querySelector<HTMLElement>('.start-search')!.click()
 
     expect(desktop.launcher.toggle).toHaveBeenCalled()
-    expect(dismiss).toHaveBeenCalled()
-    await menu.unload()
+    await vi.waitFor(() => expect(menu.isOpen).toBe(false))
   })
 
   // What James is, not what the desktop is doing — the taskbar answers that.
@@ -260,5 +259,154 @@ describe('StartMenu', () => {
       expect(host.querySelector('.start-menu')).toBeNull()
     }
     expect(menu.getElement().className.split(/\s+/).length).toBeLessThan(4)
+  })
+})
+
+/*
+ * The bug that kept coming back: press the button, nothing appears; press it
+ * again and it works. It was never one mistake — it was two records of whether
+ * the board was up (a boolean in the taskbar, and the DOM), with the boolean
+ * flipped at the *start* of a transition and the DOM catching up 140–220ms
+ * later. Anything landing in that gap, or any failure in it, left the two
+ * disagreeing for good, and from then on every press toggled a phantom.
+ *
+ * These pin the invariant rather than the symptom: the phase is only ever
+ * "open" when the element is mounted, and every path ends with the two agreeing.
+ */
+describe('opening and closing, for good', () => {
+  const anchorButton = () => {
+    const button = document.createElement('button')
+    document.body.appendChild(button)
+    return button
+  }
+
+  it('reports itself open only while it is actually mounted', async () => {
+    const menu = new StartMenu(makeDesktop())
+    expect(menu.isOpen).toBe(false)
+
+    await menu.open(host)
+    expect(menu.isOpen).toBe(true)
+    expect(host.querySelector('.start-menu')).toBeTruthy()
+
+    await menu.close()
+    expect(menu.isOpen).toBe(false)
+    expect(host.querySelector('.start-menu')).toBeNull()
+  })
+
+  it('toggles honestly however fast it is pressed', async () => {
+    const menu = new StartMenu(makeDesktop())
+    const host2 = host
+
+    // Six presses with no waiting between them: they queue rather than race.
+    const presses = Array.from({ length: 6 }, () => menu.toggle(host2))
+    await Promise.all(presses)
+
+    // Six is even, so it ends shut — and shut means gone, not merely flagged.
+    expect(menu.isOpen).toBe(false)
+    expect(host.querySelector('.start-menu')).toBeNull()
+
+    await menu.toggle(host2)
+    expect(menu.isOpen).toBe(true)
+    expect(host.querySelector('.start-menu')).toBeTruthy()
+    await menu.close()
+  })
+
+  /*
+   * The specific race that broke it: a press landing inside the exit animation.
+   * The old code had already set the state to "closed", so the press opened —
+   * and then the close it had interrupted finished and unloaded the element the
+   * open had just mounted.
+   */
+  it('survives a press landing inside the closing animation', async () => {
+    const menu = new StartMenu(makeDesktop())
+    await menu.open(host)
+
+    const closing = menu.close()
+    const reopening = menu.toggle(host)
+    await Promise.all([closing, reopening])
+
+    expect(menu.isOpen).toBe(true)
+    expect(host.querySelector('.start-menu')).toBeTruthy()
+    expect(host.querySelector('.start-menu')!.isConnected).toBe(true)
+    await menu.close()
+  })
+
+  /*
+   * And the reverse: something dismissing it while it is still coming up.
+   */
+  it('survives a dismissal landing inside the opening animation', async () => {
+    const menu = new StartMenu(makeDesktop())
+
+    const opening = menu.open(host)
+    const closing = menu.close()
+    await Promise.all([opening, closing])
+
+    expect(menu.isOpen).toBe(false)
+    expect(host.querySelector('.start-menu')).toBeNull()
+  })
+
+  /*
+   * A teardown that throws used to strand the panel: the element stayed
+   * mounted, `parent` stayed set, and every later open decided it was already
+   * up and did nothing at all.
+   */
+  it('recovers when its own teardown fails', async () => {
+    const menu = new StartMenu(makeDesktop())
+    await menu.open(host)
+
+    const boom = vi
+      .spyOn(menu as any, 'beforeUnload')
+      .mockRejectedValueOnce(new Error('scrollbar exploded'))
+
+    await menu.close()
+    expect(menu.isOpen).toBe(false)
+    expect(host.querySelector('.start-menu')).toBeNull()
+
+    boom.mockRestore()
+    // The real proof: it still opens afterwards.
+    await menu.open(host)
+    expect(menu.isOpen).toBe(true)
+    expect(host.querySelector('.start-menu')).toBeTruthy()
+    await menu.close()
+  })
+
+  it('closes on a press outside it', async () => {
+    const anchor = anchorButton()
+    const menu = new StartMenu(makeDesktop())
+    await menu.open(host, anchor)
+
+    document.body.click()
+    await vi.waitFor(() => expect(menu.isOpen).toBe(false))
+    anchor.remove()
+  })
+
+  // The board's own padding is part of the board. Testing only against the
+  // button, as this once did, closed the menu on a press between the tiles.
+  it('stays up for a press on its own background', async () => {
+    const anchor = anchorButton()
+    const menu = new StartMenu(makeDesktop())
+    await menu.open(host, anchor)
+
+    host.querySelector<HTMLElement>('.start-grid')!.click()
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(menu.isOpen).toBe(true)
+    await menu.close()
+    anchor.remove()
+  })
+
+  // The button toggles itself; it must not also be read as a dismissal, or the
+  // press would close and reopen in the same gesture.
+  it('leaves a press on its own button to the button', async () => {
+    const anchor = anchorButton()
+    const menu = new StartMenu(makeDesktop())
+    await menu.open(host, anchor)
+
+    anchor.click()
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(menu.isOpen).toBe(true)
+    await menu.close()
+    anchor.remove()
   })
 })

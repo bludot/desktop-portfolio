@@ -134,6 +134,26 @@ describe('the chat window', () => {
     await content.unload()
   })
 
+  /*
+   * A small model will agree to anything it is asked whether it can do — it
+   * offered to search the web, then discovered a turn later that it could not.
+   * The prompt has to rule the capability out rather than leave it open.
+   */
+  it('is told what it cannot do, in the prompt rather than by discovery', async () => {
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    await ask(content.getElement(), 'can you search the web?')
+
+    const [sent] = (engine.reply as any).mock.calls[0]
+    const system: string = sent[0].content
+    expect(sent[0].role).toBe('system')
+    expect(system).toContain('cannot browse the web')
+    expect(system).toContain('never offer to search')
+    await content.unload()
+  })
+
   it('keeps the conversation, so the second question has the first for context', async () => {
     const engine = stubEngine()
     const content = new ChatContent(() => engine)
@@ -204,6 +224,7 @@ describe('the chat window', () => {
     const note = host.querySelector('.chat-note')!.textContent!
     expect(note).toContain('0.5B')
     expect(note).toContain('nothing is sent anywhere')
+    expect(note).toContain('cannot look anything up')
     expect(note).toContain('makes things up')
     await content.unload()
   })

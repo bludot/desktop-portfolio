@@ -13,6 +13,8 @@ import {
   type Progress,
 } from '@thatcatdev/browser-ai'
 import { FEATURE_FLAG_DEFAULTS, loadSettings } from '../src/Store'
+import { knowledgeDocuments, knowledgeIndex } from '../src/ai'
+import db from '../src/Store'
 
 jss.setup(preset())
 jss.use(nested())
@@ -68,10 +70,40 @@ const staged = (total = 800_000_000) => {
   }
 }
 
+/**
+ * What the window knows about James, without a thread or a set of weights.
+ *
+ * One axis per topic, so retrieval is predictable: a question about Kafka
+ * matches the Kafka passages, and a question about Spotify matches nothing —
+ * which is the whole point when the model is allowed to write its own.
+ */
+const knowing = () => {
+  const topics: Record<string, string[]> = {
+    kafka: ['kafka', 'events', 'queue'],
+    gotu: ['gotu', 'engineering manager'],
+    stack: ['typescript', 'kubernetes', 'terraform'],
+  }
+  const axes = Object.keys(topics)
+  const vector = (text: string) => {
+    const lower = text.toLowerCase()
+    const values = axes.map((a) => (topics[a].some((w) => lower.includes(w)) ? 1 : 0))
+    const length = Math.hypot(...values) || 1
+    return Float32Array.from(values.map((v) => v / length))
+  }
+  return knowledgeIndex({
+    device: 'wasm',
+    load: vi.fn().mockResolvedValue(undefined),
+    embed: vi.fn(async (texts: string[]) => texts.map(vector)),
+    dispose: vi.fn(),
+  })
+}
+
 const input = () => host.querySelector<HTMLTextAreaElement>('.chat-input')!
 const send = () => host.querySelector<HTMLButtonElement>('.chat-send')!
 const status = () => host.querySelector<HTMLElement>('.chat-status')!
 const bar = () => host.querySelector<HTMLElement>('.chat-progress')!
+const openings = () => host.querySelector<HTMLElement>('.chat-openings')!
+const chips = () => [...host.querySelectorAll<HTMLButtonElement>('.chat-opening')]
 const fill = () => host.querySelector<HTMLElement>('.chat-progress-fill')!
 const turns = () =>
   [...host.querySelectorAll<HTMLElement>('.chat-turn')].map((turn) => ({
@@ -88,12 +120,25 @@ const ask = async (content: HTMLElement, text: string) => {
   return content
 }
 
-beforeEach(() => {
+let realFetch: typeof globalThis.fetch
+
+beforeEach(async () => {
+  // The notes are built from the repositories where they can be had. No test
+  // should be waiting on GitHub to answer: unreachable is a case this window
+  // handles, and it is the quick one.
+  realFetch = globalThis.fetch
+  globalThis.fetch = vi.fn(async () => {
+    throw new Error('offline')
+  }) as unknown as typeof globalThis.fetch
+  // Vectors are cached between visits; between tests they are somebody else's.
+  await db.cache.clear()
+
   host = document.createElement('div')
   document.body.appendChild(host)
 })
 
 afterEach(() => {
+  globalThis.fetch = realFetch
   setChatEngine(undefined)
   host.remove()
 })
@@ -236,6 +281,131 @@ describe('the chat window', () => {
     to(800_000_000)
     expect(status().textContent).toContain('Building the model')
     expect(bar().classList.contains('is-preparing')).toBe(true)
+    await content.unload()
+  })
+
+  /*
+   * An empty box asks somebody to think of something, and most people type
+   * "hi", get a greeting, and close it. These are questions this model can
+   * actually answer — and during the download they are the only thing in the
+   * window worth reading, which is why they are offered before it is ready.
+   */
+  it('offers questions to click, readable while the weights are still coming', async () => {
+    const { engine, to, ready } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+
+    to(80_000_000)
+    expect(openings().hidden).toBe(false)
+    expect(chips().length).toBeGreaterThan(1)
+    // Nothing to answer with yet, so nothing to press.
+    expect(chips().every((chip) => chip.disabled)).toBe(true)
+
+    ready()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    expect(chips().every((chip) => chip.disabled)).toBe(false)
+    await content.unload()
+  })
+
+  it('asks the one that was clicked', async () => {
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    const first = chips()[0]
+    const question = first.textContent!
+    first.click()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    expect(turns()).toEqual([
+      { who: 'You', said: question },
+      { who: 'Model', said: 'Hello.' },
+    ])
+    await content.unload()
+  })
+
+  // A list that keeps offering what it has just answered is the tell that it
+  // is a list rather than a conversation.
+  it('never offers the same question twice, and follows the answer down', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    const asked = chips()[0].textContent!
+    chips()[0].click()
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    expect(chips().map((chip) => chip.textContent)).not.toContain(asked)
+    // Under the last thing said, rather than stranded at the top.
+    expect(host.querySelector('.chat-log')!.lastElementChild).toBe(openings())
+    await content.unload()
+  })
+
+  /*
+   * The model writes its own follow-ups, because it has read the passages the
+   * answer came from and a fixed list has not. At this size it will also
+   * happily ask about a job James never had, so nothing it writes goes up
+   * until retrieval has found something to answer it with.
+   */
+  it('asks the model for follow-ups, and drops the ones nothing can answer', async () => {
+    const engine = stubEngine({
+      reply: vi.fn(async (messages: Message[], onToken: (t: string) => void) => {
+        // The last call is the window asking for follow-ups; the first is the
+        // question somebody actually put. One it can answer, one it invented.
+        const asked = messages[messages.length - 1].content
+        if (asked.includes('questions a reader might ask next about James')) {
+          return 'Who was on the Kafka work?\nWhat did he do at Spotify?'
+        }
+        onToken('Hello.')
+        return 'Hello.'
+      }) as ChatEngine['reply'],
+    })
+    // Built before the window opens, because a question asked before the notes
+    // land is answered without them — and a follow-up cannot be checked
+    // against notes that do not exist yet.
+    const knowledge = knowing()
+    await knowledge.build(knowledgeDocuments([]))
+
+    const content = new ChatContent(() => engine, knowledge)
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    await ask(content.getElement(), 'what has he done with kafka?')
+
+    // Written by the model, and offered because a passage answers it. The
+    // wait is for the notes: they are built in the background while the model
+    // comes up, and a follow-up cannot be checked before they exist.
+    await vi.waitFor(
+      () =>
+        expect(chips().map((c) => c.textContent)).toContain(
+          'Who was on the Kafka work?',
+        ),
+      { timeout: 2000 },
+    )
+    // Also written by the model. Nothing in James's notes is about Spotify,
+    // so it never reaches anybody.
+    expect(chips().map((c) => c.textContent)).not.toContain(
+      'What did he do at Spotify?',
+    )
+    await content.unload()
+  })
+
+  // Somebody with a question of their own does not need three of ours in the
+  // way — and deciding not to type is exactly when they are wanted back.
+  it('gets out of the way while somebody is typing', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    input().value = 'what about'
+    input().dispatchEvent(new Event('input'))
+    expect(openings().hidden).toBe(true)
+
+    input().value = ''
+    input().dispatchEvent(new Event('input'))
+    expect(openings().hidden).toBe(false)
     await content.unload()
   })
 

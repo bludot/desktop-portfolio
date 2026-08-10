@@ -24,6 +24,7 @@ import {
 import { loadRepos } from "../../utils/github";
 import { SEARCH_URL } from "../../utils/websearch";
 import { Download, remaining } from "./progress";
+import { MADE_UP, SHOWN, parseQuestions, suggest } from "./suggestions";
 import { prefersReducedMotion } from "../../utils/motion";
 
 /**
@@ -86,6 +87,8 @@ class ChatContent extends OSElement {
   private pip!: HTMLElement;
   private bar!: HTMLElement;
   private fill!: HTMLElement;
+  private openings!: HTMLElement;
+  private openingRow!: HTMLElement;
   private models!: HTMLSelectElement;
   private devices!: HTMLSelectElement;
 
@@ -100,8 +103,11 @@ class ChatContent extends OSElement {
    * long pole, and the notes are 23MB the launcher may well have fetched
    * already. Nothing waits on it — a question asked before it is ready is
    * simply answered without notes.
+   *
+   * Passed in for the same reason the engine is: a test should be able to say
+   * what this window knows without a thread and a set of weights.
    */
-  private readonly knowledge = knowledgeIndex();
+  private readonly knowledge: ReturnType<typeof knowledgeIndex>;
 
   /**
    * What the last answer was built from.
@@ -113,6 +119,27 @@ class ChatContent extends OSElement {
   private sources: Document[] = [];
 
   /**
+   * Every question that has been put, however it was put.
+   *
+   * Only so the same suggestion is not offered twice: a list that keeps
+   * offering what has just been answered is the tell that it is a list rather
+   * than a conversation.
+   */
+  private readonly answered = new Set<string>();
+
+  /**
+   * Follow-ups the model wrote, after they were checked against the notes.
+   *
+   * Emptied the moment a new question is asked: they were about the previous
+   * answer, and leaving them up under a new one is how a window ends up
+   * suggesting something the conversation has moved past.
+   */
+  private made: string[] = [];
+
+  /** The follow-ups being written, so a new question can abandon them. */
+  private thinkingUp?: AbortController;
+
+  /**
    * How an engine is got, rather than the engine itself.
    *
    * The picker builds a new one whenever the model or the device changes, so
@@ -122,10 +149,12 @@ class ChatContent extends OSElement {
   private readonly makeEngine: (model: string, device: DevicePreference) => ChatEngine;
 
   constructor(
-    makeEngine: (model: string, device: DevicePreference) => ChatEngine = chat
+    makeEngine: (model: string, device: DevicePreference) => ChatEngine = chat,
+    knowledge: ReturnType<typeof knowledgeIndex> = knowledgeIndex()
   ) {
     super("chatcontent", "chat-content");
     this.makeEngine = makeEngine;
+    this.knowledge = knowledge;
     this.engine = makeEngine(this.choice.model, this.choice.device);
 
     this.style = () => ({
@@ -443,6 +472,62 @@ class ChatContent extends OSElement {
           outlineOffset: "1px"
         },
 
+        // -------------------------------------------------- the openings
+        /*
+         * Questions to click, for anybody looking at an empty box.
+         *
+         * They live in the transcript rather than above the input, so they sit
+         * where the conversation will be and leave with it. During the
+         * download they are also the only thing in the window worth reading,
+         * which is most of why they are here rather than in a strip.
+         */
+        "& .chat-openings": {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          gap: "8px",
+          paddingTop: "2px"
+        },
+        "& .chat-openings[hidden]": { display: "none" },
+        "& .chat-openings-label": {
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.caps,
+          textTransform: "uppercase",
+          color: color.inkFaint
+        },
+        "& .chat-openings-row": {
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "7px"
+        },
+        "& .chat-opening": {
+          maxWidth: "100%",
+          padding: "6px 12px",
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.pill,
+          background: "transparent",
+          color: color.inkSoft,
+          font: "inherit",
+          fontSize: size.caption,
+          textAlign: "left",
+          cursor: "pointer",
+          transition: "background 150ms ease, color 150ms ease, border-color 150ms ease"
+        },
+        "& .chat-opening:hover:not(:disabled)": {
+          background: color.hover,
+          color: color.accent,
+          borderColor: color.accent
+        },
+        "& .chat-opening:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "1px"
+        },
+        // Offered while the weights are still arriving, because reading them is
+        // something to do with the wait — but not clickable until there is
+        // something to answer with.
+        "& .chat-opening:disabled": { opacity: 0.45, cursor: "default" },
+
         "& .chat-form": {
           flex: "0 0 auto",
           display: "flex",
@@ -510,6 +595,8 @@ class ChatContent extends OSElement {
     this.log.setAttribute("role", "log");
     this.log.setAttribute("aria-live", "polite");
     this.element.appendChild(this.log);
+    this.openings = this.buildOpenings();
+    this.offer();
 
     this.form = document.createElement("form");
     this.form.className = "chat-form";
@@ -527,6 +614,12 @@ class ChatContent extends OSElement {
         this.form.requestSubmit();
       }
     });
+    /*
+     * Somebody with a question of their own does not need three of ours in the
+     * way. They come back if the box is emptied again — deciding not to type
+     * is exactly when they are wanted.
+     */
+    this.input.addEventListener("input", () => this.offer());
 
     this.send = document.createElement("button");
     this.send.type = "submit";
@@ -613,6 +706,153 @@ class ChatContent extends OSElement {
     box.appendChild(body);
 
     return box;
+  }
+
+  /**
+   * The questions on offer, and the row they live in.
+   *
+   * One element, moved to the end of the transcript each time it is filled, so
+   * the offer always sits under the last thing said rather than at the top of a
+   * conversation that has moved on.
+   */
+  private buildOpenings(): HTMLElement {
+    const box = document.createElement("div");
+    box.className = "chat-openings";
+
+    const label = document.createElement("span");
+    label.className = "chat-openings-label";
+    label.appendChild(document.createTextNode("Try asking"));
+    box.appendChild(label);
+
+    this.openingRow = document.createElement("div");
+    this.openingRow.className = "chat-openings-row";
+    // A group rather than a list: these are controls, and a screen reader
+    // should be told what the set of them is for before reading eleven words
+    // of the first one.
+    this.openingRow.setAttribute("role", "group");
+    this.openingRow.setAttribute("aria-label", "Suggested questions");
+    box.appendChild(this.openingRow);
+
+    return box;
+  }
+
+  /**
+   * Put the next few questions up, or take them away.
+   *
+   * Away when somebody is typing — they have their own question and ours are
+   * in the way — and away for good once there is nothing left unasked.
+   */
+  private offer() {
+    const typing = this.input?.value.trim().length > 0;
+    const next = typing
+      ? []
+      : suggest(this.answered, this.sources.map((p) => p.source), SHOWN, this.made);
+
+    this.openingRow.textContent = "";
+    next.forEach((question) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chat-opening";
+      // Offered while the weights are still coming, so there is something to
+      // read during the wait; clickable only once there is an answer to give.
+      chip.disabled = this.phase !== "ready";
+      chip.appendChild(document.createTextNode(question));
+      chip.addEventListener("click", () => {
+        this.input.value = question;
+        this.form.requestSubmit();
+      });
+      this.openingRow.appendChild(chip);
+    });
+
+    this.openings.hidden = !next.length;
+    // To the end, under whatever was said last.
+    if (next.length) this.log.appendChild(this.openings);
+  }
+
+  /**
+   * Ask the model what somebody might want to know next.
+   *
+   * Better than a fixed list can be, because it has just read the passages the
+   * answer came from and a list has not — and worse than a fixed list in the
+   * one way that matters, which is that at this size it will happily invent a
+   * question about a James who does not exist. So nothing it writes is offered
+   * until retrieval has found something to answer it with: see `answerable`.
+   *
+   * In the background, after the answer. Nobody waits on a suggestion, and on
+   * a CPU this is another few seconds of generation.
+   */
+  private async imagine(found: Document[]) {
+    if (!found.length) return;
+
+    this.thinkingUp?.abort();
+    const mine = new AbortController();
+    this.thinkingUp = mine;
+
+    /*
+     * Its own exchange, not a turn in the conversation. Asked as part of the
+     * transcript, the request to write questions becomes something the model
+     * answers *again* two questions later — and the person reading it never
+     * asked for questions at all.
+     */
+    /*
+     * The rules earn their place, each one against a way this failed.
+     *
+     * Without a length, it writes "How did James contribute to the development
+     * of innovative technologies and methodologies?" — ninety characters of
+     * nothing, and no chip that size fits anywhere. Without "name something
+     * from the notes" it asks about innovation and impact rather than about
+     * Terraform. And asked for the questions with no other instruction it
+     * numbers them, so the numbers come off again on the way back.
+     */
+    const asked: Message[] = [
+      {
+        role: "user",
+        content: [
+          "Notes about James:",
+          found.map((passage) => passage.text).join("\n"),
+          "",
+          `Write ${MADE_UP} questions a reader might ask next about James, one per line.`,
+          "Rules: each under 10 words. Each must name something from the notes — a company, a tool, or a project. No numbering, no preamble."
+        ].join("\n")
+      }
+    ];
+
+    try {
+      const written = await this.engine.reply(asked, () => {}, mine.signal);
+      if (mine.signal.aborted || mine !== this.thinkingUp) return;
+
+      const kept: string[] = [];
+      for (const question of parseQuestions(written)) {
+        if (this.answered.has(question)) continue;
+        if (await this.answerable(question)) kept.push(question);
+      }
+      if (mine.signal.aborted || mine !== this.thinkingUp) return;
+
+      this.made = kept;
+      this.logger.debug(`follow-ups kept ${kept.length}: ${kept.join(" | ")}`);
+      if (!this.answering) this.offer();
+    } catch (error) {
+      // A suggestion nobody asked for is not worth reporting. The written-down
+      // questions are still there.
+      this.logger.debug(`follow-ups failed: ${error}`);
+    }
+  }
+
+  /**
+   * Whether there is anything here to answer a question with.
+   *
+   * The whole guard against a small model's inventions: it can write "What did
+   * James do at Spotify?" out of nothing, and retrieval will find nothing above
+   * the floor for it, and it is never offered. It proves only that something
+   * related exists — which is exactly the claim being made by putting it up.
+   */
+  private async answerable(question: string): Promise<boolean> {
+    if (!this.knowledge.ready) return false;
+    try {
+      return (await this.knowledge.search(question)).length > 0;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -892,6 +1132,8 @@ class ChatContent extends OSElement {
       );
       this.input.disabled = false;
       this.send.disabled = false;
+      // The openings were readable through the download; now they work.
+      this.offer();
       this.input.focus();
       // In the background: a question asked before it lands is answered
       // without notes rather than made to wait.
@@ -1013,6 +1255,16 @@ class ChatContent extends OSElement {
     if (!question || this.phase !== "ready" || this.answering) return;
 
     this.input.value = "";
+    this.answered.add(question);
+    /*
+     * Whatever the model was writing was about the previous answer. Abandoned
+     * rather than shown late, which is how a window ends up suggesting
+     * something the conversation has moved past.
+     */
+    this.thinkingUp?.abort();
+    this.made = [];
+    // Out of the way while this one is answered; back underneath the answer.
+    this.openings.hidden = true;
     this.turn("You", question);
     this.history.push({ role: "user", content: question });
 
@@ -1038,6 +1290,7 @@ class ChatContent extends OSElement {
         : "Nothing in particular — there were no notes on that, so it was the model's own words. Treat it as unreliable.";
       this.turn("Model", answer);
       this.history.push({ role: "assistant", content: answer });
+      this.offer();
       this.input.focus();
       return;
     }
@@ -1047,6 +1300,7 @@ class ChatContent extends OSElement {
       const said = this.turn("Model", refusal.answer);
       if (refusal.search) said.parentElement?.appendChild(this.webSearch(refusal.search));
       this.history.push({ role: "assistant", content: refusal.answer });
+      this.offer();
       this.input.focus();
       return;
     }
@@ -1109,6 +1363,9 @@ class ChatContent extends OSElement {
       this.history.push({ role: "assistant", content: said.textContent ?? "" });
       if (found.length) said.parentElement?.appendChild(this.citation(found));
       this.ready();
+      // Written questions go up straight away in the `finally` below; these
+      // replace them if and when they arrive, and pass a check first.
+      void this.imagine(found);
     } catch (error) {
       said.textContent = said.textContent || "It stopped partway through.";
       this.logger.debug(`chat failed: ${error}`);
@@ -1120,6 +1377,8 @@ class ChatContent extends OSElement {
       if (this.phase === "ready") {
         this.input.disabled = false;
         this.send.disabled = false;
+        // Under the answer, and about what it was about — see `suggest`.
+        this.offer();
         this.input.focus();
       }
     }
@@ -1130,6 +1389,7 @@ class ChatContent extends OSElement {
     // loaded: opening this again should not fetch the better part of a
     // gigabyte twice.
     this.stop?.abort();
+    this.thinkingUp?.abort();
   }
 }
 

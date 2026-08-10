@@ -24,18 +24,50 @@ export interface Suggestion {
   about?: string[];
 }
 
+/*
+ * Written for the two people who actually open this window, and measured
+ * rather than guessed: every one was put through the real index against the
+ * real notes, and the ones that came back with nothing — or with a single
+ * passage scraping the floor — are not here. "What has he made faster?" is the
+ * one worth mourning; the notes are full of before-and-afters (three minutes
+ * to five seconds, an hour of end-to-end time a branch) and retrieval found
+ * exactly one of them, at 0.34.
+ *
+ * The first three are what somebody sees before they have asked anything, so
+ * they carry a different job each: what he is, what he did last, and what this
+ * window itself is — which is the question an engineer is already asking by the
+ * time they find it.
+ */
 export const SUGGESTIONS: Suggestion[] = [
   { text: "What does James do?", about: ["About"] },
-  { text: "Where has he worked?" },
   { text: "What did he do at GoTu?", about: ["GoTu"] },
-  { text: "How did he move GoTu off its monolith?", about: ["GoTu"] },
-  { text: "What did he build at Honest?", about: ["Honest"] },
-  { text: "Has he worked on payments?", about: ["Honest"] },
-  { text: "What does he use Kubernetes for?", about: ["GoTu", "Honest"] },
-  { text: "How much does he write in Go?", about: ["GitHub", "Honest"] },
-  { text: "What has he open sourced?", about: ["GitHub"] },
   { text: "What is this desktop written in?", about: ["About"] },
-  { text: "Where is he based?", about: ["About"] }
+
+  /*
+   * Manager or engineer is the first thing a recruiter is scanning for, and
+   * the answer is "both, in that order" — which the GoTu passages say plainly.
+   */
+  { text: "What does he do as a manager?", about: ["GoTu"] },
+  { text: "How did he move GoTu off its monolith?", about: ["GoTu"] },
+
+  // How somebody works, which is what an engineer is really asking.
+  { text: "How does he test?", about: ["Honest", "Selfapy", "Taskworld"] },
+  { text: "How does he deploy?", about: ["GoTu", "Komatsu"] },
+  { text: "What has he done with Terraform?", about: ["GoTu", "Honest"] },
+  { text: "What has he done with Kafka?", about: ["Honest", "About"] },
+  { text: "What has he built in Go?", about: ["Honest", "GoTu", "GitHub"] },
+  // Recent enough that people ask, and specific enough to answer: Claude,
+  // wired into service generation and Helm charts.
+  { text: "How has he used AI at work?", about: ["GoTu"] },
+
+  { text: "What did he build at Honest?", about: ["Honest"] },
+  { text: "What did he build for payments?", about: ["Honest"] },
+  { text: "What has he open sourced?", about: ["GitHub", "Honest"] },
+  { text: "What does he use Kubernetes for?", about: ["GoTu", "Honest"] },
+
+  // Breadth, for the half of the audience reading a CV rather than a codebase.
+  { text: "Where has he worked?" },
+  { text: "What industries has he worked in?" }
 ];
 
 /** How many to show at once. Enough to choose from, few enough to read. */

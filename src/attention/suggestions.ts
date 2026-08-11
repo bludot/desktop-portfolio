@@ -17,12 +17,28 @@
  * otherwise*. A desktop that offers help constantly is not helpful, it is
  * nervous.
  */
+import type { IconName } from "../components/Icon";
 import type { Activity } from "./index";
 
+/**
+ * One tip, in the shape the card draws.
+ *
+ * The parts are Apple's, and each earns its place: a sender so the visitor
+ * knows which part of the desktop is talking, the feature's own symbol so the
+ * mark in the tip is the mark they will later look for, a title short enough to
+ * skim, and one line under it. Sentence case throughout, and never an
+ * explanation of how a standard control works.
+ */
 export interface Suggestion {
   /** Stable, so a dismissal can be remembered against it. */
   id: string;
-  /** What the toast says. One sentence, no exclamation marks. */
+  /** Which part of the desktop is talking. */
+  sender: string;
+  /** The mark that part wears elsewhere on the desktop. */
+  glyph: IconName;
+  /** One line, skimmable alone. */
+  title: string;
+  /** The detail under it. One sentence. */
   text: string;
   /** What the button does, and what it is called. */
   action: { label: string; run: () => void };
@@ -76,7 +92,10 @@ export const RULES: Rule[] = [
       times(a.opened, "Projects") >= 2 &&
       times(a.closed, "Projects") >= 1,
     build: (around) => ({
-      text: "Looking for something in particular? The launcher searches every repository by name.",
+      sender: "Launcher",
+      glyph: "search",
+      title: "Searching is faster",
+      text: "Find any repository by name, without scrolling the list.",
       action: { label: "Open it", run: around.openLauncher }
     })
   },
@@ -96,7 +115,10 @@ export const RULES: Rule[] = [
       a.opened.size >= 2 &&
       times(a.opened, "Chat") === 0,
     build: (around) => ({
-      text: "There is a chat window here that runs a small language model on your own machine — nothing you type leaves the tab.",
+      sender: "Chat",
+      glyph: "chat",
+      title: "There is a model on this machine",
+      text: "It answers questions about James, and nothing you type leaves the tab.",
       action: { label: "Try it", run: around.openChat }
     })
   },
@@ -116,7 +138,10 @@ export const RULES: Rule[] = [
       times(a.opened, "Experience") >= 1 &&
       times(a.opened, "Chat") === 0,
     build: (around) => ({
-      text: "The model is already loaded, if you would rather ask about any of this than read it.",
+      sender: "Chat",
+      glyph: "chat",
+      title: "The model is already loaded",
+      text: "You could ask about any of this rather than read it.",
       action: { label: "Ask it", run: around.openChat }
     })
   }

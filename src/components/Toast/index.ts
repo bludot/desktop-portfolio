@@ -1,28 +1,45 @@
 import OSElement from "../../utils/OSElement";
-import { color, font, motion as motionToken, radius, shadow, size, weight } from "../../theme";
+import { color, font, radius, shadow, size, weight } from "../../theme";
+import { icon, type IconName } from "../Icon";
 import { motion, prefersReducedMotion } from "../../utils/motion";
 
 /**
- * A small panel that says one thing and goes away.
+ * A card in the corner that says one thing and goes away.
  *
- * The desktop's only uninvited surface, which is the whole reason it is built
- * the way it is: it never covers a window, it never takes focus, it cannot
- * steal a keystroke, and it leaves on its own. Anything that fails those is not
- * a toast, it is an interruption with rounded corners.
+ * Apple's guidance has a name for this and it is not "notification": a
+ * notification reports an event, and this reports nothing — it points at a
+ * feature somebody has not found. That is filed under *offering help*, and the
+ * component is a **tip**. Everything below follows from taking that seriously.
  *
- * Above the taskbar rather than over the desktop, because that is the edge this
- * desktop already uses for things the system is saying — and far enough from
- * the start button that reaching for the menu never lands on a suggestion that
- * appeared a moment ago.
+ * It is also the lowest interruption level there is — *passive*, information a
+ * person may look at whenever they like. So: no sound, no badge, no count, no
+ * accumulation, and nothing that survives being ignored. It leaves on its own
+ * and takes the message with it.
+ *
+ * The shape is the one three decades of desktops have taught people to read: a
+ * symbol on the left saying which part of the system is talking, a short title,
+ * a line of detail, and a way out. The symbol is the feature's own — the
+ * launcher's magnifier, the chat's bubble — because a tip that shows the mark
+ * you will later look for is teaching you where to find it.
+ *
+ * What it must never do, in order: cover a window it did not ask to cover, take
+ * focus, or outlive the visitor's patience.
  */
 
 /** Long enough to read twice, short enough to ignore once. */
 const LINGER_MS = 9_000;
 
-/** Under the drag shim, over every window. It is a message, not a modal. */
+/** Under the drag shim, over every window. A message, not a modal. */
 const TOAST_Z = 9400;
 
 export interface ToastContent {
+  /** Which part of the desktop is talking. Two words at most. */
+  sender: string;
+  /** The mark that part of the desktop wears elsewhere. */
+  glyph: IconName;
+  /** One line, sentence case, skimmable on its own. */
+  title: string;
+  /** The detail under it. One sentence. */
   text: string;
   action?: { label: string; run: () => void };
   /** Called when it leaves, however it leaves. */
@@ -42,33 +59,70 @@ class Toast extends OSElement {
     this.style = () => ({
       [this.id]: {
         position: "fixed",
-        left: "50%",
-        transform: "translateX(-50%)",
-        bottom: "calc(var(--taskbar-floor, 65px) + 12px)",
+        top: "18px",
+        right: "18px",
         zIndex: `${TOAST_Z}`,
-        maxWidth: "min(460px, calc(100vw - 30px))",
+        width: "316px",
+        maxWidth: "calc(100vw - 36px)",
         boxSizing: "border-box",
         display: "flex",
-        alignItems: "center",
-        gap: "14px",
-        padding: "12px 14px",
-        borderRadius: radius.window,
-        background: color.chromeSolid,
-        boxShadow: `${shadow.chrome}, ${shadow.edge}`,
+        gap: "12px",
+        padding: "13px",
+        /*
+         * A touch rounder than a window. It is not one, and the corner is the
+         * cheapest way to say so before anybody reads a word of it.
+         */
+        borderRadius: "14px",
+        background: color.glassWindow,
+        backdropFilter: "blur(30px) saturate(1.2)",
+        WebkitBackdropFilter: "blur(30px) saturate(1.2)",
+        boxShadow: `${shadow.window}, ${shadow.edge}`,
         color: color.ink,
         fontFamily: font.ui,
-        fontSize: size.bodyTight,
-        lineHeight: 1.4,
 
-        "& .toast-text": { flex: "1 1 auto", minWidth: 0 },
+        "& .toast-mark": {
+          flex: "0 0 auto",
+          width: "34px",
+          height: "34px",
+          borderRadius: "9px",
+          background: color.chromeRaised,
+          display: "grid",
+          placeItems: "center",
+          color: color.ink
+        },
+        "& .toast-mark svg": { width: "17px", height: "17px" },
+
+        "& .toast-body": { flex: "1 1 auto", minWidth: 0 },
+
+        // The sender, in the mono the rest of the desktop uses for labels.
+        "& .toast-from": {
+          fontFamily: font.mono,
+          fontSize: "9.5px",
+          letterSpacing: "0.11em",
+          textTransform: "uppercase",
+          color: color.inkFaint,
+          marginBottom: "3px"
+        },
+        "& .toast-title": {
+          fontSize: size.bodyTight,
+          fontWeight: weight.emphasise,
+          lineHeight: 1.3
+        },
+        "& .toast-text": {
+          fontSize: "12.5px",
+          color: color.inkSoft,
+          lineHeight: 1.42,
+          marginTop: "3px"
+        },
 
         "& .toast-do": {
-          flex: "0 0 auto",
+          marginTop: "9px",
           border: `1px solid ${color.lineSoft}`,
           background: "transparent",
           borderRadius: radius.control,
           color: color.ink,
           font: "inherit",
+          fontSize: "12.5px",
           fontWeight: weight.emphasise,
           padding: "5px 11px",
           cursor: "pointer",
@@ -78,25 +132,57 @@ class Toast extends OSElement {
 
         "& .toast-close": {
           flex: "0 0 auto",
+          alignSelf: "flex-start",
           border: "0",
           background: "transparent",
           color: color.inkFaint,
           font: "inherit",
           fontSize: size.small,
           lineHeight: 1,
-          padding: "4px 2px",
+          padding: "4px",
           cursor: "pointer"
         },
-        "& .toast-close:hover": { color: color.ink }
+        "& .toast-close:hover": { color: color.ink },
+
+        /*
+         * On a phone it spans the width rather than floating in a corner that
+         * is only a thumb-width from the edge of the screen.
+         */
+        "@media (max-width: 640px)": {
+          left: "12px",
+          right: "12px",
+          top: "12px",
+          width: "auto",
+          maxWidth: "none"
+        }
       }
     });
   }
 
   async beforeLoad() {
-    const line = document.createElement("span");
-    line.className = "toast-text";
-    line.appendChild(document.createTextNode(this.content.text));
-    this.element.appendChild(line);
+    const mark = document.createElement("span");
+    mark.className = "toast-mark";
+    mark.setAttribute("aria-hidden", "true");
+    mark.appendChild(icon(this.content.glyph));
+    this.element.appendChild(mark);
+
+    const body = document.createElement("div");
+    body.className = "toast-body";
+
+    const from = document.createElement("div");
+    from.className = "toast-from";
+    from.appendChild(document.createTextNode(this.content.sender));
+    body.appendChild(from);
+
+    const title = document.createElement("div");
+    title.className = "toast-title";
+    title.appendChild(document.createTextNode(this.content.title));
+    body.appendChild(title);
+
+    const text = document.createElement("div");
+    text.className = "toast-text";
+    text.appendChild(document.createTextNode(this.content.text));
+    body.appendChild(text);
 
     if (this.content.action) {
       const act = document.createElement("button");
@@ -108,8 +194,9 @@ class Toast extends OSElement {
         this.content.action?.run();
         void this.leave();
       });
-      this.element.appendChild(act);
+      body.appendChild(act);
     }
+    this.element.appendChild(body);
 
     const close = document.createElement("button");
     close.type = "button";
@@ -125,9 +212,9 @@ class Toast extends OSElement {
      * Announced, not focused.
      *
      * `polite` waits for a gap rather than cutting in, which is the same
-     * courtesy the visual version extends. Moving focus here would take the
-     * cursor out of whatever somebody was typing, which is exactly the kind of
-     * interruption this is built not to be.
+     * courtesy the visual version extends — and the right level for something
+     * passive. Moving focus here would take the cursor out of whatever somebody
+     * was typing, which is exactly the interruption this is built not to be.
      */
     this.element.setAttribute("role", "status");
     this.element.setAttribute("aria-live", "polite");
@@ -135,8 +222,8 @@ class Toast extends OSElement {
 
   async afterLoad() {
     await motion.enter(this.element, motion.popIn);
-    // Only once it is actually up: a toast that starts its own clock while
-    // still animating in is readable for less time than it promises.
+    // Only once it is up: a card that starts its own clock while still
+    // animating in is readable for less time than it promises.
     this.timer = setTimeout(() => void this.leave(), LINGER_MS);
   }
 
@@ -156,9 +243,9 @@ class Toast extends OSElement {
     /*
      * The exit fills forwards, so it goes on applying `opacity: 0` after it
      * ends — and an animation outranks every inline style, so this has to be
-     * cancelled rather than overwritten. It has to happen here, too, while the
-     * element is still in the document: `getAnimations()` on a detached element
-     * reports none, and there is nothing left to cancel afterwards.
+     * cancelled rather than overwritten. While the element is still in the
+     * document, too: `getAnimations()` on a detached one reports none, and
+     * there is nothing left to cancel afterwards.
      */
     motion.clearAnimations(this.element);
     await this.unload();

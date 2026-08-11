@@ -115,6 +115,9 @@ export function prompt(options: PrompterOptions): Prompter {
     lastAt = Date.now();
 
     const toast = new Toast({
+      sender: found.sender,
+      glyph: found.glyph,
+      title: found.title,
       text: found.text,
       action: found.action,
       onGone: () => {

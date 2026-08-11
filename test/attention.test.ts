@@ -155,12 +155,42 @@ describe('what it decides to say', () => {
     expect(suggest(seen, around(), spent)?.id).not.toBe('search-instead-of-scrolling')
   })
 
-  // Every rule has to be answerable, or the toast has a button that does nothing.
+  // Every rule has to be answerable, or the card has a button that does nothing.
   it('gives every rule something to do', () => {
     RULES.forEach((rule) => {
       const built = rule.build(around())
       expect(built.text.length, rule.id).toBeGreaterThan(10)
       expect(typeof built.action.run, rule.id).toBe('function')
+    })
+  })
+
+  /*
+   * The parts Apple's guidance asks a tip to carry: who is talking, the mark
+   * that part of the desktop wears elsewhere, and a title you can skim without
+   * reading the line under it.
+   */
+  it('gives every rule a sender, a symbol and a title', () => {
+    RULES.forEach((rule) => {
+      const built = rule.build(around())
+      expect(built.sender, rule.id).toBeTruthy()
+      expect(built.glyph, rule.id).toBeTruthy()
+      expect(built.title, rule.id).toBeTruthy()
+    })
+  })
+
+  /*
+   * Brief, and sentence case. A tip that becomes a paragraph has stopped being
+   * a tip, and one that Shouts In Title Case reads as an advertisement.
+   */
+  it('keeps every tip short and in sentence case', () => {
+    RULES.forEach((rule) => {
+      const { title, text } = rule.build(around())
+      expect(title.length, `${rule.id} title`).toBeLessThan(42)
+      expect(text.length, `${rule.id} text`).toBeLessThan(90)
+      expect(title.endsWith('.'), `${rule.id} title has a full stop`).toBe(false)
+      // Every word after the first that starts capitalised should be a name.
+      const shouted = title.split(' ').slice(1).filter((w) => /^[A-Z]/.test(w))
+      expect(shouted, `${rule.id} title is not sentence case`).toEqual([])
     })
   })
 })
@@ -242,6 +272,36 @@ describe('how often it is willing to speak', () => {
     p.stop()
     await settle()
     expect(showing()).toBe(0)
+  })
+
+  it('draws the sender, symbol and title on the card', async () => {
+    const p = started()
+    await waitedAWhile()
+    scannedProjectsTwice()
+    await settle()
+
+    expect(host.querySelector('.toast-from')?.textContent).toBe('Launcher')
+    expect(host.querySelector('.toast-title')?.textContent).toBe('Searching is faster')
+    expect(host.querySelector('.toast-mark svg')).toBeTruthy()
+    p.stop()
+  })
+
+  /*
+   * Passive, in Apple's sense: it may be looked at whenever, so it must never
+   * take the cursor out of whatever somebody is doing.
+   */
+  it('announces itself without taking focus', async () => {
+    const before = document.activeElement
+    const p = started()
+    await waitedAWhile()
+    scannedProjectsTwice()
+    await settle()
+
+    const card = host.querySelector('.toast')!
+    expect(card.getAttribute('role')).toBe('status')
+    expect(card.getAttribute('aria-live')).toBe('polite')
+    expect(document.activeElement).toBe(before)
+    p.stop()
   })
 
   it('runs the action, and goes, when the button is pressed', async () => {

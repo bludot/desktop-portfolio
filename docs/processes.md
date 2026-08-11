@@ -124,9 +124,18 @@ load settles would be inventing an answer.
 |---|---|---|
 | `model` | opening the chat window, or the launcher's semantic search | the chat model and the embedder, on one worker |
 | `jobs` | the first call to any job | the jobs worker and whichever job modules have been loaded |
+| `attention` | the desktop, once it has finished starting up | what the visitor has done — window events, in memory, this tab only |
 
-Both are on workers today. Nothing prevents a main-thread service; the register
-does not care.
+The first two are on workers; `attention` runs on the main thread, and the
+register does not care either way. That is the point of it not being called a
+thread.
+
+`attention` is a process for a reason that is not tidiness. It notices what
+somebody is doing so the desktop can occasionally offer something, and anything
+that watches a person should be visible to them and stoppable by them: it is in
+the table, it says what it has seen, and the kill button ends it and forgets.
+It never starts a model — it asks whether one is already up, and takes no for an
+answer.
 
 ## Killing something
 

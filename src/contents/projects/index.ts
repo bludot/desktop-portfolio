@@ -13,7 +13,7 @@ import { observeWidth } from "../../utils/utils";
 import { ScrollBars } from "../../components/Scrollbar";
 import sanitiseHtml from "../../utils/sanitiseHtml";
 import { motion } from "../../utils/motion";
-import highlight from "../../utils/highlight";
+import { highlighted } from "../../utils/highlight";
 import {
   ACCOUNTS,
   forgetGithubFailure,
@@ -1703,7 +1703,22 @@ class ProjectsContent extends OSElement {
 
     const body = document.createElement("pre");
     body.className = "file-source";
-    body.appendChild(highlight(source, file.name));
+    /*
+     * Readable first, coloured a moment later.
+     *
+     * The source goes in as plain text in the frame the file opens, and the
+     * highlighted version replaces it when the tokenising comes back from the
+     * jobs thread. Highlighting is decoration; nothing about reading a file
+     * should wait for it, and on a large one it used to — synchronously, in the
+     * middle of the window's own transition.
+     */
+    body.appendChild(document.createTextNode(source));
+    void highlighted(source, file.name).then((fragment) => {
+      // Gone already: the window closed, or somebody opened another file.
+      if (!body.isConnected) return;
+      body.textContent = "";
+      body.appendChild(fragment);
+    });
     code.appendChild(body);
 
     wrapper.appendChild(code);

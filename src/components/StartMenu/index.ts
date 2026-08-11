@@ -22,10 +22,10 @@ import ProjectsContent from "../../contents/projects";
 import AlertContent from "../../contents/alert";
 import LoggerWindow from "../../contents/logger";
 import ChatContent from "../../contents/chat";
+import ProcessesContent from "../../contents/processes";
 import FeatureFlagsApp from "../../apps/FeatureFlags";
 import SettingsApp from "../../apps/Settings";
 import { NARROW_PX } from "../../utils/utils";
-import { isFeatureEnabled } from "../../Store";
 
 /**
  * Everything this desktop can open, as one board.
@@ -78,6 +78,14 @@ interface Destination {
   label: string;
   /** One line under the label, where there is room for it. */
   meta?: string;
+  /**
+   * A word about the thing itself, rather than about where it goes.
+   *
+   * Takes the meta line's place when both would be offered, because a tile is
+   * about 78px wide and "local · beta" is four characters past what fits. When
+   * something is worth warning about, that outranks describing it.
+   */
+  tag?: string;
   glyph?: IconName;
   app?: App;
   open: () => void;
@@ -125,16 +133,6 @@ class StartMenu extends OSElement {
 
   /** The button this was opened from. Pressing it again is not a dismissal. */
   private anchor?: HTMLElement;
-
-  /**
-   * Whether the chat window is on offer.
-   *
-   * Read on every open rather than once at boot, so turning the flag on in
-   * Settings shows the tile at the next press instead of the next reload. The
-   * model itself is still untouched until that tile is pressed — this is a
-   * boolean from IndexedDB, not a download.
-   */
-  private chatOffered = false;
 
   constructor(private readonly desktop: Desktop) {
     super("startmenu", "start-menu");
@@ -361,12 +359,39 @@ class StartMenu extends OSElement {
           whiteSpace: "nowrap"
         },
 
+        /*
+         * Where the meta line would be, and shaped so it is not mistaken for
+         * one: outlined, in the accent, saying something about the thing rather
+         * than about where it goes.
+         *
+         * Not a corner badge on the plate. That spot is the notification
+         * affordance — see the note above `.start-label` — and a permanent mark
+         * sitting in it would spend the one place this desktop has to say
+         * "something here wants you" on a word that will be true for months.
+         */
+        "& .start-tag": {
+          marginTop: "-3px",
+          fontFamily: font.mono,
+          fontSize: size.micro,
+          letterSpacing: tracking.mono,
+          lineHeight: 1.1,
+          color: color.accent,
+          border: `1px solid ${color.accent}`,
+          borderRadius: "999px",
+          padding: "1px 6px",
+          // The tile is a column of centred things; this one is only as wide as
+          // its word.
+          alignSelf: "center",
+          opacity: 0.85
+        },
+
         // --------------------------------------------------- the switches
         /*
-         * Not tiles. A tile promises a place you go, and these three are
+         * Not tiles. A tile promises a place you go, and these four are
          * switches — one opens a settings window, one a log, one a list of
-         * flags. Having them here also ends the mobile-only feature-flags row:
-         * there is room for the pill at every width.
+         * flags, one a list of what is running. Having them here also ends the
+         * mobile-only feature-flags row: there is room for the pill at every
+         * width.
          */
         "& .start-utility": {
           flex: "0 0 auto",
@@ -439,6 +464,12 @@ class StartMenu extends OSElement {
           // The second line is dropped rather than wrapped: there is width for
           // four columns or for a host name, not for both.
           "& .start-meta": { display: "none" },
+          /*
+           * The tag stays. It is one short word, and it is a warning — dropping
+           * it at the width where most people meet this desktop would leave the
+           * caveat visible only to the visitors least likely to need it.
+           */
+          "& .start-tag": { padding: "1px 5px" },
           "& .start-utility": {
             padding: "12px 14px",
             paddingBottom: "calc(13px + env(safe-area-inset-bottom))"
@@ -452,9 +483,23 @@ class StartMenu extends OSElement {
 
   // ------------------------------------------------------- open and shut
 
-  /** Up, or on its way up. Both answer "pressing the button should close it". */
+  /**
+   * Up, or on its way up. Both answer "pressing the button should close it".
+   *
+   * `open` is checked against the document rather than taken on trust. The
+   * phase is this board's account of itself, and an account can outlive what it
+   * describes: anything that takes the element out of the page without telling
+   * the board leaves it believing it is up. A press then means close, and is
+   * spent tidying away something nobody could see — which is the whole of the
+   * bug where the first press does nothing and the second one works.
+   *
+   * `opening` is not checked, and must not be: the mount is still in flight, so
+   * the element is legitimately not connected yet, and a press during the
+   * entrance is a press to close.
+   */
   get isOpen(): boolean {
-    return this.phase === "opening" || this.phase === "open";
+    if (this.phase === "opening") return true;
+    return this.phase === "open" && this.mounted;
   }
 
   /**
@@ -506,7 +551,7 @@ class StartMenu extends OSElement {
      * phase says — and saying otherwise is precisely how the button ended up
      * toggling something that was not there.
      */
-    if (!this.element.isConnected) await this.settleClosed();
+    if (!this.mounted) await this.settleClosed();
   }
 
   private async hide(): Promise<void> {
@@ -532,14 +577,32 @@ class StartMenu extends OSElement {
    */
   private async settleClosed(): Promise<void> {
     window.removeEventListener("click", this.onDocumentClick, true);
+
+    /*
+     * Let go of the exit before letting go of the element.
+     *
+     * `popOut` fills forwards on purpose — it is what keeps the board from
+     * flashing back to full strength between the animation ending and the
+     * element being removed. The cost is that it goes on applying `opacity: 0`
+     * afterwards, and an animation outranks every inline style, so the line
+     * that used to stand here — clearing `style.opacity` — was pulling a lever
+     * that was never connected to it. The board came back mounted, hit-testable
+     * and completely invisible, and a press that opened it looked like a press
+     * that did nothing.
+     *
+     * It has to be cancelled here, while the element is still in the document.
+     * `clearAnimations` finds animations through `getAnimations()`, and a
+     * detached element reports none of its own — so a moment later there is
+     * nothing left to cancel and the fill survives into the next open.
+     */
+    motion.clearAnimations(this.element);
+
     try {
       await this.unload();
     } catch (error) {
       this.logger.debug(`close failed: ${error}`);
     }
     this.element.remove();
-    // The exit fills forwards, so the element would come back invisible.
-    this.element.style.opacity = "";
     this.phase = "closed";
   }
 
@@ -602,24 +665,31 @@ class StartMenu extends OSElement {
             dimensions: { width: 760, height: 620 }
           })
       },
-      ...(this.chatOffered
-        ? [
-            {
-              title: "Chat",
-              label: "Chat",
-              meta: "local",
-              glyph: "chat" as const,
-              open: () =>
-                windowManager.new({
-                  title: "Chat",
-                  meta: "on this machine",
-                  content: new ChatContent(),
-                  desktop: this.desktop,
-                  dimensions: { width: 460, height: 520 }
-                })
-            }
-          ]
-        : []),
+      /*
+       * No longer behind a flag.
+       *
+       * It was, while it was the one thing here that fetched most of a
+       * gigabyte, and a flag is the right shape for "off unless you say so".
+       * But a flag nobody finds is a feature nobody has, and the cost it was
+       * guarding is still not paid until this window is opened — the tile
+       * itself downloads nothing. What is left to say is that it is new and
+       * imperfect, and `beta` says that on the tile, where it is read before
+       * the press rather than after it.
+       */
+      {
+        title: "Chat",
+        label: "Chat",
+        tag: "beta",
+        glyph: "chat" as const,
+        open: () =>
+          windowManager.new({
+            title: "Chat",
+            meta: "on this machine",
+            content: new ChatContent(),
+            desktop: this.desktop,
+            dimensions: { width: 460, height: 520 }
+          })
+      },
       {
         title: "Contact Unavailable",
         label: "Contact",
@@ -704,7 +774,12 @@ class StartMenu extends OSElement {
     label.appendChild(document.createTextNode(destination.label));
     cell.appendChild(label);
 
-    if (destination.meta) {
+    if (destination.tag) {
+      const tag = document.createElement("span");
+      tag.className = "start-tag";
+      tag.appendChild(document.createTextNode(destination.tag));
+      cell.appendChild(tag);
+    } else if (destination.meta) {
       const line = document.createElement("span");
       line.className = "start-meta";
       line.appendChild(document.createTextNode(destination.meta));
@@ -855,6 +930,23 @@ class StartMenu extends OSElement {
         new FeatureFlagsApp(this.desktop).load();
       })
     );
+    /*
+     * A switch rather than a tile, for the same reason the other three are: it
+     * is not somewhere you go, it is a look at what the desktop is doing. It
+     * sits beside the debugger because that is the company it keeps — both are
+     * for the visitor who wants to know how this works rather than what it says.
+     */
+    utility.appendChild(
+      this.pill("Processes", "debugger", () => {
+        windowManager.new({
+          title: "Processes",
+          meta: "running",
+          content: new ProcessesContent(),
+          dimensions: { width: 380, height: 300 },
+          desktop: this.desktop
+        });
+      })
+    );
     this.element.appendChild(utility);
   }
 
@@ -887,19 +979,14 @@ class StartMenu extends OSElement {
   }
 
   async load(element: HTMLElement) {
-    // Before the render, so the board is drawn once with whatever it offers
-    // rather than appearing and then growing a tile.
-    try {
-      this.chatOffered = await isFeatureEnabled("localChat");
-    } catch {
-      // A flag that cannot be read is a flag that is off.
-      this.chatOffered = false;
-    }
     this.render();
     // Before the first paint, so the board never appears in the wrong place and
     // then corrects itself.
     this.element.style.setProperty("--taskbar-floor", `${this.floor()}px`);
-    if (!this.parent) {
+    // Whether it is on screen is the document's answer, not the pointer's —
+    // see `OSElement.load`. Asking `parent` here is what turned a detached
+    // board into one that silently appended nothing and closed itself again.
+    if (!this.mounted) {
       await super.load(element);
     }
 
@@ -915,7 +1002,7 @@ class StartMenu extends OSElement {
 
     // A window closing while the board is up should take its mark with it.
     this.subscription = windowManager.subscribe(() => {
-      if (!this.parent) return;
+      if (!this.mounted) return;
       this.render();
       this.hangScrollbar();
     });

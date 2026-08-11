@@ -109,18 +109,26 @@ describe('FeatureFlagsApp', () => {
     const app = new FeatureFlagsApp(makeDesktop())
     const flags = await app.loadFeatures()
 
-    expect(flags.map((f) => f.code)).toEqual(['semanticSearch', 'localChat'])
+    expect(flags.map((f) => f.code)).toEqual(['semanticSearch'])
     expect(flags.every((f) => !f.enabled)).toBe(true)
-    expect(await db.featureFlags.count()).toBe(2)
+    expect(await db.featureFlags.count()).toBe(1)
   })
 
-  it('returns whatever rows already exist, alongside the declared ones', async () => {
-    await new FeatureFlag('experimental', 'Experimental', true).save()
+  /*
+   * A retired flag leaves its row behind in everybody's IndexedDB. Offering it
+   * would put a switch on screen wired to code that no longer reads it, which
+   * is worse than not offering it at all: it looks like it does something.
+   * `localChat` is the first to go this way.
+   */
+  it('does not offer a row whose flag no longer exists', async () => {
+    await new FeatureFlag('localChat', 'Local chat model', true).save()
     const app = new FeatureFlagsApp(makeDesktop())
     const flags = await app.loadFeatures()
 
-    expect(flags.map((f) => f.code)).toContain('experimental')
-    expect(flags.map((f) => f.code)).toContain('localChat')
+    expect(flags.map((f) => f.code)).toEqual(['semanticSearch'])
+    // Left where it is rather than deleted — it costs nothing, and a flag that
+    // comes back should find what somebody chose last time.
+    expect(await db.featureFlags.where({ code: 'localChat' }).count()).toBe(1)
   })
 
   it('opens a window listing each flag', async () => {

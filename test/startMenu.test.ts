@@ -91,6 +91,7 @@ describe('StartMenu', () => {
       'About',
       'Experience',
       'Projects',
+      'Chat',
       'Contact',
       ...APPS.map((app) => app.name),
     ])
@@ -98,9 +99,39 @@ describe('StartMenu', () => {
   })
 
   /*
+   * The chat window is new, and it is a small model that invents things. That
+   * is worth saying on the tile, before the press rather than after it — it is
+   * what the feature flag was really being used to say, back when finding the
+   * window at all required knowing to look in Settings for it.
+   *
+   * In the tag's own slot rather than the meta line's: a tile is about 78px
+   * wide, and "local · beta" does not fit in it.
+   */
+  it('marks the chat tile beta, and says nothing else about it', async () => {
+    const menu = new StartMenu(makeDesktop())
+    await menu.load(host)
+
+    const chat = cell('Chat')
+    expect(chat.querySelector('.start-tag')?.textContent).toBe('beta')
+    expect(chat.querySelector('.start-meta')).toBeNull()
+    await menu.unload()
+  })
+
+  // No flag in front of it any more: the download waits for the window, so the
+  // tile costs nothing to show and hiding it only hid the feature.
+  it('offers chat without anything having to be turned on', async () => {
+    const menu = new StartMenu(makeDesktop())
+    await menu.load(host)
+
+    expect(cell('Chat')).toBeTruthy()
+    await menu.unload()
+  })
+
+  /*
    * The switches are not destinations. A tile promises a place you go, and
-   * these three open a settings window, a log and a list of flags — and having
-   * them here is what ends the mobile-only feature-flags row.
+   * these four open a settings window, a log, a list of flags and a list of
+   * what is running — and having them here is what ends the mobile-only
+   * feature-flags row.
    */
   it('keeps the switches as pills, at every width', async () => {
     const menu = new StartMenu(makeDesktop())
@@ -109,6 +140,7 @@ describe('StartMenu', () => {
     expect(pill('Settings')).toBeTruthy()
     expect(pill('Debugger')).toBeTruthy()
     expect(pill('Feature flags')).toBeTruthy()
+    expect(pill('Processes')).toBeTruthy()
     await menu.unload()
   })
 

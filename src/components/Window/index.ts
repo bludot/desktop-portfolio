@@ -3,11 +3,9 @@ import {getWindowWidth, getWindowHeight} from "./../../utils/utils";
 import Desktop from "./../Desktop";
 import type {IWindow} from "./interfaces";
 import TopBar from "./topbar";
-import WindowBlur from "./blur";
 import Resizable from "../../utils/resizable";
 import { raiseDragShim, dropDragShim } from "../../utils/dragShim";
 import { isNarrow } from "../../utils/utils";
-// `blur` is aliased: the constructor already has a WindowBlur named blur.
 import { blur as blurFx, color, radius, shadow } from "../../theme";
 import ScrollBar from "../Scrollbar";
 import Splash, { resolveSplash } from "../Splash";
@@ -85,9 +83,7 @@ class OSWindow extends OSElement {
     // Width, not user agent: a narrow browser window has the same problem a
     // phone does, and a wide tablet does not.
     this.isMobile = isNarrow()
-    const blur = new WindowBlur(60, 8);
     this.scrollbar = new ScrollBar();
-    blur.load(this.element);
     this.title = title;
     this.content = content;
     this.desktop = desktop;
@@ -109,7 +105,7 @@ class OSWindow extends OSElement {
     this.windowPosition = windowPosition || {}
     this.style = () => ({
       [this.id]: {
-        background: this.active ? color.glass : color.glassRest,
+        background: this.active ? color.glassWindow : color.glassWindowRest,
         backdropFilter: blurFx.window,
         WebkitBackdropFilter: blurFx.window,
         color: color.ink,

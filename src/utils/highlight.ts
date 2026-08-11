@@ -1,49 +1,18 @@
-import { createLowlight } from "lowlight";
-import bash from "highlight.js/lib/languages/bash";
-import css from "highlight.js/lib/languages/css";
-import dockerfile from "highlight.js/lib/languages/dockerfile";
-import go from "highlight.js/lib/languages/go";
-import ini from "highlight.js/lib/languages/ini";
-import javascript from "highlight.js/lib/languages/javascript";
-import json from "highlight.js/lib/languages/json";
-import makefile from "highlight.js/lib/languages/makefile";
-import markdown from "highlight.js/lib/languages/markdown";
-import python from "highlight.js/lib/languages/python";
-import rust from "highlight.js/lib/languages/rust";
-import sql from "highlight.js/lib/languages/sql";
-import typescript from "highlight.js/lib/languages/typescript";
-import xml from "highlight.js/lib/languages/xml";
-import yaml from "highlight.js/lib/languages/yaml";
+import { job } from "../processes/jobs";
 
 /**
- * Syntax highlighting for the file viewer.
+ * Syntax highlighting for the file viewer — the half that needs a document.
  *
- * lowlight is used rather than highlight.js directly because it returns a tree
- * of tokens instead of a string of HTML. Every node is then built with
- * `createElement` and `textContent`, so highlighted source never reaches
- * `innerHTML` — the file being displayed is somebody's repository, and the
- * safest way to render text as text is to never turn it into markup at all.
+ * Which language a file is in, and how to turn a token tree into elements. The
+ * grammars and the walk over the source are not here: they live in the
+ * `highlight` job, on the thread that runs it, which is where the 73KB of
+ * highlight.js goes too.
  *
- * Languages are registered one by one rather than pulling the whole of
- * highlight.js: this is the set that actually appears across the accounts.
+ * Every node is built with `createElement` and `textContent`, so highlighted
+ * source never reaches `innerHTML` — the file being displayed is somebody's
+ * repository, and the safest way to render text as text is to never turn it
+ * into markup at all.
  */
-const lowlight = createLowlight({
-  bash,
-  css,
-  dockerfile,
-  go,
-  ini,
-  javascript,
-  json,
-  makefile,
-  markdown,
-  python,
-  rust,
-  sql,
-  typescript,
-  xml,
-  yaml
-});
 
 /** Extension to language. Anything unlisted is shown as plain text. */
 const BY_EXTENSION: Record<string, string> = {
@@ -167,28 +136,64 @@ function build(nodes: HastNode[], into: Node, inherited?: string) {
 }
 
 /**
- * Highlighted source, as DOM nodes.
+ * A token tree, as DOM nodes — the half of highlighting that needs a document.
  *
- * Falls back to plain text for an unknown language or a grammar that throws —
+ * Takes the tree rather than the source because the walk that produces it lives
+ * on the jobs thread now; this side only ever turns objects into elements. No
+ * tree, for an unknown language or a grammar that threw, means plain text:
  * unhighlighted code is a small loss, a broken window is not.
  */
-export function highlight(code: string, fileName: string): DocumentFragment {
+export function fromTokens(
+  tree: HastNode | undefined,
+  code: string
+): DocumentFragment {
   const fragment = document.createDocumentFragment();
-  const language = languageFor(fileName);
-
-  if (!language || !lowlight.registered(language)) {
+  if (!tree) {
     fragment.appendChild(document.createTextNode(code));
     return fragment;
   }
-
-  try {
-    const tree = lowlight.highlight(language, code) as unknown as HastNode;
-    build(tree.children ?? [], fragment);
-  } catch {
-    fragment.textContent = code;
-  }
-
+  build(tree.children ?? [], fragment);
   return fragment;
 }
 
-export default highlight;
+/**
+ * Highlighted source, with the tokenising done on another thread.
+ *
+ * Only the walk over the source travels. The nodes are built here, because
+ * building them needs `document`; what comes back is a hast tree, which is
+ * plain objects and strings and so crosses the boundary unchanged. That it
+ * clones for nothing is the reason this split is worth making.
+ *
+ * The grammars live on that side only. They are 73KB of the download, they are
+ * needed the moment somebody opens a file and never before, and keeping a copy
+ * here for a synchronous fallback would have meant shipping them twice — which
+ * is exactly what the first version of this did.
+ *
+ * Every failure ends in plain text: no `Worker` in this environment, a language
+ * nobody registered, a grammar that threw, a process somebody killed from the
+ * table mid-call. The file opens either way. The thread is a way of not
+ * stalling, not a dependency.
+ */
+export async function highlighted(
+  code: string,
+  fileName: string,
+  signal?: AbortSignal
+): Promise<DocumentFragment> {
+  const language = languageFor(fileName);
+  if (!language) return fromTokens(undefined, code);
+
+  try {
+    const tree = await job("highlight").call<HastNode | undefined>(
+      "tokens",
+      [language, code],
+      { signal }
+    );
+    return fromTokens(tree, code);
+  } catch (error) {
+    // A cancelled call is the caller's own doing and belongs to them.
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    return fromTokens(undefined, code);
+  }
+}
+
+export default highlighted;

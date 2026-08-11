@@ -16,25 +16,53 @@ import { resolve } from 'node:path'
  *
  * Hence a real build. Anything cheaper reproduces the wrong thing.
  */
-describe('the model worker, as built', () => {
-  it('keeps the handler that answers the page', async () => {
-    const result = (await build({
-      configFile: resolve(process.cwd(), 'vite.config.ts'),
-      logLevel: 'silent',
-      build: { write: false },
-    })) as unknown
+// The worker rides along as an emitted asset rather than a chunk, so read
+// whichever of the two shapes it arrives in.
+type Emitted = { fileName: string; code?: string; source?: string | Uint8Array }
 
-    // The worker rides along as an emitted asset rather than a chunk, so read
-    // whichever of the two shapes it arrives in.
-    type Emitted = { fileName: string; code?: string; source?: string | Uint8Array }
-    const outputs = (Array.isArray(result) ? result : [result]) as { output: Emitted[] }[]
-    const worker = outputs.flatMap((o) => o.output).find((e) => e.fileName.includes('model.worker'))
+/** Build for real, once, and hand back everything it emitted. */
+const built = async (): Promise<Emitted[]> => {
+  const result = (await build({
+    configFile: resolve(process.cwd(), 'vite.config.ts'),
+    logLevel: 'silent',
+    build: { write: false },
+  })) as unknown
+  const outputs = (Array.isArray(result) ? result : [result]) as { output: Emitted[] }[]
+  return outputs.flatMap((o) => o.output)
+}
 
-    expect(worker, 'the build emitted no model worker at all').toBeDefined()
+const codeOf = (emitted: Emitted) => emitted.code ?? emitted.source?.toString() ?? ''
 
-    const code = worker!.code ?? worker!.source?.toString() ?? ''
+describe('the workers, as built', () => {
+  /*
+   * Every worker gets a case here, and every new one must. This is the only
+   * check that catches an empty thread: typecheck, unit tests and dev all pass
+   * with a worker of zero bytes, because dev never bundles and a unit test
+   * never asks a bundler anything.
+   */
+  it.each([
+    ['model.worker', /onmessage/],
+    ['jobs.worker', /onmessage/],
+  ])('keeps the handler that answers the page in %s', async (name, expected) => {
+    const emitted = await built()
+    const worker = emitted.find((e) => e.fileName.includes(name))
+
+    expect(worker, `the build emitted no ${name} at all`).toBeDefined()
+
     // The symptom was an empty file; the cause was the import being dropped, so
     // assert on the thing the import exists to install rather than on a size.
-    expect(code).toMatch(/onmessage/)
+    expect(codeOf(worker!)).toMatch(expected)
+  }, 120_000)
+
+  /*
+   * The jobs worker loads what it is told to become. If the bundler cannot see
+   * those dynamic imports it emits a host that can talk and has nothing to say,
+   * which fails at the first call rather than at build time.
+   */
+  it('emits the job modules the host can become', async () => {
+    const emitted = await built()
+    const names = emitted.map((e) => e.fileName).join(' ')
+
+    expect(names).toMatch(/highlight/)
   }, 120_000)
 })

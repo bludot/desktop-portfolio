@@ -1,9 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import highlight, { languageFor } from '../src/utils/highlight'
+import { fromTokens, languageFor } from '../src/utils/highlight'
+import { tokens } from '../src/processes/jobs/highlight'
 
+/**
+ * The two halves, put back together.
+ *
+ * Tokenising runs on the jobs thread and building nodes runs on the main one,
+ * and jsdom has no worker to send anything to — so the test composes them
+ * directly. That it can is the point: both halves are plain functions, and the
+ * thread is a delivery mechanism rather than part of the meaning.
+ */
 const render = (code: string, file: string) => {
+  const language = languageFor(file)
+  const tree = language ? tokens(language, code) : undefined
   const host = document.createElement('div')
-  host.appendChild(highlight(code, file))
+  host.appendChild(fromTokens(tree as never, code))
   return host
 }
 

@@ -34,6 +34,19 @@ const SHIM_Z = 9500;
 let shim: HTMLElement | undefined;
 
 /**
+ * Whether a gesture is in progress, for anything that should stand aside.
+ *
+ * The sheet is over the whole screen while it is up, so nothing underneath can
+ * be hovered, pressed or pointed at. Work that exists to answer the pointer —
+ * hover states, reveal effects, anything measuring where the cursor is relative
+ * to something — is not merely wasted for the length of a drag, it is wasted at
+ * the exact moment the main thread has the least to spare.
+ */
+export function dragging(): boolean {
+  return !!shim?.isConnected;
+}
+
+/**
  * Cover the screen for the duration of a drag.
  *
  * Call this from the first *move*, never from the press.

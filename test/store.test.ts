@@ -96,15 +96,16 @@ describe('isFeatureEnabled', () => {
   })
 
   /*
-   * Both of the declared flags gate something that downloads a model, and both
-   * ship off: a visitor who landed here rather than chose to be should not be
-   * fetching weights because they opened a menu.
+   * The one declared flag gates something the launcher fetches without being
+   * asked, and it ships off: a visitor who landed here rather than chose to be
+   * should not be fetching weights because they opened a menu.
+   *
+   * `localChat` is deliberately not among them any more. It guarded a download
+   * that only ever happened when the chat window was opened, so the window was
+   * the gate and the flag was only hiding the feature.
    */
-  it('declares only the model-backed features, and both are off', () => {
-    expect(Object.keys(FEATURE_FLAG_DEFAULTS)).toEqual([
-      'semanticSearch',
-      'localChat',
-    ])
+  it('declares only the flag that downloads behind somebody\'s back, and it is off', () => {
+    expect(Object.keys(FEATURE_FLAG_DEFAULTS)).toEqual(['semanticSearch'])
     Object.values(FEATURE_FLAG_DEFAULTS).forEach((flag) => {
       expect(flag.enabled, flag.name).toBe(false)
     })

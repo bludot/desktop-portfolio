@@ -15,6 +15,7 @@ import {
   chat,
   contextual,
   ground,
+  isWarm as warmAlready,
   knowledgeDocuments,
   knowledgeIndex,
   personal,
@@ -168,13 +169,25 @@ class ChatContent extends OSElement {
    */
   private readonly makeEngine: (model: string, device: DevicePreference) => ChatEngine;
 
+  /**
+   * Whether the engine handed over is one that is already up.
+   *
+   * Injected alongside the factory, and for the same reason: only the module
+   * that owns the thread knows what it is holding. An engine's own `device` is
+   * not the answer — a stub can report one without ever having loaded — so the
+   * question goes back to whoever built it.
+   */
+  private readonly isWarm: (engine: ChatEngine) => boolean;
+
   constructor(
     makeEngine: (model: string, device: DevicePreference) => ChatEngine = chat,
-    knowledge: ReturnType<typeof knowledgeIndex> = knowledgeIndex()
+    knowledge: ReturnType<typeof knowledgeIndex> = knowledgeIndex(),
+    isWarm: (engine: ChatEngine) => boolean = warmAlready
   ) {
     super("chatcontent", "chat-content");
     this.makeEngine = makeEngine;
     this.knowledge = knowledge;
+    this.isWarm = isWarm;
     this.engine = makeEngine(this.choice.model, this.choice.device);
 
     this.style = () => ({
@@ -1085,6 +1098,19 @@ class ChatContent extends OSElement {
   }
 
   private async warm() {
+    /*
+     * The model may already be up, from a window that has since been closed.
+     *
+     * An engine with a device has finished loading, and its `load()` would
+     * settle in the same frame — so saying "Downloading the model… ~800MB"
+     * first would put a promise of a long wait on screen for one frame and
+     * then take it back. Straight to ready instead, which is the truth.
+     */
+    if (this.isWarm(this.engine)) {
+      this.settled();
+      return;
+    }
+
     const chosen = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
     const size = chosen ? chosen.size : "a few hundred MB";
     /*
@@ -1135,29 +1161,7 @@ class ChatContent extends OSElement {
             : `Downloading… ${percent}% · ${remaining(eta)}`
         );
       });
-      this.phase = "ready";
-      this.bar.hidden = true;
-      this.bar.classList.remove("is-waiting", "is-preparing");
-      /*
-       * The model's own name rather than "0.5B parameters": it is searchable,
-       * and it is what somebody would tell a friend they had been using.
-       */
-      const named = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
-      const where = this.engine.device === "webgpu" ? "GPU" : "CPU";
-      this.say(
-        this.engine.fellBackToCpu
-          ? `${named?.label ?? "Ready"} · CPU — no WebGPU here`
-          : `${named?.label ?? "Ready"} · ${where}`,
-        true
-      );
-      this.input.disabled = false;
-      this.send.disabled = false;
-      // The openings were readable through the download; now they work.
-      this.offer();
-      this.input.focus();
-      // In the background: a question asked before it lands is answered
-      // without notes rather than made to wait.
-      void this.learn();
+      this.settled();
     } catch (error) {
       this.phase = "failed";
       this.bar.hidden = true;
@@ -1166,6 +1170,39 @@ class ChatContent extends OSElement {
       );
       this.logger.debug(`chat model failed: ${error}`);
     }
+  }
+
+  /**
+   * The model is up: say which one, and let somebody type.
+   *
+   * Reached two ways — at the end of a download, and immediately on opening a
+   * window whose model a previous one left running — which is the reason it is
+   * a method rather than the tail of `warm`.
+   */
+  private settled() {
+    this.phase = "ready";
+    this.bar.hidden = true;
+    this.bar.classList.remove("is-waiting", "is-preparing");
+    /*
+     * The model's own name rather than "0.5B parameters": it is searchable,
+     * and it is what somebody would tell a friend they had been using.
+     */
+    const named = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
+    const where = this.engine.device === "webgpu" ? "GPU" : "CPU";
+    this.say(
+      this.engine.fellBackToCpu
+        ? `${named?.label ?? "Ready"} · CPU — no WebGPU here`
+        : `${named?.label ?? "Ready"} · ${where}`,
+      true
+    );
+    this.input.disabled = false;
+    this.send.disabled = false;
+    // The openings were readable through the download; now they work.
+    this.offer();
+    this.input.focus();
+    // In the background: a question asked before it lands is answered
+    // without notes rather than made to wait.
+    void this.learn();
   }
 
   /**

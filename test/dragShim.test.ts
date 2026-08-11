@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
-import { raiseDragShim, dropDragShim } from '../src/utils/dragShim'
+import { raiseDragShim, dropDragShim, dragging } from '../src/utils/dragShim'
 import Resizable from '../src/utils/resizable'
 import OSElement from '../src/utils/OSElement'
 
@@ -158,5 +158,37 @@ describe('a resize gesture', () => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     expect(clicks).toEqual(['hit'])
     button.remove()
+  })
+})
+
+/*
+ * The sheet is also how the rest of the desktop knows a gesture is happening.
+ * Work that exists to answer the pointer — the reveal on every button, for one
+ * — stands aside while it is up, because nothing underneath it can be pointed
+ * at and the main thread has better things to do for the length of a drag.
+ */
+describe('telling the desktop a gesture is happening', () => {
+  it('says so for as long as the sheet is up', () => {
+    expect(dragging()).toBe(false)
+
+    raiseDragShim('grabbing')
+
+    expect(dragging()).toBe(true)
+  })
+
+  it('stops saying so the moment it comes down', () => {
+    raiseDragShim('grabbing')
+    dropDragShim()
+
+    expect(dragging()).toBe(false)
+  })
+
+  // A gesture that changes cursor mid-way — a resize crossing edges — re-raises
+  // the sheet, and must not stop counting as a gesture while it does.
+  it('keeps saying so when the cursor changes mid-gesture', () => {
+    raiseDragShim('grabbing')
+    raiseDragShim('ew-resize')
+
+    expect(dragging()).toBe(true)
   })
 })

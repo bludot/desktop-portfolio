@@ -1,9 +1,7 @@
 import OSElement from "./../../utils/OSElement";
 import type Desktop from "../Desktop";
 import TaskbarButtons from "./button";
-import WindowBlur from "../Window/blur";
 import { isNarrow } from "../../utils/utils";
-// Aliased: the constructor already has a WindowBlur named blur.
 import { blur as blurFx, color, radius, shadow } from "../../theme";
 
 class Taskbar extends OSElement {
@@ -13,8 +11,6 @@ class Taskbar extends OSElement {
   constructor(desktop: Desktop) {
     super("taskbar", "taskbar");
     this.isMobile = isNarrow()
-    const blur = new WindowBlur(30, 8);
-    blur.load(this.element);
     this.taskbarButtons = new TaskbarButtons(desktop);
     this.taskbarButtons.load(this.element);
     this.style = () => ({
@@ -28,7 +24,7 @@ class Taskbar extends OSElement {
         alignItems: "center",
         padding: "0 8px",
         zIndex: "1000",
-        backgroundColor: color.chrome,
+        backgroundColor: color.chromeSolid,
         backdropFilter: blurFx.chrome,
         WebkitBackdropFilter: blurFx.chrome,
         margin: this.isMobile ? "0px" : "15px",

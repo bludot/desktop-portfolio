@@ -22,9 +22,14 @@ export const color = {
   /** Window glass, focused and resting. */
   glass: "var(--glass)",
   glassRest: "var(--glass-rest)",
+  /** A window's own fill. More tint, because it is blurred once — see themes. */
+  glassWindow: "var(--glass-window)",
+  glassWindowRest: "var(--glass-window-rest)",
   glassEdge: "var(--glass-edge)",
   /** Taskbar and launcher sit slightly further back than a window. */
   chrome: "var(--chrome)",
+  /** The taskbar's own fill. More tint, because it is blurred once now. */
+  chromeSolid: "var(--chrome-solid)",
   chromeRaised: "var(--chrome-raised)",
 
   accent: "var(--accent)",
@@ -110,7 +115,17 @@ export const shadow = {
 } as const;
 
 export const blur = {
-  window: "blur(30px) saturate(1.45)",
+  /*
+   * One filter, and a gentler saturation than the two it replaces.
+   *
+   * A window used to carry this and hold a layer carrying it again. Two
+   * chained filters do not compose the way multiplying their parameters
+   * suggests — the outer blur averages the inner one's saturation back down —
+   * so this was matched to the old rendering by measurement rather than by
+   * arithmetic: saturation and luminance land within a point of where they
+   * were, across the window's interior.
+   */
+  window: "blur(30px) saturate(1.2)",
   chrome: "blur(28px) saturate(1.4)",
 } as const;
 

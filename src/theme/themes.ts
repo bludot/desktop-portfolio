@@ -34,8 +34,32 @@ export const light: Theme = {
 
     "--glass": "rgba(255, 255, 255, .58)",
     "--glass-rest": "rgba(255, 255, 255, .40)",
+    /*
+     * The window's own fill, which carries more tint than the glass every
+     * other surface uses.
+     *
+     * A window used to be blurred twice — its own filter, and again by a layer
+     * inside it — and the inner one was sampling the window's fill along with
+     * the wallpaper, mixing that tint through the result. With the second blur
+     * gone the tint has to be in the fill to start with, or the picture behind
+     * comes through sharper and more saturated than it did.
+     *
+     * The dark pair was measured against the old two-blur rendering and
+     * matches it to within a couple of points per channel. These two are the
+     * same proportions applied to the light theme, which was not measured.
+     */
+    "--glass-window": "rgba(255, 255, 255, .74)",
+    "--glass-window-rest": "rgba(255, 255, 255, .52)",
     "--glass-edge": "rgba(255, 255, 255, .75)",
     "--chrome": "rgba(255, 255, 255, .5)",
+    /*
+     * The taskbar's own fill, carrying the tint the layer inside it used to mix
+     * in. Same story as `--glass-window`: it was blurred twice, the inner blur
+     * sampled this fill along with the desktop, and with that layer gone the
+     * tint has to be here instead. Proportioned from the dark pair, which is
+     * the one that was measured.
+     */
+    "--chrome-solid": "rgba(255, 255, 255, .64)",
     "--chrome-raised": "rgba(255, 255, 255, .72)",
 
     "--current": "#4a7c59",
@@ -81,8 +105,13 @@ export const dark: Theme = {
     // read as a sheet of frosted paper laid over a night sky.
     "--glass": "rgba(40, 34, 51, .66)",
     "--glass-rest": "rgba(40, 34, 51, .48)",
+    // Measured: see the light theme's note. These are the pair that were
+    // matched against the old rendering.
+    "--glass-window": "rgba(40, 34, 51, .80)",
+    "--glass-window-rest": "rgba(40, 34, 51, .62)",
     "--glass-edge": "rgba(255, 255, 255, .12)",
     "--chrome": "rgba(32, 27, 41, .6)",
+    "--chrome-solid": "rgba(32, 27, 41, .74)",
     "--chrome-raised": "rgba(60, 52, 76, .72)",
 
     "--current": "#74c295",

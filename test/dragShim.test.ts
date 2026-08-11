@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import jss from 'jss'
 import preset from 'jss-preset-default'
 import nested from 'jss-plugin-nested'
-import { raiseDragShim, dropDragShim } from '../src/utils/dragShim'
+import { raiseDragShim, dropDragShim, dragging } from '../src/utils/dragShim'
 import Resizable from '../src/utils/resizable'
 import OSElement from '../src/utils/OSElement'
 
@@ -158,5 +158,47 @@ describe('a resize gesture', () => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     expect(clicks).toEqual(['hit'])
     button.remove()
+  })
+})
+
+/*
+ * The sheet is also the signal that a gesture is happening, and the windows
+ * read it: they drop their frosted glass for the duration, because a
+ * backdrop-filter on something that moves is re-blurred by the compositor every
+ * frame over a backdrop that keeps changing. See `theme/global`.
+ */
+describe('telling the desktop a gesture is happening', () => {
+  it('says so for as long as the sheet is up', () => {
+    expect(dragging()).toBe(false)
+    expect(document.body.classList.contains('is-dragging')).toBe(false)
+
+    raiseDragShim('grabbing')
+
+    expect(dragging()).toBe(true)
+    expect(document.body.classList.contains('is-dragging')).toBe(true)
+  })
+
+  it('stops saying so the moment it comes down', () => {
+    raiseDragShim('grabbing')
+    dropDragShim()
+
+    expect(dragging()).toBe(false)
+    expect(document.body.classList.contains('is-dragging')).toBe(false)
+  })
+
+  // Every release path calls it, including ones that never raised a sheet.
+  it('is safe to drop when nothing was ever raised', () => {
+    expect(() => dropDragShim()).not.toThrow()
+    expect(document.body.classList.contains('is-dragging')).toBe(false)
+  })
+
+  // A gesture that changes cursor mid-way — a resize crossing edges — must not
+  // lose the flag when the sheet is re-raised.
+  it('keeps saying so when the cursor changes mid-gesture', () => {
+    raiseDragShim('grabbing')
+    raiseDragShim('ew-resize')
+
+    expect(dragging()).toBe(true)
+    expect(document.body.classList.contains('is-dragging')).toBe(true)
   })
 })

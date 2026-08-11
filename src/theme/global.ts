@@ -83,6 +83,39 @@ export function attachGlobalStyles() {
          */
         maskImage: `radial-gradient(circle at var(--ripple-x) var(--ripple-y), #000 calc(var(--ripple) - ${FEATHER_PX}px), transparent var(--ripple))`,
         WebkitMaskImage: `radial-gradient(circle at var(--ripple-x) var(--ripple-y), #000 calc(var(--ripple) - ${FEATHER_PX}px), transparent var(--ripple))`
+      },
+
+      /*
+       * No frosted glass while something is being dragged.
+       *
+       * A backdrop filter's input is whatever is behind the element, so an
+       * element that moves has a different input every frame: the compositor
+       * re-samples the area under the window and runs a 30px blur and a
+       * saturate over it, sixty times a second, for as long as the gesture
+       * lasts. `translate3d` does not save it — a transform is cheap because
+       * the layer can be reused, and this layer cannot be, because the picture
+       * inside it depends on where it now is.
+       *
+       * That cost is the compositor's, which is why it never appears in a
+       * profile of the drag handler and why the handler being fast and the drag
+       * being slow were both true at once.
+       *
+       * What replaces it is not an approximation invented for this: it is the
+       * flat translucent fill the desktop already shows where `backdrop-filter`
+       * is unsupported — a look that was designed, and that this repository
+       * already ships to anyone whose browser lacks the feature. It comes back
+       * the moment the pointer is released.
+       *
+       * Matched on the attribute rather than with `#window-blur`, because every
+       * window builds one of these and they all carry the same id — an id
+       * selector would read as though there were only ever one. An element and
+       * two classes is already more specific than the component's own generated
+       * class, so this wins on the cascade without anything being shouted.
+       */
+      'body.is-dragging [id="window-blur"]': {
+        backdropFilter: "none",
+        WebkitBackdropFilter: "none",
+        background: color.glass
       }
     }
   });

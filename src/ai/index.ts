@@ -62,6 +62,21 @@ function models(): Worker {
       }),
     stop: (worker) => {
       /*
+       * Tell whoever is waiting, before taking the thread away.
+       *
+       * `terminate()` fires nothing. The library rejects outstanding requests
+       * from `worker.onerror`, which is the door a thread that *dies* comes
+       * through — so killing one deliberately went around it and left every
+       * call in flight unsettled, which is indistinguishable from a model being
+       * slow. The same door is knocked on here rather than a second one being
+       * cut for it.
+       */
+      worker.onerror?.call(
+        worker,
+        new ErrorEvent("error", { message: "The model process was killed" })
+      );
+
+      /*
        * The engines go with it. They are only handles onto weights that live
        * in the worker, and a handle whose `load()` has already resolved would
        * otherwise report a model that is ready on a thread that is gone.

@@ -14,15 +14,39 @@ threads are not free, each is a fresh heap and a copy of whatever it imports,
 and these jobs are brief and idle between presses, so they make far better
 neighbours than tenants.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Projects window
+    participant J as job highlight
+    participant C as Channel
+    participant W as jobs worker
+    participant M as jobs/highlight.ts
+
+    P->>J: call("tokens", [lang, source])
+    J->>C: send — allocates id 1
+    C->>W: {id 1, kind call, job, method, args}
+    Note over W: first call naming this job
+    W->>M: import("./jobs/highlight")
+    M-->>W: module
+    W->>M: tokens(lang, source, say)
+    M-->>W: hast tree
+    W-->>C: {id 1, kind done, value tree}
+    C-->>J: resolves
+    J-->>P: tree
+    Note over P: fromTokens(tree) builds the nodes,<br/>because that half needs a document
 ```
-main thread                          jobs thread
------------                          -----------
-job("highlight")
-  .call("tokens", [lang, src])  ──▶  load("highlight")   → import("./jobs/highlight")
-                                     module.tokens(lang, src, say)
-                              ◀──    { kind: "done", value: tree }
-fromTokens(tree, src)
-  → DOM nodes
+
+The worker knows how to talk and nothing about the work. Which module it becomes
+is decided by the first call that names one:
+
+```mermaid
+flowchart LR
+    spawn["new Worker(jobs.worker.ts)"] --> blank["A thread that can talk<br/>and does nothing"]
+    blank -->|"call: job=highlight"| exec["import('./jobs/highlight')"]
+    exec --> ready["A thread that highlights"]
+    blank -->|"call: job=something-else"| exec2["import('./jobs/something-else')"]
+    exec2 --> ready2["and that too — same thread"]
 ```
 
 ## The protocol
@@ -36,8 +60,20 @@ answers.
 **Responses:** `chunk { value }`, `done { value }`, `error { message, name? }`,
 `aborted`.
 
+```mermaid
+flowchart TB
+    sent(["call sent — the id goes in the pending map"]) --> pending{{"Pending"}}
+    pending -->|"chunk — reports, settles nothing"| pending
+    pending -->|"done"| ok(["Resolved with the value"])
+    pending -->|"error"| bad(["Rejected"])
+    pending -->|"aborted"| bad
+    pending -->|"the thread died, or was killed"| bad
+```
+
 `chunk` is non-terminal — a job may report a hundred times against one id. The
-other three end the call and remove it from the pending map.
+other three end the call and remove it from the pending map. The last transition
+is the one that is easy to leave out, and leaving it out is how a caller ends up
+waiting forever on a thread that no longer exists.
 
 Ids are allocated by the client and only ever echoed by the worker.
 
@@ -111,6 +147,18 @@ chunk of **exactly zero bytes**. The page then asked a thread that was not
 listening to load a model and waited. Nothing failed and nothing was logged,
 because no answer looks exactly like a slow one. Dev serves modules unbundled
 and never tree-shakes, so it appeared only once deployed.
+
+```mermaid
+flowchart TB
+    src["src/processes/jobs.worker.ts"] -->|"matched literally in<br/>new Worker(new URL(...))"| detect{"Did the bundler<br/>see the reference?"}
+    detect -->|"no — path built from a variable"| dev1["Dev: works.<br/>Modules are served as asked for"]
+    detect -->|"no"| prod1["Build: no asset emitted.<br/>Fails only once deployed"]
+    detect -->|yes| build["A build of its own —<br/>inherits none of the main build's plugins"]
+    build --> shake{"Is the entry only a<br/>side-effect import from a<br/>sideEffects:false package?"}
+    shake -->|yes| empty["A chunk of zero bytes.<br/>Nothing logged. Nothing listening."]
+    shake -->|no| asset["assets/jobs.worker-HASH.js"]
+    empty -.->|"the fix: say it is side-effectful<br/>during resolution, in both plugin lists"| asset
+```
 
 The fix is in `vite.config.ts`, and two things about it are not obvious:
 

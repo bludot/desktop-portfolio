@@ -60,6 +60,23 @@ The bigger win turned out to be the download rather than the frame — 73KB of
 grammars left the initial bundle and are now fetched only when somebody opens a
 file. See [workers](./workers.md#what-the-split-bought).
 
+## Deciding, next time
+
+```mermaid
+flowchart TB
+    start["Some logic in an app"] --> dom{"Does it touch<br/>the DOM?"}
+    dom -->|yes| stay["Stays. A worker has no document"]
+    dom -->|no| cost{"Is it expensive?<br/>A stall you can see,<br/>or bytes better fetched later"}
+    cost -->|no| stay2["Stays. A protocol costs more<br/>than the work does"]
+    cost -->|yes| clone{"Does what crosses<br/>clone cheaply?"}
+    clone -->|"no — DOM nodes, functions,<br/>huge buffers"| think["Think again.<br/>Serialising may cost<br/>more than it saves"]
+    clone -->|"yes — plain objects,<br/>strings, arrays"| job["Make it a job"]
+```
+
+Syntax highlighting is the only thing in this repository that has walked all the
+way to the right of that chart. `github.ts` stops at the second question, and
+almost everything else stops at the first.
+
 ## The general point
 
 This codebase had already done the separation work that usually motivates a

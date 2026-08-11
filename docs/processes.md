@@ -8,6 +8,29 @@ Something running with a lifetime of its own. A window may start one; every
 window may close without it stopping. It ends when it is killed, or when the tab
 does.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor V as Visitor
+    participant W as Chat window
+    participant R as Process register
+    participant T as Model worker
+
+    V->>W: opens the chat
+    W->>R: ensure("model")
+    R->>T: start — new Worker
+    T-->>W: weights up, about five seconds
+    V->>W: closes the window
+    W--xW: unloaded
+    Note over T: still running, still holding the model
+    V->>W: opens the chat again
+    W->>R: ensure("model")
+    R-->>W: the one already running
+    Note over W: ready in a frame, nothing to download,<br/>nothing to rebuild
+    V->>R: kills it from the Processes window
+    R->>T: stop — fail what is in flight, then terminate
+```
+
 That is the whole idea, and it exists because of one concrete failure. Opening
 the chat window brings up half a gigabyte of weights. Closing the window and
 opening it again used to rebuild them — not re-download, the browser had the
@@ -35,6 +58,16 @@ The closest thing available is spawn-then-exec, and that is what the jobs worker
 does — see [workers](./workers.md).
 
 ## The register
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Absent
+    Absent --> Running: ensure — start() runs, once
+    Running --> Running: ensure — the same one back
+    Running --> Absent: kill — out of the map, then stop()
+```
+
 
 ```ts
 import * as processes from "../processes"

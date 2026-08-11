@@ -16,6 +16,39 @@ the windows themselves.
 
 ## The shape of the thing
 
+```mermaid
+flowchart TB
+    subgraph main["Main thread — everything with a document"]
+        direction TB
+        wm["windowManager"]
+        win["Windows: About, Experience, Projects, Chat, Processes"]
+        chrome["Taskbar, start menu, launcher"]
+        wm --> win
+    end
+
+    subgraph procs["The process register — src/processes"]
+        direction TB
+        reg["ensure · running · kill · list · watch"]
+    end
+
+    subgraph threads["Workers — no document, no DOM"]
+        direction TB
+        model["model worker<br/>chat model + embedder"]
+        jobs["jobs worker<br/>loads what it is told to become"]
+        hl["highlight job<br/>tokenises source"]
+        jobs -.->|"import() on first call"| hl
+    end
+
+    win -->|"asks for a model"| reg
+    win -->|"asks for a job"| reg
+    chrome --> reg
+    reg -->|"starts once, outlives every window"| model
+    reg -->|"starts once, outlives every window"| jobs
+```
+
+A window may start a process and every window may close without it stopping.
+That is the whole idea, and the rest of these notes are its consequences.
+
 A window is a `Content` object — a subclass of `OSElement` — handed to
 `windowManager.new()`. It owns an element, a stylesheet, and a load/unload
 lifecycle. Everything a visitor sees is built that way, and all of it runs on

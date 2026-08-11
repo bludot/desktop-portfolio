@@ -42,7 +42,16 @@ class ToastStack extends OSElement {
         right: "18px",
         zIndex: `${STACK_Z}`,
         display: "flex",
-        flexDirection: "column",
+        /*
+         * Reversed, so the newest is at the top without anything being moved.
+         *
+         * Cards are appended in the order they were said and the column turns
+         * that upside down. Reordering the nodes instead — inserting each new
+         * one before the first — worked in a test and not in a browser, because
+         * mounting is asynchronous and the move raced it. Nothing races a
+         * stylesheet.
+         */
+        flexDirection: "column-reverse",
         gap: "10px",
         // The column is a place, not a surface: only the cards take the pointer.
         pointerEvents: "none",
@@ -96,15 +105,8 @@ export function post(host: HTMLElement, content: Notification): Toast {
   showing.push(toast);
   content.onShown?.(() => void toast.leave());
 
-  // Newest at the top of the column, so the column reads in the order things
-  // were said rather than in the order they happen to have been mounted.
-  void toast.load(stack.getElement()).then(() => {
-    const element = toast.getElement();
-    const first = stack?.getElement().firstElementChild;
-    if (first && first !== element) {
-      stack?.getElement().insertBefore(element, first);
-    }
-  });
+  // Appended in the order it was said; the column reverses it — see above.
+  void toast.load(stack.getElement());
 
   return toast;
 }

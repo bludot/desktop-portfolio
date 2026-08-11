@@ -141,6 +141,22 @@ describe('StartMenu', () => {
     expect(pill('Debugger')).toBeTruthy()
     expect(pill('Feature flags')).toBeTruthy()
     expect(pill('Processes')).toBeTruthy()
+    expect(pill('Playground')).toBeTruthy()
+    await menu.unload()
+  })
+
+  /*
+   * The tiles are the first thing in the menu. A person looking at five of
+   * them does not need a line above saying there are five, and the heading
+   * that remains earns its place by saying those ones go somewhere else.
+   */
+  it('does not count the windows back at you', async () => {
+    const menu = new StartMenu(makeDesktop())
+    await menu.load(host)
+
+    const headings = [...host.querySelectorAll('.start-group')].map((h) => h.textContent)
+    expect(headings.some((h) => /windows/i.test(h ?? ''))).toBe(false)
+    expect(headings.some((h) => /apps/i.test(h ?? ''))).toBe(true)
     await menu.unload()
   })
 

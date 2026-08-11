@@ -19,6 +19,11 @@ const say = (over: Partial<Notification> = {}): Notification => ({
 })
 
 const cards = () => host.querySelectorAll('.toast')
+/**
+ * In the order they were said. The column is `column-reverse`, so the last of
+ * these is the one drawn at the top — a distinction no query can see, and the
+ * reason ordering is a stylesheet's job rather than a script's.
+ */
 const titles = () => [...host.querySelectorAll('.toast-title')].map((t) => t.textContent)
 /** Let the mount and its entrance settle. */
 const settle = () => vi.advanceTimersByTimeAsync(20)
@@ -70,8 +75,8 @@ describe('saying something from anywhere', () => {
     showNotifications(host)
     await settle()
 
-    // Newest at the top of the column, so the second is drawn above the first.
-    expect(titles()).toEqual(['Second', 'First'])
+    // Said first, said second — and drawn the other way up.
+    expect(titles()).toEqual(['First', 'Second'])
   })
 
   // A backlog is a short gap, not a mailbox. Fifty arriving at once would be
@@ -102,7 +107,7 @@ describe('the stack', () => {
     notify(say({ title: 'Two' }))
     await settle()
 
-    expect(titles()).toEqual(['Two', 'One'])
+    expect(titles()).toEqual(['One', 'Two'])
   })
 
   /*
@@ -118,7 +123,7 @@ describe('the stack', () => {
     }
 
     expect(cards()).toHaveLength(3)
-    expect(titles()).toEqual(['Four', 'Three', 'Two'])
+    expect(titles()).toEqual(['Two', 'Three', 'Four'])
   })
 
   it('closes the gap when one in the middle is dismissed', async () => {
@@ -133,7 +138,7 @@ describe('the stack', () => {
     middle.querySelector<HTMLButtonElement>('.toast-close')!.click()
     await settle()
 
-    expect(titles()).toEqual(['Three', 'One'])
+    expect(titles()).toEqual(['One', 'Three'])
     expect(posted()).toHaveLength(2)
   })
 

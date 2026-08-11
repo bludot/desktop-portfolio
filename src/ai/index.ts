@@ -144,6 +144,17 @@ export function chat(
 }
 
 /**
+ * Whether a chat model is up, without asking for one.
+ *
+ * Starts nothing — no worker, no download, no load. For anything that wants to
+ * mention the model only when mentioning it is free, which is the only honest
+ * way to bring it up unprompted.
+ */
+export function modelUp(): boolean {
+  return !!held?.engine.device;
+}
+
+/**
  * Whether this is an engine the desktop has already brought all the way up.
  *
  * Asked by the chat window so it can open ready rather than opening with a

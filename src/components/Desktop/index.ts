@@ -10,6 +10,10 @@ import appearance from "../../utils/appearance";
 import { saveSettings } from "../../Store";
 import SettingsApp from "../../apps/Settings";
 import Launcher from "../Launcher";
+import ChatContent from "../../contents/chat";
+import { start as watchAttention } from "../../attention/prompter";
+import { showNotifications } from "../Toast/stack";
+import { modelUp } from "../../ai";
 import ProjectsContent from "../../contents/projects";
 import type { Repo } from "../../utils/github";
 
@@ -251,6 +255,37 @@ class Desktop extends OSElement {
     this.launcher = new Launcher(this, this.launcherActions());
     await this.launcher.load(this.mainElement);
     await this.applyStyle();
+
+    /*
+     * Start noticing what the visitor does, so the desktop can occasionally
+     * offer something.
+     *
+     * Only window events, only in memory, and it dies with the tab — see
+     * `attention`. Started after the desktop is built so the windows it opens
+     * for itself are counted as what they are: the desktop's doing, not the
+     * visitor's, and the clock the rules read starts here rather than at boot.
+     */
+    /*
+     * Anything on this desktop may say something from here on — see
+     * `notifications`. Mounted before the watcher starts so nothing said during
+     * startup has to be held.
+     */
+    showNotifications(this.mainElement);
+
+    watchAttention({
+      // Never a reason to start one; only ever a reason to mention it.
+      modelWarm: modelUp,
+      openLauncher: () => void this.launcher.toggle(),
+      openChat: () =>
+        windowManager.new({
+          title: "Chat",
+          meta: "on this machine",
+          content: new ChatContent(),
+          desktop: this,
+          dimensions: { width: 460, height: 520 }
+        })
+    });
+
     // Let the boot sequence finish before it fades; the desktop is already
     // built behind it, so this costs nothing but the animation.
     await bootscreen.complete?.();

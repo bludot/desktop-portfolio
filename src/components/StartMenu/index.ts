@@ -23,6 +23,7 @@ import AlertContent from "../../contents/alert";
 import LoggerWindow from "../../contents/logger";
 import ChatContent from "../../contents/chat";
 import ProcessesContent from "../../contents/processes";
+import PlaygroundContent from "../../contents/playground";
 import FeatureFlagsApp from "../../apps/FeatureFlags";
 import SettingsApp from "../../apps/Settings";
 import { NARROW_PX } from "../../utils/utils";
@@ -897,9 +898,15 @@ class StartMenu extends OSElement {
     const body = document.createElement("div");
     body.className = "start-body";
 
-    const destinations = this.destinations();
-    body.appendChild(this.group("Windows", `· ${destinations.length}`));
-    body.appendChild(this.grid(destinations));
+    /*
+     * No heading over the first group.
+     *
+     * It labelled the obvious — the tiles are the first thing in the menu, and
+     * a person looking at four windows does not need to be told there are four
+     * windows. The heading below earns its place because it says these ones go
+     * somewhere else; this one only took a line and said nothing.
+     */
+    body.appendChild(this.grid(this.destinations()));
 
     body.appendChild(this.group("Apps", "· elsewhere"));
     body.appendChild(this.grid(this.apps()));
@@ -936,6 +943,22 @@ class StartMenu extends OSElement {
      * sits beside the debugger because that is the company it keeps — both are
      * for the visitor who wants to know how this works rather than what it says.
      */
+    /*
+     * Kept beside the other switches rather than given a tile: it is a look
+     * inside the desktop, not somewhere to go. It is also the only way to see a
+     * notification on demand — the real ones wait for a visitor to earn them.
+     */
+    utility.appendChild(
+      this.pill("Playground", "windows", () => {
+        windowManager.new({
+          title: "Playground",
+          meta: "every part",
+          content: new PlaygroundContent(),
+          dimensions: { width: 560, height: 620 },
+          desktop: this.desktop
+        });
+      })
+    );
     utility.appendChild(
       this.pill("Processes", "debugger", () => {
         windowManager.new({

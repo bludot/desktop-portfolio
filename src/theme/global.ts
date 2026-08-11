@@ -100,19 +100,28 @@ export function attachGlobalStyles() {
        * profile of the drag handler, and why the handler being fast and the
        * drag being slow were both true at once.
        *
-       * Nothing is added in its place. The window already paints its own
-       * translucent fill — `glass` when it is active, `glassRest` when it is
-       * not — so dropping the filter leaves it tinted and see-through, just no
-       * longer blurring what is behind it. An earlier version of this put a
-       * second fill on the inner layer as well, which stacked on the window's
-       * own and turned a subtle change into a visible jump.
+       * One of the two, and only the inner one.
        *
-       * Only the window in the gesture, rather than every window on the
-       * desktop: the others are not moving, their backdrops are not changing,
-       * and there is nothing to be gained by flattening something nobody is
-       * touching.
+       * A window carries `blur(30px) saturate(1.45)` and then holds a layer
+       * that carries `blur(30px) saturate(1.45)` again — the backdrop is
+       * filtered twice, for a difference nobody can point to. Dropping the
+       * inner one for the length of a gesture halves what the compositor has to
+       * do per frame and is, side by side, not visible.
+       *
+       * Taking both was tried first and is the wrong trade. Blur is doing more
+       * work here than it looks: against a photograph — and the wallpaper may
+       * well be one — an unfiltered window stops reading as a frosted surface
+       * and becomes a dark, busy pane with the picture sharp behind the text.
+       * The desktop is lighter and flatter with the blur than without it, which
+       * is the opposite of what the unsupported-browser fallback assumes, and
+       * that fallback's own comment says why: it was written for a soft
+       * gradient, not for a photograph.
+       *
+       * Only the window in the gesture, too. The others are not moving, their
+       * backdrops are not changing, and there is nothing to gain by touching
+       * something nobody is holding.
        */
-      '.window.is-moving, .window.is-moving [id="window-blur"]': {
+      '.window.is-moving [id="window-blur"]': {
         backdropFilter: "none",
         WebkitBackdropFilter: "none"
       }

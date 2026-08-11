@@ -87,14 +87,6 @@ export function raiseDragShim(cursor = "default"): void {
 
   shim.style.cursor = cursor;
   document.body.appendChild(shim);
-  /*
-   * Tells the stylesheet that a gesture is happening, which is how the windows
-   * drop their frosted glass for the duration of it — see `theme/global`. Put
-   * here rather than in the window, because a resize moves the same expensive
-   * layer over the same changing backdrop, and every gesture on this desktop
-   * already comes through here.
-   */
-  document.body.classList.add("is-dragging");
 
   /*
    * The sheet takes itself down on the next release, whatever happens upstream.
@@ -119,9 +111,4 @@ export function raiseDragShim(cursor = "default"): void {
  */
 export function dropDragShim(): void {
   shim?.remove();
-  // The glass comes back with the pointer. Unconditional, like the removal
-  // above: every release path calls this, including ones that never raised.
-  if (typeof document !== "undefined") {
-    document.body.classList.remove("is-dragging");
-  }
 }

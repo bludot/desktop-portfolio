@@ -162,20 +162,18 @@ describe('a resize gesture', () => {
 })
 
 /*
- * The sheet is also the signal that a gesture is happening, and the windows
- * read it: they drop their frosted glass for the duration, because a
- * backdrop-filter on something that moves is re-blurred by the compositor every
- * frame over a backdrop that keeps changing. See `theme/global`.
+ * The sheet is also how the rest of the desktop knows a gesture is happening.
+ * Work that exists to answer the pointer — the reveal on every button, for one
+ * — stands aside while it is up, because nothing underneath it can be pointed
+ * at and the main thread has better things to do for the length of a drag.
  */
 describe('telling the desktop a gesture is happening', () => {
   it('says so for as long as the sheet is up', () => {
     expect(dragging()).toBe(false)
-    expect(document.body.classList.contains('is-dragging')).toBe(false)
 
     raiseDragShim('grabbing')
 
     expect(dragging()).toBe(true)
-    expect(document.body.classList.contains('is-dragging')).toBe(true)
   })
 
   it('stops saying so the moment it comes down', () => {
@@ -183,22 +181,14 @@ describe('telling the desktop a gesture is happening', () => {
     dropDragShim()
 
     expect(dragging()).toBe(false)
-    expect(document.body.classList.contains('is-dragging')).toBe(false)
   })
 
-  // Every release path calls it, including ones that never raised a sheet.
-  it('is safe to drop when nothing was ever raised', () => {
-    expect(() => dropDragShim()).not.toThrow()
-    expect(document.body.classList.contains('is-dragging')).toBe(false)
-  })
-
-  // A gesture that changes cursor mid-way — a resize crossing edges — must not
-  // lose the flag when the sheet is re-raised.
+  // A gesture that changes cursor mid-way — a resize crossing edges — re-raises
+  // the sheet, and must not stop counting as a gesture while it does.
   it('keeps saying so when the cursor changes mid-gesture', () => {
     raiseDragShim('grabbing')
     raiseDragShim('ew-resize')
 
     expect(dragging()).toBe(true)
-    expect(document.body.classList.contains('is-dragging')).toBe(true)
   })
 })

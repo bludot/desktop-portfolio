@@ -86,36 +86,35 @@ export function attachGlobalStyles() {
       },
 
       /*
-       * No frosted glass while something is being dragged.
+       * No live blur on the window that is moving.
        *
-       * A backdrop filter's input is whatever is behind the element, so an
-       * element that moves has a different input every frame: the compositor
+       * A backdrop filter's input is whatever is behind the element, so
+       * something that moves has a different input every frame: the compositor
        * re-samples the area under the window and runs a 30px blur and a
-       * saturate over it, sixty times a second, for as long as the gesture
-       * lasts. `translate3d` does not save it — a transform is cheap because
-       * the layer can be reused, and this layer cannot be, because the picture
-       * inside it depends on where it now is.
+       * saturate over it again, sixty times a second, for as long as the
+       * gesture lasts. `translate3d` does not save it — transforms are cheap
+       * because a layer can be reused, and this one cannot be, because the
+       * picture inside it depends on where it now is.
        *
-       * That cost is the compositor's, which is why it never appears in a
-       * profile of the drag handler and why the handler being fast and the drag
-       * being slow were both true at once.
+       * That cost belongs to the compositor, which is why it never appears in a
+       * profile of the drag handler, and why the handler being fast and the
+       * drag being slow were both true at once.
        *
-       * What replaces it is not an approximation invented for this: it is the
-       * flat translucent fill the desktop already shows where `backdrop-filter`
-       * is unsupported — a look that was designed, and that this repository
-       * already ships to anyone whose browser lacks the feature. It comes back
-       * the moment the pointer is released.
+       * Nothing is added in its place. The window already paints its own
+       * translucent fill — `glass` when it is active, `glassRest` when it is
+       * not — so dropping the filter leaves it tinted and see-through, just no
+       * longer blurring what is behind it. An earlier version of this put a
+       * second fill on the inner layer as well, which stacked on the window's
+       * own and turned a subtle change into a visible jump.
        *
-       * Matched on the attribute rather than with `#window-blur`, because every
-       * window builds one of these and they all carry the same id — an id
-       * selector would read as though there were only ever one. An element and
-       * two classes is already more specific than the component's own generated
-       * class, so this wins on the cascade without anything being shouted.
+       * Only the window in the gesture, rather than every window on the
+       * desktop: the others are not moving, their backdrops are not changing,
+       * and there is nothing to be gained by flattening something nobody is
+       * touching.
        */
-      'body.is-dragging [id="window-blur"]': {
+      '.window.is-moving, .window.is-moving [id="window-blur"]': {
         backdropFilter: "none",
-        WebkitBackdropFilter: "none",
-        background: color.glass
+        WebkitBackdropFilter: "none"
       }
     }
   });

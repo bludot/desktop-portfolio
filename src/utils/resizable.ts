@@ -157,7 +157,6 @@ class ResizableBorder extends OSElement {
     // resize left one behind for the life of the page.
     const mousemove = this.mouseMove.bind(this);
     const mouseup = () => {
-      this.resizeTarget.classList.remove("is-moving");
       dropDragShim();
       window.removeEventListener("mousemove", mousemove);
       window.removeEventListener("mouseup", mouseup);
@@ -196,13 +195,6 @@ class ResizableBorder extends OSElement {
      * into nothing.
      */
     raiseDragShim(CURSORS[this.type]);
-    /*
-     * A resize changes what is behind the window just as a move does, so the
-     * same live blur is re-computed every frame over a backdrop that will not
-     * hold still. Marked here for the same reason and dropped in the same
-     * place — see `theme/global`.
-     */
-    this.resizeTarget.classList.add("is-moving");
 
     if (this.type === ResizeType.RIGHT) {
       this.updateParentDimensions(

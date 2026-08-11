@@ -83,47 +83,6 @@ export function attachGlobalStyles() {
          */
         maskImage: `radial-gradient(circle at var(--ripple-x) var(--ripple-y), #000 calc(var(--ripple) - ${FEATHER_PX}px), transparent var(--ripple))`,
         WebkitMaskImage: `radial-gradient(circle at var(--ripple-x) var(--ripple-y), #000 calc(var(--ripple) - ${FEATHER_PX}px), transparent var(--ripple))`
-      },
-
-      /*
-       * No live blur on the window that is moving.
-       *
-       * A backdrop filter's input is whatever is behind the element, so
-       * something that moves has a different input every frame: the compositor
-       * re-samples the area under the window and runs a 30px blur and a
-       * saturate over it again, sixty times a second, for as long as the
-       * gesture lasts. `translate3d` does not save it — transforms are cheap
-       * because a layer can be reused, and this one cannot be, because the
-       * picture inside it depends on where it now is.
-       *
-       * That cost belongs to the compositor, which is why it never appears in a
-       * profile of the drag handler, and why the handler being fast and the
-       * drag being slow were both true at once.
-       *
-       * One of the two, and only the inner one.
-       *
-       * A window carries `blur(30px) saturate(1.45)` and then holds a layer
-       * that carries `blur(30px) saturate(1.45)` again — the backdrop is
-       * filtered twice, for a difference nobody can point to. Dropping the
-       * inner one for the length of a gesture halves what the compositor has to
-       * do per frame and is, side by side, not visible.
-       *
-       * Taking both was tried first and is the wrong trade. Blur is doing more
-       * work here than it looks: against a photograph — and the wallpaper may
-       * well be one — an unfiltered window stops reading as a frosted surface
-       * and becomes a dark, busy pane with the picture sharp behind the text.
-       * The desktop is lighter and flatter with the blur than without it, which
-       * is the opposite of what the unsupported-browser fallback assumes, and
-       * that fallback's own comment says why: it was written for a soft
-       * gradient, not for a photograph.
-       *
-       * Only the window in the gesture, too. The others are not moving, their
-       * backdrops are not changing, and there is nothing to gain by touching
-       * something nobody is holding.
-       */
-      '.window.is-moving [id="window-blur"]': {
-        backdropFilter: "none",
-        WebkitBackdropFilter: "none"
       }
     }
   });

@@ -252,8 +252,6 @@ class OSWindow extends OSElement {
   }
 
   mouseup(e: MouseEvent): void {
-    // The blur comes back with the pointer, whether or not it ever went away.
-    this.element.classList.remove("is-moving");
     dropDragShim();
     window.removeEventListener("mousemove", this.onMouseMove);
     window.removeEventListener("mouseup", this.onMouseUp);
@@ -286,13 +284,6 @@ class OSWindow extends OSElement {
      * click ever reached them.
      */
     raiseDragShim("grabbing");
-    /*
-     * This window is the one moving, so it is the one that gives up its live
-     * blur for the length of the gesture — see `theme/global`. On the move
-     * rather than the press, for the same reason the sheet is: a press that
-     * turns out to be a click should change nothing at all.
-     */
-    this.element.classList.add("is-moving");
 
     /*
      * Dragging a maximised window puts it back first, keeping the cursor at the

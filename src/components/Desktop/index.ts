@@ -12,6 +12,7 @@ import SettingsApp from "../../apps/Settings";
 import Launcher from "../Launcher";
 import ChatContent from "../../contents/chat";
 import { start as watchAttention } from "../../attention/prompter";
+import { showNotifications } from "../Toast/stack";
 import { modelUp } from "../../ai";
 import ProjectsContent from "../../contents/projects";
 import type { Repo } from "../../utils/github";
@@ -264,8 +265,14 @@ class Desktop extends OSElement {
      * for itself are counted as what they are: the desktop's doing, not the
      * visitor's, and the clock the rules read starts here rather than at boot.
      */
+    /*
+     * Anything on this desktop may say something from here on — see
+     * `notifications`. Mounted before the watcher starts so nothing said during
+     * startup has to be held.
+     */
+    showNotifications(this.mainElement);
+
     watchAttention({
-      host: this.mainElement,
       // Never a reason to start one; only ever a reason to mention it.
       modelWarm: modelUp,
       openLauncher: () => void this.launcher.toggle(),

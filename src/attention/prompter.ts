@@ -13,7 +13,7 @@
  * feature nobody notices, and the version that is too loud is a page people
  * leave.
  */
-import Toast from "../components/Toast";
+import { notify } from "../notifications";
 import * as processes from "../processes";
 import { activity, forget, onChange, watch } from "./index";
 import { suggest, type Suggestion, type Surroundings } from "./suggestions";
@@ -30,10 +30,13 @@ interface Prompter {
   said: () => number;
 }
 
-export interface PrompterOptions extends Surroundings {
-  /** Where the toast mounts. The desktop, in practice. */
-  host: HTMLElement;
-}
+/*
+ * No host. Attention says things through `notify`, which knows nothing about
+ * where the desktop is mounted and does not need to — the toast column
+ * subscribes at the other end. Anything else on this desktop can say something
+ * the same way, and this is no longer the only thing that can.
+ */
+export type PrompterOptions = Surroundings;
 
 export const ATTENTION_PROCESS = "attention";
 
@@ -98,7 +101,10 @@ export function prompt(options: PrompterOptions): Prompter {
    * to somebody who just declined it is how a suggestion becomes nagging.
    */
   const spent = new Set<string>();
-  let showing: Toast | undefined;
+  /** Whether one of ours is still up. The column may hold others. */
+  let showing = false;
+  /** How to take ours back, while it is up. */
+  let withdraw: (() => void) | undefined;
   let said = 0;
   let lastAt = 0;
   let stopped = false;
@@ -114,18 +120,21 @@ export function prompt(options: PrompterOptions): Prompter {
     said += 1;
     lastAt = Date.now();
 
-    const toast = new Toast({
+    showing = true;
+    notify({
+      onShown: (dismiss) => {
+        withdraw = dismiss;
+      },
       sender: found.sender,
       glyph: found.glyph,
       title: found.title,
       text: found.text,
       action: found.action,
       onGone: () => {
-        showing = undefined;
+        showing = false;
+        withdraw = undefined;
       }
     });
-    showing = toast;
-    void toast.load(options.host);
   };
 
   const unwatch = onChange(consider);
@@ -144,7 +153,9 @@ export function prompt(options: PrompterOptions): Prompter {
       stopped = true;
       unwatch();
       clearInterval(tick);
-      void showing?.leave();
+      // Killing the watcher takes back what it was saying. Somebody who ended
+      // it has said what they meant.
+      withdraw?.();
     }
   };
 }

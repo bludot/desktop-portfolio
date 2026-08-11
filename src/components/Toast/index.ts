@@ -1,7 +1,8 @@
 import OSElement from "../../utils/OSElement";
 import { color, font, radius, shadow, size, weight } from "../../theme";
-import { icon, type IconName } from "../Icon";
+import { icon } from "../Icon";
 import { motion, prefersReducedMotion } from "../../utils/motion";
+import type { Notification } from "../../notifications";
 
 /**
  * A card in the corner that says one thing and goes away.
@@ -29,24 +30,20 @@ import { motion, prefersReducedMotion } from "../../utils/motion";
 /** Long enough to read twice, short enough to ignore once. */
 const LINGER_MS = 9_000;
 
-/** Under the drag shim, over every window. A message, not a modal. */
-const TOAST_Z = 9400;
-
-export interface ToastContent {
-  /** Which part of the desktop is talking. Two words at most. */
-  sender: string;
-  /** The mark that part of the desktop wears elsewhere. */
-  glyph: IconName;
-  /** One line, sentence case, skimmable on its own. */
-  title: string;
-  /** The detail under it. One sentence. */
-  text: string;
-  action?: { label: string; run: () => void };
-  /** Called when it leaves, however it leaves. */
-  onGone?: (taken: boolean) => void;
-}
+/** What a card draws. Declared once, on the bus — see `notifications`. */
+export type ToastContent = Notification;
 
 class Toast extends OSElement {
+  /**
+   * The mount, so leaving can wait for it.
+   *
+   * A card can be asked to go before it has finished arriving — three posted in
+   * the same tick push the first out while it is still loading. Without this,
+   * `leave` found nothing mounted, returned, and the card then finished
+   * mounting into a column that had already forgotten it: a notification with
+   * no way of ever being taken away again.
+   */
+  private mounting?: Promise<void>;
   private timer?: ReturnType<typeof setTimeout>;
   private taken = false;
   private onGone?: (taken: boolean) => void;
@@ -58,12 +55,9 @@ class Toast extends OSElement {
 
     this.style = () => ({
       [this.id]: {
-        position: "fixed",
-        top: "18px",
-        right: "18px",
-        zIndex: `${TOAST_Z}`,
+        // Placed by the column it lives in — see `Toast/stack`.
         width: "316px",
-        maxWidth: "calc(100vw - 36px)",
+        maxWidth: "100%",
         boxSizing: "border-box",
         display: "flex",
         gap: "12px",
@@ -144,17 +138,8 @@ class Toast extends OSElement {
         },
         "& .toast-close:hover": { color: color.ink },
 
-        /*
-         * On a phone it spans the width rather than floating in a corner that
-         * is only a thumb-width from the edge of the screen.
-         */
-        "@media (max-width: 640px)": {
-          left: "12px",
-          right: "12px",
-          top: "12px",
-          width: "auto",
-          maxWidth: "none"
-        }
+        // On a phone the column spans the width, and the card fills it.
+        "@media (max-width: 640px)": { width: "auto" }
       }
     });
   }
@@ -227,8 +212,15 @@ class Toast extends OSElement {
     this.timer = setTimeout(() => void this.leave(), LINGER_MS);
   }
 
+  async load(element: HTMLElement): Promise<void> {
+    this.mounting = super.load(element);
+    return this.mounting;
+  }
+
   /** Take it away, whatever brought that about. */
   async leave(): Promise<void> {
+    // Arrive first, then go. See `mounting`.
+    await this.mounting;
     if (!this.mounted) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;

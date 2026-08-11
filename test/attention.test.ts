@@ -6,6 +6,8 @@ import * as attention from '../src/attention'
 import { RULES, suggest, type Surroundings } from '../src/attention/suggestions'
 import { ATTENTION_PROCESS, prompt, start } from '../src/attention/prompter'
 import * as processes from '../src/processes'
+import { showNotifications, clearToasts } from '../src/components/Toast/stack'
+import { resetNotifications } from '../src/notifications'
 import windowManager from '../src/utils/windowManager'
 
 jss.setup(preset())
@@ -66,6 +68,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   processes.reset()
+  clearToasts()
+  resetNotifications()
   attention.forget()
   for (const w of windowManager.list()) windowManager.remove(w.window)
   host.remove()
@@ -205,8 +209,9 @@ describe('how often it is willing to speak', () => {
    */
   const started = () => {
     vi.useFakeTimers()
+    showNotifications(host)
     attention.watch()
-    return prompt({ host, ...around() })
+    return prompt(around())
   }
 
   /** Long enough to be past the settle-in, then let the toast mount. */
@@ -306,9 +311,10 @@ describe('how often it is willing to speak', () => {
 
   it('runs the action, and goes, when the button is pressed', async () => {
     vi.useFakeTimers()
+    showNotifications(host)
     attention.watch()
     const openLauncher = vi.fn()
-    const p = prompt({ host, ...around({ openLauncher }) })
+    const p = prompt(around({ openLauncher }))
 
     await waitedAWhile()
     scannedProjectsTwice()
@@ -343,7 +349,7 @@ describe('how often it is willing to speak', () => {
  */
 describe('in the process table', () => {
   it('appears, and says what it has noticed', () => {
-    start({ host, ...around() })
+    start(around())
     open('Projects')
 
     const entry = processes.list().find((p) => p.name === ATTENTION_PROCESS)!
@@ -353,14 +359,14 @@ describe('in the process table', () => {
   })
 
   it('is one thing however many times it is started', () => {
-    start({ host, ...around() })
-    start({ host, ...around() })
+    start(around())
+    start(around())
 
     expect(processes.list().filter((p) => p.name === ATTENTION_PROCESS)).toHaveLength(1)
   })
 
   it('stops watching when it is killed, and forgets what it saw', () => {
-    start({ host, ...around() })
+    start(around())
     open('Projects')
     expect(attention.activity().opened.size).toBe(1)
 
@@ -377,7 +383,7 @@ describe('in the process table', () => {
    */
   it('never asks for a model, only whether there is one', () => {
     const modelWarm = vi.fn(() => false)
-    start({ host, ...around({ modelWarm }) })
+    start(around({ modelWarm }))
     open('Projects')
 
     expect(processes.list().map((p) => p.name)).toEqual([ATTENTION_PROCESS])

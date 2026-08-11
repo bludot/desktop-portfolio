@@ -145,13 +145,13 @@ afterEach(() => {
 
 describe('the chat window', () => {
   /*
-   * The whole point of the flag: opening this window is the only thing on the
-   * desktop that fetches a model, and it does not happen a moment earlier.
+   * This is the gate, and it is the only one there needs to be.
+   *
+   * Opening this window is the only thing on the desktop that fetches a chat
+   * model, and it does not happen a moment earlier — which is why the tile no
+   * longer sits behind a feature flag. Nobody pays for weights by opening a
+   * menu, so nothing was being protected by hiding the tile from them.
    */
-  it('ships behind a flag that is off', () => {
-    expect(FEATURE_FLAG_DEFAULTS.localChat.enabled).toBe(false)
-  })
-
   it('loads the model only once it is opened', async () => {
     const engine = stubEngine()
     const content = new ChatContent(() => engine)
@@ -561,6 +561,48 @@ describe('the chat window', () => {
     await vi.waitFor(() => expect(status().textContent).toContain('GPU'))
     expect(status().textContent).toContain('Qwen2.5')
     expect(host.querySelector('.chat-pip')!.classList.contains('is-ready')).toBe(true)
+    await content.unload()
+  })
+
+  /*
+   * Closing this window does not take the model down — the thread it runs on is
+   * a process now, and outlives every window that uses it. So a second opening
+   * has nothing to pay and nothing to say: the band names the model straight
+   * away rather than promising an 800MB download that was settled minutes ago
+   * and then taking it back a frame later.
+   */
+  it('opens ready when the model is already up, without a word about downloading', async () => {
+    const engine = stubEngine({ device: 'webgpu' })
+    const content = new ChatContent(() => engine, undefined, () => true)
+    await content.load(host)
+
+    await vi.waitFor(() => expect(status().textContent).toContain('Qwen2.5'))
+    expect(status().textContent).not.toContain('Downloading')
+    expect(engine.load).not.toHaveBeenCalled()
+    expect(host.querySelector<HTMLElement>('.chat-progress')!.hidden).toBe(true)
+    expect(host.querySelector<HTMLTextAreaElement>('.chat-input')!.disabled).toBe(false)
+
+    await content.unload()
+  })
+
+  /*
+   * The other half of that: an engine nobody has brought up yet is still an
+   * 800MB promise, and saying so before the wait is the whole design of this
+   * window. A stub reporting a device is not evidence of a completed load,
+   * which is why the question goes back to whoever built the engine.
+   */
+  it('still counts a cold model in, however much it claims to know', async () => {
+    // Staged, so the window is caught mid-load: a stub that resolves at once is
+    // already past the banner by the time `load` returns.
+    const { engine, ready } = staged()
+    const content = new ChatContent(() => engine, undefined, () => false)
+    await content.load(host)
+
+    await vi.waitFor(() => expect(status().textContent).toContain('Downloading'))
+    expect(engine.load).toHaveBeenCalled()
+
+    ready()
+    await vi.waitFor(() => expect(status().textContent).not.toContain('Downloading'))
     await content.unload()
   })
 

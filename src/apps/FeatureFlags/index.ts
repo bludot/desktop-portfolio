@@ -14,6 +14,16 @@ class FeatureFlagsApp extends App {
     super("FeatureFlagsApp");
   }
 
+  /**
+   * The flags there are, backed by rows for the ones there is no row for yet.
+   *
+   * Filtered by what the code still knows about rather than returned whole. A
+   * flag that has been retired leaves its row behind in everybody's IndexedDB,
+   * and listing it would offer a switch that is wired to nothing — which is
+   * worse than not offering it, because it looks like it works. `localChat` is
+   * the first to go this way; the row stays where it is and is simply not asked
+   * about.
+   */
   async loadFeatures(): Promise<FeatureFlag[]> {
     const featureFlags = await db.featureFlags.toArray()
     for (const code of Object.keys(FEATURE_FLAG_DEFAULTS)) {
@@ -25,7 +35,8 @@ class FeatureFlagsApp extends App {
         await newFeature.save()
       }
     }
-    return db.featureFlags.toArray()
+    const stored = await db.featureFlags.toArray()
+    return stored.filter((flag: FeatureFlag) => flag.code in FEATURE_FLAG_DEFAULTS)
   }
 
   load() {

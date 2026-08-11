@@ -84,10 +84,12 @@ describe('where related results sit in the launcher', () => {
 })
 
 describe('the flags', () => {
-  // Both gate something that downloads a model, and a visitor who landed here
-  // rather than chose to be should not be fetching weights.
-  it('ship off', () => {
+  // It gates something the launcher fetches on open, without being asked: a
+  // visitor who landed here rather than chose to be should not be pulling down
+  // weights to search a list they can already read. The chat window is the
+  // other model on this desktop and is not a flag, because opening it is the
+  // asking.
+  it('ships off', () => {
     expect(FEATURE_FLAG_DEFAULTS.semanticSearch.enabled).toBe(false)
-    expect(FEATURE_FLAG_DEFAULTS.localChat.enabled).toBe(false)
   })
 })

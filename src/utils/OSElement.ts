@@ -18,6 +18,19 @@ class OSElement {
     this.logger.debug(`Initializing`);
   }
 
+  /**
+   * Whether this is on screen — asked of the document, which cannot go stale.
+   *
+   * The one question every caller was answering for itself by reading `parent`,
+   * which is a record kept here and therefore only as current as the last thing
+   * that thought to update it. Anything that removes the element without going
+   * through `unload()` leaves that record wrong, and the component unshowable.
+   * Ask this instead.
+   */
+  get mounted(): boolean {
+    return this.element.isConnected;
+  }
+
   applyStyle() {
     this.logger.debug(`Applying styles`);
     if (this.styleSheet) {
@@ -47,6 +60,26 @@ class OSElement {
 
     await this.beforeLoad();
     this.logger.debug(`Finished beforeLoad hook`);
+
+    /*
+     * A pointer can go stale. The document cannot.
+     *
+     * `parent` is this component's record of being mounted, and it is the half
+     * of the truth somebody else can take away: anything that removes the
+     * element without going through `unload()` — a host rebuilding its
+     * children, a parent replacing its contents — leaves the record insisting
+     * on a mounting the DOM has already forgotten. Trusted on its own it makes
+     * the component unshowable for the rest of the session, because every
+     * attempt to bring it back is read as a double-load.
+     *
+     * So the document is asked first and the record is corrected to match it.
+     * What is left below is a real double-load — loaded, still on screen,
+     * loaded again — which is a caller's mistake and still worth refusing.
+     */
+    if (this.parent && !this.mounted) {
+      this.logger.debug(`Remounting: the element had been detached`);
+      this.parent = null;
+    }
 
     if (this.parent) {
       throw new Error("Already loaded! did you mean to reload?");

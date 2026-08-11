@@ -375,6 +375,14 @@ export const motion = {
    * hide is what causes the blink at the finish.
    */
   enter,
+  /**
+   * Drop whatever is still animating an element.
+   *
+   * Exposed here because an exit that fills forwards has to be let go of
+   * deliberately, by whoever is about to take the element out of the document
+   * — see `StartMenu.settleClosed`. After that it cannot be reached.
+   */
+  clearAnimations,
 
   /** A window arriving: rises and settles rather than appearing. */
   windowIn(el: HTMLElement) {

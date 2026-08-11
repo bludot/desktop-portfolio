@@ -9,6 +9,7 @@
  * declines to answer.
  */
 import {
+  CHAT_MODELS,
   VectorIndex,
   contextual,
   ground,
@@ -22,6 +23,7 @@ import {
   type Embedder,
   type Limit
 } from "@thatcatdev/browser-ai";
+import * as processes from "../processes";
 import { desktopStore } from "./store";
 import { COMMON, aboutJames, fromRepos } from "./documents";
 import type { Repo } from "../utils/github";
@@ -41,30 +43,115 @@ export type { Document };
  * arithmetic, and on the main thread that is five seconds in which this desktop
  * does not respond — no menu opens, no window drags. The press that appears to
  * do nothing gets pressed again, and both arrive at once when it thaws.
+ *
+ * It is a process rather than a variable so that its lifetime is its own: the
+ * chat window closing is not a reason to take it down, and killing it is
+ * something a person can choose to do, in the window that lists what is
+ * running. See `../processes`.
  */
-let thread: Worker | undefined;
+export const MODEL_PROCESS = "model";
 
 function models(): Worker {
-  if (!thread) {
-    thread = new Worker(new URL("./model.worker.ts", import.meta.url), {
-      type: "module"
-    });
-  }
-  return thread;
+  return processes.ensure<Worker>({
+    name: MODEL_PROCESS,
+    label: "Model",
+    detail: () => held?.description,
+    start: () =>
+      new Worker(new URL("./model.worker.ts", import.meta.url), {
+        type: "module"
+      }),
+    stop: (worker) => {
+      /*
+       * The engines go with it. They are only handles onto weights that live
+       * in the worker, and a handle whose `load()` has already resolved would
+       * otherwise report a model that is ready on a thread that is gone.
+       */
+      held = undefined;
+      embedder = undefined;
+      worker.terminate();
+    }
+  });
 }
 
-/** The chat model, on that thread. */
+/**
+ * The chat model that is up, and what it took to get there.
+ *
+ * At most one, because the worker holds at most one: `load-chat` replaces
+ * whatever pipeline was there. Keyed by model *and* device, since asking for
+ * the same weights on the CPU is a different load and a different answer to
+ * "where is this running".
+ */
+let held: { key: string; engine: ChatEngine; description: string } | undefined;
+
+/**
+ * The chat model, on that thread — the one that is already up, where possible.
+ *
+ * `WorkerChat` remembers its own `load()`, so handing back the same instance is
+ * what makes re-opening the window free: `warm()` awaits a promise that settled
+ * minutes ago and the window is ready in a frame. Building a fresh engine, as
+ * this used to, sent a second `load-chat` and the worker rebuilt the graph from
+ * files it had already read — the download the status line promised was long
+ * since paid, so the wait had nothing to show for itself and no explanation.
+ *
+ * A different model or device replaces the entry rather than joining it. The
+ * old engine is dropped without `dispose()` on purpose: disposing releases the
+ * shared channel, and the last release terminates the worker — which is the
+ * right behaviour for a library whose users come and go, and the wrong one here
+ * now that the thread's lifetime belongs to the process register.
+ */
 export function chat(
   model: string,
   device: DevicePreference,
   options?: ChatOptions
 ): ChatEngine {
-  return workerChat(models(), model, device, options);
+  const key = `${model}::${device}`;
+  if (held?.key === key) return held.engine;
+
+  const engine = workerChat(models(), model, device, options);
+  held = {
+    key,
+    engine,
+    get description() {
+      /*
+       * The model's own name rather than its repository path, for the same
+       * reason the chat window uses it: "SmolLM2 135M" is what somebody would
+       * say out loud, and the path is 38 characters that ellipsise to nothing
+       * in a 380px window. The path is the fallback, since a model this
+       * desktop does not list is still a model it can be told to run.
+       */
+      const named = CHAT_MODELS.find((m) => m.id === model)?.label ?? model;
+      // Read at the moment the table is drawn: before `load()` settles there is
+      // no device to name yet, and claiming one would be a guess.
+      return engine.device ? `${named} · ${engine.device}` : `${named} · loading`;
+    }
+  };
+  return engine;
 }
 
-/** The embedder, on the same one. */
+/**
+ * Whether this is an engine the desktop has already brought all the way up.
+ *
+ * Asked by the chat window so it can open ready rather than opening with a
+ * promise of an 800MB download it has already paid. Deliberately identity-based
+ * rather than "does it have a device": a device on an engine this module never
+ * handed out says nothing about what the worker is holding, and the honest
+ * answer for anything else is no.
+ */
+export function isWarm(engine: ChatEngine): boolean {
+  return engine === held?.engine && !!engine.device;
+}
+
+/**
+ * The embedder, on the same one — and likewise only ever built once.
+ *
+ * Same reasoning, smaller stake: 23MB rather than 800, but the launcher asks
+ * for one on every open and the worker rebuilds on every `load-embed`.
+ */
+let embedder: Embedder | undefined;
+
 export function vectors(): Embedder {
-  return workerEmbedder(models());
+  if (!embedder) embedder = workerEmbedder(models());
+  return embedder;
 }
 
 /**

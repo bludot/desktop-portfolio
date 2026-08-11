@@ -1,3 +1,5 @@
+import { dragging } from "../../utils/dragShim";
+
 interface FluentButtonOptions {
   text?: string;
   icon?: string;
@@ -77,36 +79,88 @@ class FluentButton {
     currentTarget.classList.remove("fluent-btn--pressed");
   }
 
+  /*
+   * One listener for every button that lights up as the pointer nears it.
+   *
+   * Static, so there is one of these however many buttons exist — but it runs
+   * on every mouse move anywhere on the page, and walks every registered
+   * button. That makes it the most expensive thing on the desktop attached to
+   * an event that fires at the frame rate, and it is worth reading the two
+   * guards below as one idea: do it once per frame, and do not do it at all
+   * when nobody could see the result.
+   */
   observeOuterReveal() {
     FluentButton.observingOuterReveal = true;
 
     window.addEventListener("resize", this.updateElementDimensions.bind(this));
-    window.addEventListener("mousemove", (event) => {
-      window.requestAnimationFrame(this.updateOuterReveal.bind(this, event));
-    });
+    window.addEventListener("mousemove", (event) =>
+      this.scheduleOuterReveal(event)
+    );
     window.addEventListener("touchmove", ({ touches }) => {
       // @ts-ignore
       const [{ clientX, clientY }] = touches;
-      const position = { pageX: clientX, pageY: clientY };
-      window.requestAnimationFrame(this.updateOuterReveal.bind(this, position));
+      this.scheduleOuterReveal({ pageX: clientX, pageY: clientY });
+    });
+  }
+
+  /**
+   * Answer the newest position, once, on the next frame.
+   *
+   * A frame was requested per event before this, so several moves arriving
+   * between two frames queued several passes over every button — each one doing
+   * the same work against a position already out of date by the time it ran.
+   * Holding the latest position and one frame means the work happens as often
+   * as it can be seen and no more.
+   */
+  private scheduleOuterReveal(at: { pageX: number; pageY: number }) {
+    FluentButton.pointer = at;
+    if (FluentButton.revealFrame !== undefined) return;
+    FluentButton.revealFrame = window.requestAnimationFrame(() => {
+      FluentButton.revealFrame = undefined;
+      const position = FluentButton.pointer;
+      if (position) this.updateOuterReveal(position);
     });
   }
 
   updateOuterReveal({ pageX, pageY }: { pageX: number; pageY: number }) {
+    /*
+     * Nothing to light up while something is being dragged.
+     *
+     * A drag puts a sheet over the entire screen — see `utils/dragShim` — so no
+     * button is under the pointer, and every one of these passes would answer a
+     * question nobody is asking. Skipping it gives the frame back to the gesture
+     * that is actually happening, which is the one place on this desktop where
+     * the main thread is genuinely contended.
+     */
+    if (dragging()) return;
+
+    /*
+     * Read everything, then write everything.
+     *
+     * `offsetLeft` is a layout read and setting a custom property invalidates
+     * style, so alternating them per button asked the browser to lay the page
+     * out again on every iteration — a forced synchronous layout per button per
+     * frame, which is the actual cost here rather than the arithmetic.
+     */
+    const measured: Array<{
+      el: RevealTarget;
+      x: number;
+      y: number;
+      near: boolean;
+    }> = [];
+
     // @ts-ignore
     for (const [el, { width, height }] of FluentButton.outerRevealElements) {
-      const { x, y } = this.updateCoordinates({
-        pageX,
-        pageY,
-        currentTarget: el
-      });
-
-      if (this.isInRevealThreshold({ x, y, width, height })) {
-        el.classList.add("fluent-btn--reveal");
-      } else {
-        el.classList.remove("fluent-btn--reveal");
-      }
+      const x = pageX - el.offsetLeft;
+      const y = pageY - el.offsetTop;
+      measured.push({ el, x, y, near: this.isInRevealThreshold({ x, y, width, height }) });
     }
+
+    measured.forEach(({ el, x, y, near }) => {
+      el.style.setProperty("--x", `${x}px`);
+      el.style.setProperty("--y", `${y}px`);
+      el.classList.toggle("fluent-btn--reveal", near);
+    });
   }
 
   isInRevealThreshold({ x, y, width, height }: { x: number; y: number } & Dimensions) {
@@ -140,6 +194,10 @@ class FluentButton {
   static outerRevealElements = new Map<HTMLElement, Dimensions>();
   static outerRevealThreshold = 75;
   static observingOuterReveal = false;
+  /** The frame already asked for, so several moves cannot queue several. */
+  static revealFrame: number | undefined;
+  /** The newest pointer position, answered when that frame runs. */
+  static pointer: { pageX: number; pageY: number } | undefined;
 
   static createHTML = ({ text, icon }: FluentButtonOptions) => `
     <div class="fluent-btn">

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import FluentButton from '../src/components/FluentButton'
+import { raiseDragShim, dropDragShim } from '../src/utils/dragShim'
 
 let root: HTMLElement
 
@@ -16,6 +17,9 @@ describe('FluentButton', () => {
     FluentButton.elements.clear()
     FluentButton.outerRevealElements.clear()
     FluentButton.observingOuterReveal = false
+    FluentButton.revealFrame = undefined
+    FluentButton.pointer = undefined
+    dropDragShim()
   })
 
   it('renders its markup into the root element', () => {
@@ -142,5 +146,84 @@ describe('FluentButton', () => {
     button.destroy()
     expect(root.innerHTML).toBe('')
     expect(FluentButton.elements.has(root)).toBe(false)
+  })
+})
+
+/*
+ * The reveal runs on a listener attached to `window`, so it runs on every mouse
+ * move on the desktop — including every frame of a window being dragged, when
+ * it is both invisible and competing with the one gesture that needs the frame.
+ */
+describe('the outer reveal, during a drag', () => {
+  /** A button-shaped thing that records what was read and written to it. */
+  const target = () => {
+    const reads: string[] = []
+    const el = {
+      get offsetLeft() {
+        reads.push('offsetLeft')
+        return 0
+      },
+      get offsetTop() {
+        reads.push('offsetTop')
+        return 0
+      },
+      style: { setProperty: vi.fn() },
+      classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() },
+    }
+    return { el, reads }
+  }
+
+  const button = () => makeButton({ outerReveal: true })
+
+  it('does no work at all while something is being dragged', () => {
+    const { el, reads } = target()
+    FluentButton.outerRevealElements.set(el as never, { width: 10, height: 10 })
+
+    raiseDragShim('grabbing')
+    button().updateOuterReveal({ pageX: 5, pageY: 5 })
+
+    expect(reads, 'measured a button nobody can see').toEqual([])
+    expect(el.style.setProperty).not.toHaveBeenCalled()
+  })
+
+  it('goes back to work when the drag ends', () => {
+    const { el, reads } = target()
+    FluentButton.outerRevealElements.set(el as never, { width: 10, height: 10 })
+
+    raiseDragShim('grabbing')
+    dropDragShim()
+    button().updateOuterReveal({ pageX: 5, pageY: 5 })
+
+    expect(reads.length).toBeGreaterThan(0)
+    expect(el.style.setProperty).toHaveBeenCalled()
+  })
+
+  /*
+   * Reading layout and invalidating style alternately asks the browser to lay
+   * the page out again on every iteration. Every read has to happen before any
+   * write for that to cost one layout rather than one per button.
+   */
+  it('reads every button before writing to any of them', () => {
+    const order: string[] = []
+    const make = (name: string) => ({
+      get offsetLeft() {
+        order.push(`read:${name}`)
+        return 0
+      },
+      get offsetTop() {
+        return 0
+      },
+      style: { setProperty: () => order.push(`write:${name}`) },
+      classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+    })
+
+    FluentButton.outerRevealElements.set(make('a') as never, { width: 10, height: 10 })
+    FluentButton.outerRevealElements.set(make('b') as never, { width: 10, height: 10 })
+
+    button().updateOuterReveal({ pageX: 1, pageY: 1 })
+
+    const firstWrite = order.findIndex((step) => step.startsWith('write:'))
+    const lastRead = order.map((s) => s.startsWith('read:')).lastIndexOf(true)
+    expect(lastRead, 'a read happened after a write').toBeLessThan(firstWrite)
   })
 })

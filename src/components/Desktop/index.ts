@@ -11,6 +11,7 @@ import { saveSettings } from "../../Store";
 import SettingsApp from "../../apps/Settings";
 import Launcher from "../Launcher";
 import ChatContent from "../../contents/chat";
+import { chatRuns } from "../../contents/chat/support";
 import { start as watchAttention } from "../../attention/prompter";
 import { showNotifications } from "../Toast/stack";
 import { modelUp } from "../../ai";
@@ -275,6 +276,7 @@ class Desktop extends OSElement {
     watchAttention({
       // Never a reason to start one; only ever a reason to mention it.
       modelWarm: modelUp,
+      chatRuns,
       openLauncher: () => void this.launcher.toggle(),
       openChat: () =>
         windowManager.new({

@@ -1,7 +1,6 @@
 import OSElement from "../../utils/OSElement";
-import { color, font, radius, size, space, tracking, weight } from "../../theme";
+import { color, font, radius, shadow, size, space, tracking, weight } from "../../theme";
 import {
-  CHAT_MODEL,
   CHAT_MODELS,
   gpuAvailable,
   type ChatEngine,
@@ -26,6 +25,15 @@ import {
 import { loadRepos } from "../../utils/github";
 import { SEARCH_URL } from "../../utils/websearch";
 import { Download, remaining } from "./progress";
+import { assess, type Verdict } from "./support";
+import {
+  attempted,
+  attempting,
+  constrained,
+  crashedLoading,
+  smallerThan,
+  startingModel
+} from "./fit";
 import { MADE_UP, SHOWN, parseQuestions, suggest } from "./suggestions";
 import { prefersReducedMotion } from "../../utils/motion";
 
@@ -98,7 +106,8 @@ class ChatContent extends OSElement {
   // Stamped when the window opens, not when the module loads: a desktop left
   // open overnight should not tell the model it is still yesterday.
   private history: Message[] = [system(new Date())];
-  private choice: ChatChoice = { model: CHAT_MODEL, device: "auto" };
+  // The smallest model on a phone. See `./fit`.
+  private choice: ChatChoice = { model: startingModel(), device: "auto" };
 
   private log!: HTMLElement;
   private form!: HTMLFormElement;
@@ -114,6 +123,16 @@ class ChatContent extends OSElement {
   private devices!: HTMLSelectElement;
 
   private phase: Phase = "loading";
+
+  /**
+   * The model that was loading when this page last died, when there was no
+   * smaller one to step down to. `./support` is told, so the popup can say so.
+   */
+  private crashedModel?: string;
+  /** Models somebody chose to try after being told they probably won't fit. */
+  private readonly triedAnyway = new Set<string>();
+  /** The popup over the window, while there is one. */
+  private popup?: HTMLElement;
   private answering = false;
   private stop?: AbortController;
 
@@ -206,6 +225,8 @@ class ChatContent extends OSElement {
       [this.id]: {
         display: "flex",
         flexDirection: "column",
+        // So the popup can cover exactly this window. See `.chat-popup`.
+        position: "relative",
         height: "100%",
         minHeight: 0,
         fontFamily: font.ui,
@@ -608,6 +629,74 @@ class ChatContent extends OSElement {
         "& .chat-send:focus-visible": {
           outline: `2px solid ${color.accent}`,
           outlineOffset: "1px"
+        },
+
+        // ------------------------------------------------------ the popup
+        /*
+         * Said before a download that would not work. Covers the window and
+         * not the desktop, because it is about this window. See `hold`.
+         */
+        "& .chat-popup": {
+          position: "absolute",
+          inset: 0,
+          zIndex: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "16px",
+          background: "rgba(0, 0, 0, 0.28)"
+        },
+        "& .chat-popup-card": {
+          width: "100%",
+          maxWidth: "360px",
+          maxHeight: "100%",
+          overflowY: "auto",
+          padding: `18px ${space.windowPadX}`,
+          borderRadius: radius.window,
+          background: color.chromeSolid,
+          boxShadow: shadow.window,
+          color: color.ink
+        },
+        "& .chat-popup-title": {
+          margin: "0 0 10px",
+          fontSize: size.heading,
+          fontWeight: weight.announce,
+          letterSpacing: tracking.heading
+        },
+        "& .chat-popup-reason": {
+          margin: "0 0 10px",
+          color: color.inkSoft,
+          lineHeight: 1.45
+        },
+        "& .chat-popup-actions": {
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
+          gap: "8px",
+          marginTop: "16px"
+        },
+        "& .chat-popup-action": {
+          minHeight: "36px",
+          padding: "0 14px",
+          border: `1px solid ${color.line}`,
+          borderRadius: radius.pill,
+          background: color.chromeRaised,
+          color: color.ink,
+          font: "inherit",
+          fontSize: size.small,
+          fontWeight: weight.emphasise,
+          cursor: "pointer"
+        },
+        "& .chat-popup-action:hover": { color: color.accent },
+        // Marked the way Send is marked on hover, rather than with a fill
+        // that nothing else on this desktop uses.
+        "& .chat-popup-action.is-primary": {
+          borderColor: color.accent,
+          color: color.accent
+        },
+        "& .chat-popup-action:focus-visible": {
+          outline: `2px solid ${color.accent}`,
+          outlineOffset: "1px"
         }
       }
     });
@@ -957,6 +1046,11 @@ class ChatContent extends OSElement {
       // rather than in a tooltip nobody opens.
       option.text = `${model.label} · ${model.size}`;
       option.title = model.note;
+      // Said rather than prevented: a phone with the memory for it can still
+      // try, and `./fit` steps back down if the try takes the tab with it.
+      if (constrained() && model.id !== CHAT_MODELS[0].id) {
+        option.text += " · may not fit a phone";
+      }
       this.models.appendChild(option);
     });
     this.models.value = this.choice.model;
@@ -1034,6 +1128,8 @@ class ChatContent extends OSElement {
     }
     this.choice = next;
     void saveSettings({ chatModel: next.model, chatDevice: next.device });
+    // A choice made in the picker answers whatever the popup was asking.
+    this.dismiss();
 
     this.stop?.abort();
     this.phase = "loading";
@@ -1063,9 +1159,39 @@ class ChatContent extends OSElement {
       } catch {
         // The defaults are already in force.
       }
+
+      /*
+       * The last time a model was loaded here, the tab died during the load.
+       * Loading the same thing again would kill it again, so step down a
+       * size, and remember the smaller one so the next visit starts there.
+       */
+      const crashed = crashedLoading();
+      let stepped: string | undefined;
+      if (crashed && crashed.model === this.choice.model) {
+        const smaller = smallerThan(crashed.model);
+        if (smaller) {
+          this.choice.model = smaller;
+          stepped = crashed.model;
+          void saveSettings({ chatModel: smaller });
+        } else {
+          // Nothing smaller to try. The popup says what happened instead.
+          this.crashedModel = crashed.model;
+        }
+      }
+
       this.models.value = this.choice.model;
       this.devices.value = this.choice.device;
       this.engine = this.makeEngine(this.choice.model, this.choice.device);
+
+      if (stepped) {
+        const label = CHAT_MODELS.find((m: ChatModel) => m.id === stepped)?.label;
+        // In the transcript rather than the status line, which the download
+        // is about to take over.
+        this.turn(
+          "Model",
+          `Last time, ${label} ran this page out of memory while loading, so I'm using a smaller model. You can still pick a larger one above.`
+        );
+      }
     }
 
     void this.warm();
@@ -1111,6 +1237,19 @@ class ChatContent extends OSElement {
       return;
     }
 
+    /*
+     * Ask before fetching. A model that won't fit on a phone doesn't fail. It
+     * takes the page down a few hundred megabytes later, so this is the only
+     * point at which there is anything useful to say. See `./support`.
+     */
+    if (!this.triedAnyway.has(this.choice.model)) {
+      const verdict = assess(this.choice.model, this.crashedModel === this.choice.model);
+      if (verdict) {
+        this.hold(verdict);
+        return;
+      }
+    }
+
     const chosen = CHAT_MODELS.find((m: ChatModel) => m.id === this.choice.model);
     const size = chosen ? chosen.size : "a few hundred MB";
     /*
@@ -1129,6 +1268,7 @@ class ChatContent extends OSElement {
      * tokenizer. See `Download`.
      */
     const download = new Download(chosen?.bytes);
+    attempting(this.choice);
     try {
       await this.engine.load((_fraction, detail) => {
         const { fraction, eta, preparing } = download.record(
@@ -1161,8 +1301,10 @@ class ChatContent extends OSElement {
             : `Downloading… ${percent}% · ${remaining(eta)}`
         );
       });
+      attempted();
       this.settled();
     } catch (error) {
+      attempted();
       this.phase = "failed";
       this.bar.hidden = true;
       this.say(
@@ -1170,6 +1312,115 @@ class ChatContent extends OSElement {
       );
       this.logger.debug(`chat model failed: ${error}`);
     }
+  }
+
+  /**
+   * Stop before the download, and say why in a popup over the window.
+   *
+   * Over the window rather than in a dialog of its own: the answer is about
+   * this window, the choices in it change this window's model, and on a phone
+   * the window already fills the screen.
+   */
+  private hold(verdict: Verdict) {
+    this.phase = "failed";
+    this.bar.hidden = true;
+    this.input.disabled = true;
+    this.send.disabled = true;
+    this.say(
+      verdict.blocked
+        ? "Can't run in this browser"
+        : "Not loaded. This model probably won't fit here."
+    );
+
+    const actions: Array<[string, () => void]> = [];
+    if (verdict.blocked) {
+      // Nothing in this window can work here, so the window goes too. It
+      // closes the same way as the titlebar's close button. See `Window`.
+      actions.push([
+        "OK",
+        () => {
+          this.dismiss();
+          this.element.dispatchEvent(new Event("window-close", { bubbles: true }));
+        }
+      ]);
+    } else {
+      const model = this.choice.model;
+      const { smaller } = verdict;
+      if (smaller) {
+        actions.push([
+          `Use ${smaller.label} · ${smaller.size}`,
+          () => {
+            this.dismiss();
+            this.models.value = smaller.id;
+            void this.choose({ model: smaller.id });
+          }
+        ]);
+      }
+      actions.push([
+        "Try anyway",
+        () => {
+          this.dismiss();
+          this.triedAnyway.add(model);
+          this.phase = "loading";
+          void this.warm();
+        }
+      ]);
+      actions.push(["Not now", () => this.dismiss()]);
+    }
+    this.show(verdict, actions);
+  }
+
+  private show(verdict: Verdict, actions: Array<[string, () => void]>) {
+    this.dismiss();
+
+    const popup = document.createElement("div");
+    popup.className = "chat-popup";
+    popup.setAttribute("role", "alertdialog");
+    popup.setAttribute("aria-modal", "true");
+    popup.setAttribute("aria-labelledby", `${this.id}-popup-title`);
+
+    const card = document.createElement("div");
+    card.className = "chat-popup-card";
+
+    const title = document.createElement("h2");
+    title.className = "chat-popup-title";
+    title.id = `${this.id}-popup-title`;
+    title.appendChild(document.createTextNode(verdict.title));
+    card.appendChild(title);
+
+    verdict.reasons.forEach((reason) => {
+      const p = document.createElement("p");
+      p.className = "chat-popup-reason";
+      p.appendChild(document.createTextNode(reason));
+      card.appendChild(p);
+    });
+
+    const row = document.createElement("div");
+    row.className = "chat-popup-actions";
+    actions.forEach(([label, act], index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `chat-popup-action${index === 0 ? " is-primary" : ""}`;
+      button.appendChild(document.createTextNode(label));
+      button.addEventListener("click", act);
+      row.appendChild(button);
+    });
+    card.appendChild(row);
+
+    // Escape is the last choice, which is always the one that does nothing.
+    popup.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") actions[actions.length - 1][1]();
+    });
+
+    popup.appendChild(card);
+    this.element.appendChild(popup);
+    this.popup = popup;
+    row.querySelector<HTMLButtonElement>("button")?.focus();
+  }
+
+  private dismiss() {
+    this.popup?.remove();
+    this.popup = undefined;
   }
 
   /**

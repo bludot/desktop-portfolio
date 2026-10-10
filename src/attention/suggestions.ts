@@ -53,6 +53,13 @@ export interface Surroundings {
    * no longer exists. Never a reason to start one.
    */
   modelWarm: () => boolean;
+  /**
+   * Whether the chat can run in this browser at all.
+   *
+   * A tip pointing somebody at a window that can only tell them it does not
+   * work here is worse than no tip. See `chatRuns` in `contents/chat/support`.
+   */
+  chatRuns: () => boolean;
   /** Open the launcher, which is where searching happens. */
   openLauncher: () => void;
   /** Open the chat window. */
@@ -110,7 +117,8 @@ export const RULES: Rule[] = [
    */
   {
     id: "there-is-a-model-here",
-    when: (a) =>
+    when: (a, around) =>
+      around.chatRuns() &&
       a.seconds > 90 &&
       a.opened.size >= 2 &&
       times(a.opened, "Chat") === 0,
@@ -133,6 +141,9 @@ export const RULES: Rule[] = [
   {
     id: "ask-what-you-are-reading-about",
     when: (a, around) =>
+      // Warm already implies it runs, unless somebody tried anyway and it
+      // only just held. Asked anyway, so no chat tip skips the question.
+      around.chatRuns() &&
       around.modelWarm() &&
       a.seconds > SETTLE_IN &&
       times(a.opened, "Experience") >= 1 &&

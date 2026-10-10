@@ -56,6 +56,7 @@ const activityOf = (
 
 const around = (over: Partial<Surroundings> = {}): Surroundings => ({
   modelWarm: () => false,
+  chatRuns: () => true,
   openLauncher: vi.fn(),
   openChat: vi.fn(),
   ...over,
@@ -150,6 +151,20 @@ describe('what it decides to say', () => {
     expect(suggest(seen, around({ modelWarm: () => true }), new Set())?.id).toBe(
       'ask-what-you-are-reading-about',
     )
+  })
+
+  /*
+   * A tip that leads to a window which can only say it does not work here is
+   * worse than saying nothing. See `chatRuns` in `contents/chat/support`.
+   */
+  it('never mentions the chat where it cannot run', () => {
+    const cannot = around({ chatRuns: () => false, modelWarm: () => true })
+
+    const wandering = activityOf({ seconds: 120, opened: [['About', 1], ['Experience', 1]] })
+    expect(suggest(wandering, cannot, new Set())?.sender).not.toBe('Chat')
+
+    const reading = activityOf({ opened: [['Experience', 1]] })
+    expect(suggest(reading, cannot, new Set())).toBeUndefined()
   })
 
   it('does not repeat one that has been used up', () => {

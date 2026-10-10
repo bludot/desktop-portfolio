@@ -400,6 +400,19 @@ class OSWindow extends OSElement {
     // arrives once it has finished has missed the wait it was there for.
     await this.raiseSplash(main);
 
+    /*
+     * A way for what is inside to close the window it is in.
+     *
+     * An event rather than a reference passed down: contents are built before
+     * the window that will hold them, and none of them should need to know
+     * what a window is. Anything that dispatches `window-close` from inside
+     * this window gets the same exit as the titlebar's close button.
+     */
+    main.addEventListener("window-close", (event) => {
+      event.stopPropagation();
+      void this.requestClose();
+    });
+
     if (typeof this.content.load === "function") {
 
       await this.content.load(main);

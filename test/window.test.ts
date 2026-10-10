@@ -253,6 +253,16 @@ describe('OSWindow', () => {
     })
   })
 
+  it('closes when something inside it asks to', async () => {
+    const content = document.createElement('p')
+    const onClose = vi.fn()
+    const win = makeWindow({ content, onClose })
+    await win.load(null as unknown as HTMLElement)
+
+    content.dispatchEvent(new Event('window-close', { bubbles: true }))
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledWith(win))
+  })
+
   it('appends raw nodes when the content has no load method', async () => {
     const content = document.createElement('p')
     content.textContent = 'plain'

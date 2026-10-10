@@ -12,7 +12,7 @@ import {
   type Message,
   type Progress,
 } from '@thatcatdev/browser-ai'
-import { FEATURE_FLAG_DEFAULTS, loadSettings } from '../src/Store'
+import { FEATURE_FLAG_DEFAULTS, loadSettings, saveSettings } from '../src/Store'
 import { knowledgeDocuments, knowledgeIndex } from '../src/ai'
 import db from '../src/Store'
 
@@ -141,6 +141,8 @@ afterEach(() => {
   globalThis.fetch = realFetch
   setChatEngine(undefined)
   host.remove()
+  // A test that ends mid-download leaves the note `chat/fit` reads as a crash.
+  localStorage.clear()
 })
 
 describe('the chat window', () => {
@@ -768,5 +770,342 @@ describe('choosing the model and where it runs', () => {
       expect(saved.chatDevice).toBe('wasm')
     })
     await content.unload()
+  })
+})
+
+/*
+ * On a phone, a model too big for the tab does not fail. The browser kills the
+ * tab and the page reloads, with nothing for the window to catch. See
+ * `contents/chat/fit`.
+ */
+describe('fitting the model to the device', () => {
+  const phone = () => {
+    ;(window as any).matchMedia = (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })
+  }
+  const models = () => host.querySelector<HTMLSelectElement>('[aria-label="Model"]')!
+  const popup = () => host.querySelector<HTMLElement>('.chat-popup')
+
+  beforeEach(async () => {
+    await db.settings.clear()
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    delete (window as any).matchMedia
+    localStorage.clear()
+  })
+
+  it('starts a phone on the smallest model', async () => {
+    phone()
+    const built: string[] = []
+    const content = new ChatContent((model) => {
+      built.push(model)
+      return stubEngine({ model })
+    })
+    await content.load(host)
+
+    expect(models().value).toBe(CHAT_MODELS[0].id)
+    expect(built).not.toContain(CHAT_MODEL)
+    expect(models().options[1].text).toContain('may not fit a phone')
+    await content.unload()
+  })
+
+  it('keeps the larger default where there is a mouse', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+
+    expect(models().value).toBe(CHAT_MODEL)
+    expect(models().options[1].text).not.toContain('may not fit')
+    await content.unload()
+  })
+
+  it('still honours a phone that chose a larger model', async () => {
+    phone()
+    await saveSettings({ chatModel: CHAT_MODEL })
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+
+    expect(models().value).toBe(CHAT_MODEL)
+    await content.unload()
+  })
+
+  it('crosses out the note once the load ends', async () => {
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+
+    expect(localStorage.getItem('chat-loading')).toBeNull()
+    await content.unload()
+  })
+
+  it('leaves the note behind while the load is running', async () => {
+    const { engine } = staged()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    expect(JSON.parse(localStorage.getItem('chat-loading')!).model).toBe(CHAT_MODEL)
+    await content.unload()
+  })
+
+  it('steps down a size after a load took the page with it', async () => {
+    localStorage.setItem(
+      'chat-loading',
+      JSON.stringify({ model: CHAT_MODEL, device: 'auto' }),
+    )
+    const built: string[] = []
+    const content = new ChatContent((model) => {
+      built.push(model)
+      return stubEngine({ model })
+    })
+    await content.load(host)
+
+    expect(models().value).toBe(CHAT_MODELS[0].id)
+    expect(built[built.length - 1]).toBe(CHAT_MODELS[0].id)
+    expect(turns().some((t) => t.said?.includes('ran this page out of memory'))).toBe(true)
+    await vi.waitFor(async () =>
+      expect((await loadSettings()).chatModel).toBe(CHAT_MODELS[0].id),
+    )
+    await content.unload()
+  })
+
+  it('asks before trying the smallest again straight after it crashed, but not next time', async () => {
+    phone()
+    localStorage.setItem(
+      'chat-loading',
+      JSON.stringify({ model: CHAT_MODELS[0].id, device: 'auto' }),
+    )
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    expect(engine.load).not.toHaveBeenCalled()
+    expect(popup()?.textContent).toContain('ran out of memory')
+    expect(input().disabled).toBe(true)
+    await content.unload()
+
+    const again = stubEngine()
+    const reopened = new ChatContent(() => again)
+    await reopened.load(host)
+    expect(popup()).toBeNull()
+    expect(again.load).toHaveBeenCalled()
+    await reopened.unload()
+  })
+
+  it('ignores a note about a different model than the one chosen', async () => {
+    localStorage.setItem(
+      'chat-loading',
+      JSON.stringify({ model: CHAT_MODELS[2].id, device: 'auto' }),
+    )
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+
+    expect(models().value).toBe(CHAT_MODEL)
+    await content.unload()
+  })
+})
+
+/*
+ * Asked before anything is fetched, from what the browser will say about
+ * itself. See `contents/chat/support`.
+ */
+describe('saying when it will not work here', () => {
+  const realUA = navigator.userAgent
+  const realWasm = globalThis.WebAssembly
+  const IPHONE =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1'
+
+  const as = (ua: string) =>
+    Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
+  const memory = (gb: number | undefined) =>
+    Object.defineProperty(navigator, 'deviceMemory', { value: gb, configurable: true })
+
+  const popup = () => host.querySelector<HTMLElement>('.chat-popup')
+  const actions = () =>
+    [...host.querySelectorAll<HTMLButtonElement>('.chat-popup-action')].map((b) => b.textContent)
+  const press = (label: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>('.chat-popup-action')]
+      .find((b) => b.textContent?.startsWith(label))!
+      .click()
+
+  beforeEach(async () => {
+    await db.settings.clear()
+  })
+
+  afterEach(() => {
+    as(realUA)
+    memory(undefined)
+    globalThis.WebAssembly = realWasm
+  })
+
+  it('says nothing and simply loads where nothing is in the way', async () => {
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    expect(popup()).toBeNull()
+    expect(engine.load).toHaveBeenCalled()
+    await content.unload()
+  })
+
+  it('stops an iPhone before it downloads a model Safari would kill it for', async () => {
+    as(IPHONE)
+    await saveSettings({ chatModel: CHAT_MODEL })
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    expect(engine.load).not.toHaveBeenCalled()
+    expect(popup()?.getAttribute('role')).toBe('alertdialog')
+    expect(popup()?.textContent).toContain('Safari on iPhone')
+    expect(actions()).toEqual(['Use SmolLM2 135M · ~185MB', 'Try anyway', 'Not now'])
+    await content.unload()
+  })
+
+  it('lets the smallest model through on an iPhone', async () => {
+    as(IPHONE)
+    await saveSettings({ chatModel: CHAT_MODELS[0].id })
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    expect(popup()).toBeNull()
+    expect(engine.load).toHaveBeenCalled()
+    await content.unload()
+  })
+
+  it('switches to the smaller model when offered', async () => {
+    as(IPHONE)
+    await saveSettings({ chatModel: CHAT_MODEL })
+    const built: string[] = []
+    const content = new ChatContent((model) => {
+      built.push(model)
+      return stubEngine({ model })
+    })
+    await content.load(host)
+
+    press('Use SmolLM2')
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    expect(popup()).toBeNull()
+    expect(built[built.length - 1]).toBe(CHAT_MODELS[0].id)
+    await content.unload()
+  })
+
+  it('tries anyway when told to, and does not ask twice', async () => {
+    as(IPHONE)
+    await saveSettings({ chatModel: CHAT_MODEL })
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    press('Try anyway')
+    await vi.waitFor(() => expect(input().disabled).toBe(false))
+    expect(popup()).toBeNull()
+    expect(engine.load).toHaveBeenCalledTimes(1)
+    await content.unload()
+  })
+
+  it('downloads nothing when told not now', async () => {
+    as(IPHONE)
+    await saveSettings({ chatModel: CHAT_MODEL })
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    press('Not now')
+    expect(popup()).toBeNull()
+    expect(engine.load).not.toHaveBeenCalled()
+    expect(status().textContent).toContain('Not loaded')
+    await content.unload()
+  })
+
+  it('warns from the memory Chromium reports', async () => {
+    memory(2)
+    await saveSettings({ chatModel: CHAT_MODEL })
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+
+    expect(popup()?.textContent).toContain('about 2GB of memory')
+    await content.unload()
+  })
+
+  it('never warns at 8GB, which means "8 or more"', async () => {
+    memory(8)
+    await saveSettings({ chatModel: CHAT_MODELS[2].id })
+    const content = new ChatContent(() => stubEngine())
+    await content.load(host)
+
+    expect(popup()).toBeNull()
+    await content.unload()
+  })
+
+  it('offers nothing to try when WebAssembly is off, as in Lockdown Mode', async () => {
+    // @ts-expect-error -- what Lockdown Mode leaves behind
+    delete globalThis.WebAssembly
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    expect(engine.load).not.toHaveBeenCalled()
+    expect(popup()?.textContent).toContain('Lockdown Mode')
+    expect(actions()).toEqual(['OK'])
+    await content.unload()
+  })
+
+  it('offers nothing to try when the browser predates WebAssembly SIMD', async () => {
+    globalThis.WebAssembly = { ...realWasm, validate: () => false } as typeof WebAssembly
+    const engine = stubEngine()
+    const content = new ChatContent(() => engine)
+    await content.load(host)
+
+    expect(engine.load).not.toHaveBeenCalled()
+    expect(popup()?.textContent).toContain('iOS 16.4')
+    const closed = vi.fn()
+    host.addEventListener('window-close', closed)
+    press('OK')
+    expect(popup()).toBeNull()
+    expect(status().textContent).toContain("Can't run")
+    // It asks whatever window it is in to close. See `Window`.
+    expect(closed).toHaveBeenCalledTimes(1)
+    await content.unload()
+  })
+})
+
+describe('whether anything should point at the chat', () => {
+  const realWasm = globalThis.WebAssembly
+
+  afterEach(() => {
+    globalThis.WebAssembly = realWasm
+    localStorage.clear()
+  })
+
+  it('says it runs where nothing is in the way', async () => {
+    const { chatRuns } = await import('../src/contents/chat/support')
+    expect(chatRuns()).toBe(true)
+  })
+
+  it('says it does not where the browser cannot run any model', async () => {
+    const { chatRuns } = await import('../src/contents/chat/support')
+    globalThis.WebAssembly = { ...realWasm, validate: () => false } as typeof WebAssembly
+    expect(chatRuns()).toBe(false)
+  })
+
+  it('says it does not after the smallest model took the page down, and leaves the note for the window', async () => {
+    const { chatRuns } = await import('../src/contents/chat/support')
+    const note = JSON.stringify({ model: CHAT_MODELS[0].id, device: 'auto' })
+    localStorage.setItem('chat-loading', note)
+
+    expect(chatRuns()).toBe(false)
+    expect(localStorage.getItem('chat-loading')).toBe(note)
+  })
+
+  it('still runs after a larger model crashed, since there is a smaller one', async () => {
+    const { chatRuns } = await import('../src/contents/chat/support')
+    localStorage.setItem('chat-loading', JSON.stringify({ model: CHAT_MODEL, device: 'auto' }))
+    expect(chatRuns()).toBe(true)
   })
 })
